@@ -86,6 +86,12 @@ export const getAnalytics = (year, month = null) => {
   }).then(handleResponse);
 };
 
+export const deleteAccount = () =>
+  fetch(`${BASE_URL}/api/auth/account`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 export const getAnomalies = () =>
   fetch(`${BASE_URL}/api/transaction/anomalies`, {
     headers: authHeaders(),
