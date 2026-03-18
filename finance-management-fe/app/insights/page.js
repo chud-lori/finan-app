@@ -218,7 +218,7 @@ export default function InsightsPage() {
 
             {/* Why You're Broke */}
             <Section
-              title='🧠 Why You\'re Spending'
+              title="🧠 Why You're Spending"
               subtitle="Root-cause breakdown of where your money is going this month"
               loading={loading.explain}
               error={errors.explain}
