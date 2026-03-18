@@ -4,6 +4,7 @@ import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getTransactions, deleteTransaction } from '@/lib/api';
 import { formatIDR, formatDate, toTitleCase } from '@/lib/format';
+import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 
 const MONTHS = [
   '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -72,26 +73,13 @@ export default function DashboardPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
 
           {/* Stats row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <StatCard
-              label="Balance"
-              value={formatIDR(data.balance?.amount ?? 0)}
-              color="indigo"
-              icon="💰"
-            />
-            <StatCard
-              label="Income this month"
-              value={formatIDR(income)}
-              color="emerald"
-              icon="📈"
-            />
-            <StatCard
-              label="Expense this month"
-              value={formatIDR(outcome)}
-              color="rose"
-              icon="📉"
-            />
-          </div>
+          {loading ? <SkeletonStatCards /> : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <StatCard label="Balance"            value={formatIDR(data.balance?.amount ?? 0)} color="indigo"  icon="💰" />
+              <StatCard label="Income this month"  value={formatIDR(income)}                    color="emerald" icon="📈" />
+              <StatCard label="Expense this month" value={formatIDR(outcome)}                   color="rose"    icon="📉" />
+            </div>
+          )}
 
           {/* Table card */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -114,9 +102,7 @@ export default function DashboardPage() {
             )}
 
             {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-              </div>
+              <SkeletonTableRows rows={6} />
             ) : txns.length === 0 ? (
               <div className="text-center py-16 text-gray-400">
                 <div className="text-4xl mb-3">📭</div>
@@ -161,7 +147,7 @@ export default function DashboardPage() {
                             title="Delete"
                           >
                             {deleting === (t.id || t._id) ? (
-                              <span className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin inline-block" />
+                              <span className="w-4 h-4 bg-gray-200 rounded animate-pulse inline-block" />
                             ) : (
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
