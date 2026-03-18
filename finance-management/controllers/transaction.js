@@ -251,7 +251,7 @@ const deleteTransaction = async (req, res, next) => {
     }
 }
 
-const getOutcomes = async (req, res, next) => {
+const getExpense = async (req, res, next) => {
     try {
         const outcomes = await Transaction.find({
             user: req.user.id,
@@ -259,10 +259,10 @@ const getOutcomes = async (req, res, next) => {
         }).exec();
 
         const sum = outcomes.reduce((total, curVal) => total + curVal.amount, 0);
-        res.status(200).json(BaseResponseDTO.success('Total outcomes retrieved', { totalOutcomes: sum }));
+        res.status(200).json(BaseResponseDTO.success('Total expense retrieved', { totalExpense: sum }));
     } catch (error) {
-        logger.error(`Get outcomes error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get outcomes', error.message));
+        logger.error(`Get expense error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to get expense', error.message));
     }
 }
 
@@ -788,7 +788,7 @@ module.exports = {
     getCategory,
     getByDate,
     getByTimeRange,
-    getOutcomes,
+    getExpense,
     deleteTransaction,
     getRecommendation,
     importCsv,

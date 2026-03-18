@@ -117,13 +117,13 @@ describe('End-to-End Integration Tests', () => {
             expect(transactionsRes.body.data.transactions).to.have.length(3);
             expect(transactionsRes.body.data.balance.amount).to.equal(4650000);
 
-            // Step 8: Get outcomes summary
+            // Step 8: Get expense summary
             const outcomesRes = await chai.request(server)
-                .get('/api/transaction/outcomes')
+                .get('/api/transaction/expense')
                 .set('Authorization', `Bearer ${authToken}`);
 
             expect(outcomesRes).to.have.status(200);
-            expect(outcomesRes.body.data.totalOutcomes).to.equal(350000);
+            expect(outcomesRes.body.data.totalExpense).to.equal(350000);
 
             // Step 9: Create a financial goal
             const goal = {

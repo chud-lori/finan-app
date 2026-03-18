@@ -9,7 +9,7 @@ const {
     seedCategory,
     getByDate,
     getByTimeRange,
-    getOutcomes,
+    getExpense,
     deleteTransaction,
     getRecommendation,
     importCsv,
@@ -35,17 +35,17 @@ const upload = multer({
 
 /**
  * @openapi
- * /api/transaction/outcomes:
+ * /api/transaction/expense:
  *   get:
  *     tags:
  *       - Transaction
- *     summary: Get total outcomes summary
+ *     summary: Get total expense summary
  *     description: Retrieves the total amount of all outcome transactions for the authenticated user
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Total outcomes retrieved successfully
+ *         description: Total expense retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -56,18 +56,18 @@ const upload = multer({
  *                   example: 1
  *                 message:
  *                   type: string
- *                   example: "Total outcomes retrieved"
+ *                   example: "Total expense retrieved"
  *                 data:
  *                   type: object
  *                   properties:
- *                     totalOutcomes:
+ *                     totalExpense:
  *                       type: number
  *                       description: Sum of all outcome transactions
  *                       example: 1500000
  *       500:
  *         description: Server error
  */
-router.get('/outcomes', authenticateJWT, getOutcomes);
+router.get('/expense', authenticateJWT, getExpense);
 router.get('/analytics', authenticateJWT, getAnalytics);
 router.get('/anomalies', authenticateJWT, getAnomalies);
 router.get('/explain', authenticateJWT, getExplainability);

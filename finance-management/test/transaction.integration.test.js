@@ -139,7 +139,7 @@ describe('Transaction Integration Tests', () => {
         });
     });
 
-    describe('GET /api/transaction/outcomes', () => {
+    describe('GET /api/transaction/expense', () => {
         beforeEach(async () => {
             // Create some test transactions
             await Transaction.create([
@@ -149,20 +149,20 @@ describe('Transaction Integration Tests', () => {
             ]);
         });
 
-        it('should return total outcomes', async () => {
+        it('should return total expense', async () => {
             const res = await chai.request(server)
-                .get('/api/transaction/outcomes')
+                .get('/api/transaction/expense')
                 .set('Authorization', `Bearer ${authToken}`);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
-            expect(res.body).to.have.property('message', 'Total outcomes retrieved');
-            expect(res.body.data).to.have.property('totalOutcomes', 75000);
+            expect(res.body).to.have.property('message', 'Total expense retrieved');
+            expect(res.body.data).to.have.property('totalExpense', 75000);
         });
 
         it('should return 401 for unauthorized access', async () => {
             const res = await chai.request(server)
-                .get('/api/transaction/outcomes');
+                .get('/api/transaction/expense');
 
             expect(res).to.have.status(401);
         });
@@ -361,9 +361,12 @@ describe('Transaction Integration Tests', () => {
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
             expect(res.body).to.have.property('message', 'Budget recommendation');
-            expect(res.body.data).to.have.property('outcome');
-            expect(res.body.data).to.have.property('threshold');
-            expect(res.body.data).to.have.property('leftOverBudget');
+            expect(res.body.data).to.have.property('actualSpend');
+            expect(res.body.data).to.have.property('projectedTotal');
+            expect(res.body.data).to.have.property('budgetRemaining');
+            expect(res.body.data).to.have.property('canAfford');
+            expect(res.body.data).to.have.property('dailyBurnRate');
+            expect(res.body.data).to.have.property('velocityStatus');
             expect(res.body.data).to.have.property('resultRecommendation');
         });
 
