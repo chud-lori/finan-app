@@ -42,21 +42,23 @@ body {
 .dark .border-gray-100  { border-color: #334155; }
 .dark .border-gray-200  { border-color: #334155; }
 .dark .border-gray-300  { border-color: #475569; }
+.dark .divide-gray-50  > * + *  { border-color: #1e293b; }
 .dark .divide-gray-100 > * + *  { border-color: #334155; }
 .dark .divide-gray-200 > * + *  { border-color: #334155; }
 
 /* Indigo */
 .dark .bg-indigo-50               { background-color: #1e1b4b; }
+.dark .text-indigo-600            { color: #818cf8; }
 .dark .text-indigo-700            { color: #a5b4fc; }
 .dark .hover\:bg-indigo-50:hover  { background-color: #1e1b4b; }
 .dark .border-indigo-200          { border-color: #3730a3; }
 
 /* Red */
-.dark .bg-red-50                { background-color: rgba(127, 29, 29, 0.35); }
-.dark .border-red-200           { border-color: rgba(220, 38, 38, 0.4); }
-.dark .text-red-700             { color: #fca5a5; }
-.dark .text-red-600             { color: #f87171; }
-.dark .hover\:bg-red-50:hover   { background-color: rgba(127, 29, 29, 0.35); }
+.dark .bg-red-50                 { background-color: rgba(127, 29, 29, 0.35); }
+.dark .border-red-200            { border-color: rgba(220, 38, 38, 0.4); }
+.dark .text-red-700              { color: #fca5a5; }
+.dark .text-red-600              { color: #f87171; }
+.dark .hover\:bg-red-50:hover    { background-color: rgba(127, 29, 29, 0.35); }
 .dark .hover\:text-red-500:hover { color: #f87171; }
 
 /* Emerald */
@@ -64,16 +66,23 @@ body {
 .dark .text-emerald-700   { color: #6ee7b7; }
 .dark .text-emerald-600   { color: #34d399; }
 .dark .border-emerald-200 { border-color: rgba(16, 185, 129, 0.3); }
+.dark .border-emerald-300 { border-color: rgba(16, 185, 129, 0.5); }
 
 /* Rose */
 .dark .bg-rose-50      { background-color: rgba(136, 19, 55, 0.35); }
 .dark .text-rose-700   { color: #fda4af; }
 .dark .text-rose-600   { color: #fb7185; }
+.dark .text-rose-500   { color: #f43f5e; }
 .dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.3); }
+.dark .border-rose-300 { border-color: rgba(244, 63, 94, 0.5); }
 
 /* Amber */
-.dark .bg-amber-50    { background-color: rgba(120, 53, 15, 0.35); }
-.dark .text-amber-700 { color: #fcd34d; }
+.dark .bg-amber-50     { background-color: rgba(120, 53, 15, 0.35); }
+.dark .border-amber-200 { border-color: rgba(217, 119, 6, 0.4); }
+.dark .text-amber-800  { color: #fcd34d; }
+.dark .text-amber-700  { color: #fbbf24; }
+.dark .text-amber-600  { color: #f59e0b; }
+.dark .text-amber-400  { color: #d97706; }
 
 /* Blue */
 .dark .bg-blue-50    { background-color: rgba(30, 58, 138, 0.35); }
