@@ -85,7 +85,7 @@ const loginUser = async (req, res, next) => {
     const user = await User.findOne({ username: loginDTO.username });
     if (!user) {
       logger.error(`Auth Login: ${loginDTO.username} username not found`);
-      return res.status(404).json(BaseResponseDTO.error("Invalid username/password"));
+      return res.status(404).json(BaseResponseDTO.error("Username not found"));
     }
 
     // Block OAuth-only accounts from password login
@@ -97,7 +97,7 @@ const loginUser = async (req, res, next) => {
     const isMatch = await bcrypt.compare(loginDTO.password, user.password);
     if (!isMatch) {
       logger.error(`Auth Login: ${loginDTO.username} password incorrect`);
-      return res.status(400).json(BaseResponseDTO.error("Invalid username/password"));
+      return res.status(400).json(BaseResponseDTO.error("Password incorrect"));
     }
 
     // Create JWT Payload

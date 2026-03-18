@@ -1,3 +1,6 @@
+// Load test env vars before anything else (dotenv won't overwrite already-set vars)
+require('dotenv').config({ path: __dirname + '/test.env' });
+
 // Test setup utilities
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
