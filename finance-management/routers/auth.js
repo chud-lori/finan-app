@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { loginValidatorRules, registerValidatorRules, validate } = require('../helpers/validator');
-const { registerUser, loginUser, checkAuth, verifyGoogleToken } = require('../controllers/auth');
+const { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount } = require('../controllers/auth');
+const authenticateJWT = require('../middleware/authJWT');
 
 /**
  * @openapi
@@ -211,5 +212,6 @@ router.get('/check', checkAuth);
  *         description: Invalid Google token
  */
 router.post('/google/verify', verifyGoogleToken);
+router.delete('/account', authenticateJWT, deleteAccount);
 
 module.exports = router;

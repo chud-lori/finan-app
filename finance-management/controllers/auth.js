@@ -206,4 +206,23 @@ const verifyGoogleToken = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken };
+const deleteAccount = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const Transaction = require('../models/transaction.model');
+
+        await Promise.all([
+            Transaction.deleteMany({ user: userId }),
+            Balance.deleteOne({ user: userId }),
+        ]);
+        await User.deleteOne({ _id: userId });
+
+        logger.info(`Account deleted: ${userId}`);
+        res.status(200).json(BaseResponseDTO.success('Account and all data deleted successfully'));
+    } catch (error) {
+        logger.error(`Delete account error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to delete account', error.message));
+    }
+};
+
+module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount };
