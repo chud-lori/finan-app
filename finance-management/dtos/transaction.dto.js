@@ -106,11 +106,20 @@ class TransactionSummaryResponseDTO {
  * Recommendation Response DTO
  */
 class RecommendationResponseDTO {
-    constructor(outcome, threshold, leftOverBudget, resultRecommendation) {
-        this.outcome = outcome;
-        this.threshold = threshold;
-        this.leftOverBudget = leftOverBudget;
-        this.resultRecommendation = resultRecommendation;
+    constructor(data) {
+        this.actualSpend = data.actualSpend;
+        this.projectedTotal = data.projectedTotal;
+        this.budgetRemaining = data.budgetRemaining;
+        this.desiredSpend = data.desiredSpend;
+        this.dailyBurnRate = data.dailyBurnRate;
+        this.daysElapsed = data.daysElapsed;
+        this.daysRemaining = data.daysRemaining;
+        this.savingsRateWithout = data.savingsRateWithout;
+        this.savingsRateWith = data.savingsRateWith;
+        this.velocityStatus = data.velocityStatus;
+        this.canAfford = data.canAfford;
+        // backward compat
+        this.resultRecommendation = data.canAfford;
     }
 }
 

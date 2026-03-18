@@ -268,28 +268,60 @@ const getOutcomes = async (req, res, next) => {
 
 const getRecommendation = async (req, res, next) => {
     try {
-        const today = new Date();
-        const weekAgo = new Date().setDate(today.getDate() - 7);
+        const monthlyBudget = Number(req.params.monthly);
+        const desiredSpend = Number(req.params.spend);
 
-        const threshold = Number(req.params.monthly) / 4;
-        const costGoingSpend = Number(req.params.spend);
+        if (!monthlyBudget || monthlyBudget <= 0) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid monthly budget'));
+        }
 
+        const now = moment.tz('Asia/Jakarta');
+        const startOfMonth = now.clone().startOf('month').toDate();
+        const endOfMonth = now.clone().endOf('month').toDate();
+        const daysInMonth = now.daysInMonth();
+        const daysElapsed = Math.max(now.date(), 1);
+        const daysRemaining = daysInMonth - daysElapsed;
+
+        // Fetch all outcome transactions this month
         const transactions = await Transaction.find({
             user: req.user.id,
-            time: {
-                $gte: new Date(new Date(moment.tz(weekAgo, 'Asia/Jakarta')).setHours(0, 0, 0)),
-                $lt: new Date(new Date(moment.tz(today, 'Asia/Jakarta')).setHours(23, 59, 59))
-            }
+            type: 'outcome',
+            time: { $gte: startOfMonth, $lte: endOfMonth }
         }).exec();
 
-        const outcomeTransactions = transactions.filter(t => t.type === 'outcome');
-        const outcome = outcomeTransactions.reduce((total, curVal) => total + curVal.amount, 0);
+        const actualSpend = transactions.reduce((sum, t) => sum + t.amount, 0);
+        const dailyBurnRate = actualSpend / daysElapsed;
+        const projectedTotal = Math.round(actualSpend + dailyBurnRate * daysRemaining);
+        const budgetRemaining = Math.round(monthlyBudget - projectedTotal);
+        const canAfford = budgetRemaining >= desiredSpend ? 1 : 0;
 
-        const leftOverBudget = threshold - outcome;
-        const resultRecommendation = leftOverBudget >= costGoingSpend ? 1 : 0;
+        // Savings rate with and without the purchase
+        const savingsRateWithout = monthlyBudget > 0
+            ? Math.round(((monthlyBudget - projectedTotal) / monthlyBudget) * 100)
+            : 0;
+        const savingsRateWith = monthlyBudget > 0
+            ? Math.round(((monthlyBudget - projectedTotal - desiredSpend) / monthlyBudget) * 100)
+            : 0;
 
-        // Return DTO response
-        const responseDTO = new RecommendationResponseDTO(outcome, threshold, leftOverBudget, resultRecommendation);
+        // Spending velocity vs expected daily rate
+        const expectedDaily = monthlyBudget / daysInMonth;
+        const velocityRatio = expectedDaily > 0 ? dailyBurnRate / expectedDaily : 1;
+        const velocityStatus = velocityRatio > 1.3 ? 'very_fast' : velocityRatio > 1.1 ? 'fast' : 'on_track';
+
+        const responseDTO = new RecommendationResponseDTO({
+            actualSpend,
+            projectedTotal,
+            budgetRemaining,
+            desiredSpend,
+            dailyBurnRate: Math.round(dailyBurnRate),
+            daysElapsed,
+            daysRemaining,
+            savingsRateWithout,
+            savingsRateWith,
+            velocityStatus,
+            canAfford,
+        });
+
         res.status(200).json(BaseResponseDTO.success('Budget recommendation', responseDTO));
 
     } catch (error) {
