@@ -74,7 +74,9 @@ export const getRecommendation = (monthly, spend) =>
 
 export const getCategories = (type = null) => {
   const q = type ? `?type=${type}` : '';
-  return fetch(`${BASE_URL}/api/transaction/category${q}`).then(handleResponse);
+  return fetch(`${BASE_URL}/api/transaction/category${q}`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
 };
 
 export const getAnalytics = (year, month = null) => {
