@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { GoogleLogin } from '@react-oauth/google';
@@ -11,6 +11,17 @@ function LoginForm() {
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const googleBtnRef = useRef(null);
+  const [googleBtnWidth, setGoogleBtnWidth] = useState(300);
+
+  useEffect(() => {
+    if (!googleBtnRef.current) return;
+    const obs = new ResizeObserver(([entry]) => {
+      setGoogleBtnWidth(Math.floor(entry.contentRect.width));
+    });
+    obs.observe(googleBtnRef.current);
+    return () => obs.disconnect();
+  }, []);
 
   useEffect(() => {
     if (localStorage.getItem('token')) { router.replace('/'); return; }
@@ -69,11 +80,11 @@ function LoginForm() {
           )}
 
           {/* Google OAuth button */}
-          <div className="flex justify-center">
+          <div ref={googleBtnRef} className="w-full overflow-hidden flex justify-center">
             <GoogleLogin
               onSuccess={handleGoogleSuccess}
               onError={() => setError('Google sign-in failed. Please try again.')}
-              width="360"
+              width={googleBtnWidth}
               theme="outline"
               shape="rectangular"
               text="continue_with"
