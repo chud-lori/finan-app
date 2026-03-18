@@ -107,11 +107,10 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Fetch categories filtered by transaction type
+  // Fetch expense categories only (income has no category picker)
   useEffect(() => {
-    if (!form.type) return;
-    const apiType = form.type === 'outcome' ? 'expense' : 'income';
-    getCategories(apiType)
+    if (form.type !== 'outcome') return;
+    getCategories('expense')
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
   }, [form.type]);
@@ -127,7 +126,7 @@ export default function AddPage() {
       const timeValue = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
       const payload = {
         description: form.description,
-        category:    form.category.trim().toLowerCase(),
+        category:    form.type === 'income' ? 'income' : form.category.trim().toLowerCase(),
         amount:      Number(form.amount.replace(/[^0-9]/g, '')),
         type:        form.type,
         time:        timeValue,
@@ -219,20 +218,20 @@ export default function AddPage() {
                   <input type="hidden" name="type" value={form.type} required />
                 </Field>
 
-                {/* Category combobox */}
-                <Field label="Category">
-                  <CategoryCombobox
-                    value={form.category}
-                    onChange={(val) => setForm(f => ({ ...f, category: val }))}
-                    categories={categories}
-                    disabled={!form.type}
-                  />
-                  {form.type && (
+                {/* Category combobox — expense only */}
+                {form.type === 'outcome' && (
+                  <Field label="Category">
+                    <CategoryCombobox
+                      value={form.category}
+                      onChange={(val) => setForm(f => ({ ...f, category: val }))}
+                      categories={categories}
+                      disabled={false}
+                    />
                     <p className="text-xs text-gray-400 mt-1">
-                      Showing {form.type === 'income' ? 'income' : 'expense'} categories · Type to search or create new
+                      Showing expense categories · Type to search or create new
                     </p>
-                  )}
-                </Field>
+                  </Field>
+                )}
 
                 <Field label="Date & Time">
                   <DateTimePicker
@@ -244,7 +243,7 @@ export default function AddPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || success || !form.type || !form.category.trim()}
+                  disabled={loading || success || !form.type || (form.type === 'outcome' && !form.category.trim())}
                   className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
