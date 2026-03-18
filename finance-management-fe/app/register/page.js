@@ -63,7 +63,7 @@ export default function RegisterPage() {
                 value={form.name}
                 onChange={set('name')}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                placeholder="John Doe"
+                placeholder="Jajang Aja"
                 autoFocus
               />
             </div>
@@ -76,7 +76,7 @@ export default function RegisterPage() {
                 value={form.username}
                 onChange={set('username')}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                placeholder="john_doe"
+                placeholder="jajang_aja"
               />
             </div>
 
@@ -88,7 +88,7 @@ export default function RegisterPage() {
                 value={form.email}
                 onChange={set('email')}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                placeholder="john@example.com"
+                placeholder="jajang@example.com"
               />
             </div>
 

@@ -3,7 +3,7 @@ import GoogleProvider from "@/components/GoogleProvider";
 import Footer from "@/components/Footer";
 
 export const metadata = {
-  title: "Lori — Finance",
+  title: "Finan App",
   description: "Personal finance tracker",
 };
 

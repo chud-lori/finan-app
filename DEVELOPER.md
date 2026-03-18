@@ -1,6 +1,6 @@
 # Developer Guide
 
-Technical reference for setting up, running, and deploying Lori Finance.
+Technical reference for setting up, running, and deploying Finan App.
 
 ---
 

@@ -21,7 +21,7 @@ const { registerUser, loginUser, checkAuth, verifyGoogleToken } = require('../co
  *             properties:
  *               username:
  *                 type: string
- *                 example: "john_doe"
+ *                 example: "jajang_aja"
  *               password:
  *                 type: string
  *                 example: "password123"
@@ -84,13 +84,13 @@ router.post('/login', loginValidatorRules(), validate, loginUser);
  *             properties:
  *               name:
  *                 type: string
- *                 example: "John Doe"
+ *                 example: "Jajang Aja"
  *               username:
  *                 type: string
- *                 example: "john_doe"
+ *                 example: "jajan_aja"
  *               email:
  *                 type: string
- *                 example: "john@example.com"
+ *                 example: "jajang@example.com"
  *               password:
  *                 type: string
  *                 example: "password123"

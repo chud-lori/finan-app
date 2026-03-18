@@ -1,4 +1,4 @@
-# Lori Finance
+# Finan App
 
 Personal finance tracker for recording income, tracking spending by category, and staying on top of your monthly budget.
 

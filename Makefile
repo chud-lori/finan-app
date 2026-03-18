@@ -16,7 +16,7 @@ FE_DIR := finance-management-fe
 # ── help ───────────────────────────────────────────────────────────────────────
 help:
 	@echo ""
-	@echo "$(BOLD)Lori Finance — available targets$(RESET)"
+	@echo "$(BOLD)Finan App — available targets$(RESET)"
 	@echo ""
 	@echo "  $(CYAN)Setup$(RESET)"
 	@echo "    $(GREEN)setup$(RESET)          Copy .env.example → .env (skips if .env already exists)"
