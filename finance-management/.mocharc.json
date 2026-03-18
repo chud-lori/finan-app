@@ -1,7 +1,7 @@
 {
   "timeout": 100000,
   "exit": true,
-  "require": ["./test/setup.js"],
+  "file": ["./test/setup.js"],
   "recursive": true,
   "spec": "test/**/*.test.js",
   "exclude": "test/auth.test.js"

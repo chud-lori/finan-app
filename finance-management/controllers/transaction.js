@@ -32,18 +32,13 @@ const addTransaction = async (req, res, next) => {
             return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
         }
 
-        // Find or create category (stored lowercase)
+        // Find category (case-insensitive); reject if not found
         const nameLower = transactionDTO.category.trim().toLowerCase();
-        let categoryExists = await Category.findOne({
+        const categoryExists = await Category.findOne({
             name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') }
         });
         if (!categoryExists) {
-            categoryExists = await Category.findOneAndUpdate(
-                { name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') } },
-                { $setOnInsert: { name: nameLower, type: transactionDTO.type === 'income' ? 'income' : 'expense' } },
-                { upsert: true, new: true }
-            );
-            logger.info(`Add transaction: auto-created category "${nameLower}"`);
+            return res.status(400).json(BaseResponseDTO.error('Invalid category'));
         }
 
         // Validate currency
@@ -54,7 +49,7 @@ const addTransaction = async (req, res, next) => {
         }
 
         // Validate time format — try common formats
-        const TIME_FORMATS = ['M/D/YYYY H:mm:ss', 'YYYY-MM-DD HH:mm:ss', 'D/M/YYYY H:mm:ss', moment.ISO_8601];
+        const TIME_FORMATS = ['M/D/YYYY H:mm:ss', 'M/D/YYYY HH:mm:ss', 'YYYY-MM-DD HH:mm:ss', 'D/M/YYYY H:mm:ss', 'D/M/YYYY HH:mm:ss', moment.ISO_8601];
         let transactionTime = null;
         for (const fmt of TIME_FORMATS) {
             const t = moment.tz(transactionDTO.time, fmt, true, transactionDTO.transaction_timezone);

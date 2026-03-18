@@ -8,11 +8,9 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 let mongoServer;
 
 const setupTestDB = async () => {
-    // Disconnect from existing connection if any
     if (mongoose.connection.readyState !== 0) {
         await mongoose.disconnect();
     }
-    
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
@@ -26,10 +24,22 @@ const teardownTestDB = async () => {
 const cleanupCollections = async () => {
     const collections = mongoose.connection.collections;
     for (const key in collections) {
-        const collection = collections[key];
-        await collection.deleteMany({});
+        await collections[key].deleteMany({});
     }
 };
+
+// Register as global Mocha hooks — runs for every test file
+before(async () => {
+    await setupTestDB();
+});
+
+afterEach(async () => {
+    await cleanupCollections();
+});
+
+after(async () => {
+    await teardownTestDB();
+});
 
 module.exports = {
     setupTestDB,

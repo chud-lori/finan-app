@@ -2,21 +2,8 @@ const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
 const server = require('../app');
-const { setupTestDB, teardownTestDB, cleanupCollections } = require('./setup');
 
 chai.use(chaiHttp);
-
-before(async () => {
-    await setupTestDB();
-});
-
-after(async () => {
-    await teardownTestDB();
-});
-
-afterEach(async () => {
-    await cleanupCollections();
-});
 
 describe('App Integration Tests', () => {
     describe('GET /', () => {
@@ -32,7 +19,8 @@ describe('App Integration Tests', () => {
     describe('GET /api-docs', () => {
         it('should serve Swagger UI', async () => {
             const res = await chai.request(server)
-                .get('/api-docs');
+                .get('/api-docs/')
+                .redirects(0);
 
             expect(res).to.have.status(200);
             expect(res).to.have.header('content-type', /html/);

@@ -332,7 +332,7 @@ router.post('/category', authenticateJWT, seedCategory)
  *       500:
  *         description: Server error
  */
-router.get('/category', getCategory);
+router.get(`/category`, authenticateJWT, getCategory);
 
 /**
  * @openapi
