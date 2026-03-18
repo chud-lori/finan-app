@@ -17,6 +17,7 @@ services:
 
   # ── Backend (Express) ───────────────────────────────────────
   backend:
+    image: ghcr.io/chud-lori/finan-app-backend:latest
     build:
       context: ./finance-management
       dockerfile: Dockerfile
@@ -42,14 +43,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   # ── Frontend (Next.js) ──────────────────────────────────────
   frontend:
+    image: ghcr.io/chud-lori/finan-app-frontend:latest
     build:
       context: ./finance-management-fe
       dockerfile: Dockerfile
       args:
-        # Browser-side vars — must be the URL the user's browser can reach
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
     container_name: finan-fe
@@ -59,6 +62,24 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    networks:
+      - finan-net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ── Watchtower ──────────────────────────────────────────────
+  watchtower:
+    image: containrrr/watchtower
+    container_name: finan-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json:ro
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 30
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      DOCKER_CONFIG: /config.json
     networks:
       - finan-net
 
