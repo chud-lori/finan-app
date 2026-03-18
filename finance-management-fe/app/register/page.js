@@ -11,7 +11,7 @@ function ThemeToggle() {
     <button
       onClick={toggleTheme}
       aria-label="Toggle dark mode"
-      className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+      className={`p-2 rounded-lg transition-colors ${dark ? 'text-yellow-400 hover:bg-slate-700' : 'text-gray-500 hover:bg-gray-100'}`}
     >
       {dark ? (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -72,7 +72,7 @@ export default function RegisterPage() {
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600 text-white text-2xl font-bold mb-4 shadow-lg">
-              L
+              FA
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Create account</h1>
             <p className="text-gray-500 text-sm mt-1">Start tracking your finances</p>
