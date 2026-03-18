@@ -80,6 +80,7 @@ services:
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_CLEANUP: "true"
       DOCKER_CONFIG: /config.json
+      DOCKER_API_VERSION: "1.44"
     networks:
       - finan-net
 
