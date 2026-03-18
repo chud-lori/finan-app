@@ -2,10 +2,14 @@ const { body, validationResult } = require('express-validator');
 
 const loginValidatorRules = () => {
     return [
-        // username must be filled
-        body('username').notEmpty().withMessage('Please isi'),
-        // password must be at least 8 chars long
-        body('password').notEmpty().withMessage('Please isi'),
+        // accept either 'identifier' (new) or legacy 'username'
+        body().custom((_, { req }) => {
+            if (!req.body.identifier && !req.body.username) {
+                throw new Error('Username or email is required');
+            }
+            return true;
+        }),
+        body('password').notEmpty().withMessage('Password is required'),
     ]
 }
 
