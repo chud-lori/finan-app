@@ -1,0 +1,49 @@
+# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Express CICD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install dependencies
+      run: npm i
+    - name: Run test cases
+      run: npm test
+
+  build:
+    needs: test
+    runs-on: self-hosted
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build the Docker Image
+      run: docker build -t localhost:8888/finan-be:latest -f Dockerfile .
+    - name: push image to registry
+      run: docker image push localhost:8888/finan-be:latest
+
+  update:
+    runs-on: self-hosted
+    steps:
+    - name: Stop finan-be container
+      run: docker stop finan-be || true
+    - name: Remove finan-be container
+      run: docker rm finan-be || true
+
+  deploy:
+    needs: build
+    runs-on: self-hosted
+    steps:
+    - name: Pull docker image
+      run: docker pull localhost:8888/finan-be:latest
+    - name: Docker Compose
+      # working-directory: /home/ubuntu/app-finan-be
+      run: docker compose up -d

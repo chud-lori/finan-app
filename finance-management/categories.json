@@ -1,0 +1,27 @@
+{
+  "categories": [
+    { "name": "food",            "type": "expense" },
+    { "name": "entertainment",   "type": "expense" },
+    { "name": "personal care",   "type": "expense" },
+    { "name": "living budget",   "type": "expense" },
+    { "name": "monthly budget",  "type": "expense" },
+    { "name": "household",       "type": "expense" },
+    { "name": "transport",       "type": "expense" },
+    { "name": "fashion",         "type": "expense" },
+    { "name": "gadget",          "type": "expense" },
+    { "name": "grocery",         "type": "expense" },
+    { "name": "health",          "type": "expense" },
+    { "name": "bill",            "type": "expense" },
+    { "name": "self improve",    "type": "expense" },
+    { "name": "sharing",         "type": "expense" },
+    { "name": "salary",          "type": "income"  },
+    { "name": "freelance",       "type": "income"  },
+    { "name": "business",        "type": "income"  },
+    { "name": "investment",      "type": "income"  },
+    { "name": "rental income",   "type": "income"  },
+    { "name": "bonus",           "type": "income"  },
+    { "name": "gift",            "type": "income"  },
+    { "name": "side income",     "type": "income"  },
+    { "name": "other income",    "type": "income"  }
+  ]
+}

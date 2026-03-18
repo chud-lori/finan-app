@@ -1,0 +1,15 @@
+version: '3'
+services:
+  finan-be:
+    container_name: finan-be
+    restart: always
+    # image: "localhost:8888/finan-be:latest"
+    build:
+      context: ./  # Path to your Dockerfile's folder
+      dockerfile: Dockerfile  # Optional if named Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - /home/ubuntu/app-finan-be/docker.env
+    volumes:
+      - /home/ubuntu/app-finan-be/logs/:/usr/src/app/logs/

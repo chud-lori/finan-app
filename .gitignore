@@ -1,0 +1,26 @@
+# Environment — never commit real credentials
+.env
+.env.local
+.env.*.local
+
+# OAuth credentials file
+oauth
+
+# Excel / data files
+*.xlsx
+*.xls
+*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Docker override files
+docker-compose.override.yml
+
+# Node
+node_modules/

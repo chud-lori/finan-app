@@ -1,0 +1,70 @@
+services:
+
+  # ── MongoDB ────────────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: finan-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - finan-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend (Express) ───────────────────────────────────────
+  backend:
+    build:
+      context: ./finance-management
+      dockerfile: Dockerfile
+    container_name: finan-be
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: production
+      DB_URI: ${DB_URI:-mongodb://mongo:27017/finan}
+      SECRET_TOKEN: ${SECRET_TOKEN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3001/api/auth/google/callback}
+      FE_URL: ${FE_URL:-http://localhost:3000}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - finan-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Frontend (Next.js) ──────────────────────────────────────
+  frontend:
+    build:
+      context: ./finance-management-fe
+      dockerfile: Dockerfile
+      args:
+        # Browser-side vars — must be the URL the user's browser can reach
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+    container_name: finan-fe
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - finan-net
+
+volumes:
+  mongo_data:
+
+networks:
+  finan-net:
+    driver: bridge
