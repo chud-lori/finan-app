@@ -32,11 +32,11 @@ export const register = (body) =>
     body: JSON.stringify(body),
   }).then(handleResponse);
 
-export const login = (username, password) =>
+export const login = (identifier, password) =>
   fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ identifier, password }),
   }).then(handleResponse);
 
 export const getTransactions = (params = {}) => {

@@ -36,14 +36,15 @@ class RegisterRequestDTO extends BaseRequestDTO {
 class LoginRequestDTO extends BaseRequestDTO {
     constructor(data) {
         super(data);
-        this.username = data.username;
+        // Accept 'identifier' (new) or 'username' (legacy) interchangeably
+        this.identifier = data.identifier || data.username;
         this.password = data.password;
     }
 
     validate() {
         const errors = [];
-        if (!this.username || typeof this.username !== 'string') {
-            errors.push('Username is required and must be a string');
+        if (!this.identifier || typeof this.identifier !== 'string') {
+            errors.push('Username or email is required');
         }
         if (!this.password || typeof this.password !== 'string') {
             errors.push('Password is required and must be a string');

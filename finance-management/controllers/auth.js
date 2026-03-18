@@ -72,20 +72,23 @@ const registerUser = async (req, res, next) => {
 
 const loginUser = async (req, res, next) => {
   try {
-    logger.info(`Auth Login: ${req.body.username}`);
+    const loginDTO = new LoginRequestDTO(req.body);
+    logger.info(`Auth Login: ${loginDTO.identifier}`);
 
     // Validate request data
-    const loginDTO = new LoginRequestDTO(req.body);
     const validationErrors = loginDTO.validate();
     if (validationErrors.length > 0) {
       return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
     }
 
-    // Find user by username
-    const user = await User.findOne({ username: loginDTO.username });
+    // Find user by email or username (auto-detect by presence of @)
+    const isEmail = loginDTO.identifier.includes('@');
+    const user = isEmail
+      ? await User.findOne({ email: loginDTO.identifier.toLowerCase() })
+      : await User.findOne({ username: loginDTO.identifier });
     if (!user) {
-      logger.error(`Auth Login: ${loginDTO.username} username not found`);
-      return res.status(404).json(BaseResponseDTO.error("Username not found"));
+      logger.error(`Auth Login: ${loginDTO.identifier} not found`);
+      return res.status(404).json(BaseResponseDTO.error(isEmail ? "Email not found" : "Username not found"));
     }
 
     // Block OAuth-only accounts from password login
@@ -96,7 +99,7 @@ const loginUser = async (req, res, next) => {
     // Check password
     const isMatch = await bcrypt.compare(loginDTO.password, user.password);
     if (!isMatch) {
-      logger.error(`Auth Login: ${loginDTO.username} password incorrect`);
+      logger.error(`Auth Login: ${loginDTO.identifier} password incorrect`);
       return res.status(400).json(BaseResponseDTO.error("Password incorrect"));
     }
 

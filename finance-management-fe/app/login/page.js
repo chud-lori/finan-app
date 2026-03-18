@@ -8,7 +8,7 @@ import { login, verifyGoogleToken } from '@/lib/api';
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState({ identifier: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const googleBtnRef = useRef(null);
@@ -33,7 +33,7 @@ function LoginForm() {
     setError('');
     setLoading(true);
     try {
-      const data = await login(form.username, form.password);
+      const data = await login(form.identifier, form.password);
       localStorage.setItem('token', data.data.token);
       localStorage.setItem('username', data.data.user?.name || form.username);
       router.replace('/');
@@ -101,14 +101,14 @@ function LoginForm() {
           {/* Username / password form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Username or email</label>
               <input
                 type="text"
                 required
-                value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                value={form.identifier}
+                onChange={(e) => setForm({ ...form, identifier: e.target.value })}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                placeholder="your_username"
+                placeholder="your_username or email@example.com"
                 autoFocus
               />
             </div>
