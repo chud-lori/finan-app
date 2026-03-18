@@ -18,6 +18,9 @@ export function ThemeProvider({ children }) {
     if (!mounted) return;
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem('theme', dark ? 'dark' : 'light');
+    // Tell browser which scheme is active so Brave/Safari won't override
+    const meta = document.querySelector('meta[name="color-scheme"]');
+    if (meta) meta.setAttribute('content', dark ? 'dark light' : 'light dark');
   }, [dark, mounted]);
 
   return (
