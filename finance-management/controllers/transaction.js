@@ -623,6 +623,164 @@ const getAnalytics = async (req, res) => {
     }
 };
 
+const getAnomalies = async (req, res) => {
+    try {
+        const now = moment.tz('Asia/Jakarta');
+        const startOfMonth = now.clone().startOf('month').toDate();
+        const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
+
+        const [currentTxns, historicalTxns, priorCategories] = await Promise.all([
+            Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: startOfMonth } }).lean(),
+            Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: threeMonthsAgo, $lt: startOfMonth } }).lean(),
+            Transaction.distinct('category', { user: req.user.id, type: 'outcome', time: { $lt: startOfMonth } }),
+        ]);
+
+        const priorCategorySet = new Set(priorCategories.map(c => c.toLowerCase()));
+
+        // Per-category average from historical data
+        const histMap = {};
+        historicalTxns.forEach(t => {
+            const cat = t.category.toLowerCase();
+            if (!histMap[cat]) histMap[cat] = { total: 0, count: 0 };
+            histMap[cat].total += t.amount;
+            histMap[cat].count++;
+        });
+
+        const anomalies = [];
+        currentTxns.forEach(t => {
+            const cat = t.category.toLowerCase();
+            const flags = [];
+
+            if (!priorCategorySet.has(cat)) {
+                flags.push({ type: 'first_time', message: `First time spending in ${t.category}` });
+            }
+
+            const hist = histMap[cat];
+            if (hist && hist.count > 0) {
+                const avg = hist.total / hist.count;
+                const ratio = t.amount / avg;
+                if (ratio >= 2) {
+                    flags.push({
+                        type: 'high_amount',
+                        ratio: Math.round(ratio * 10) / 10,
+                        avg: Math.round(avg),
+                        message: `This is ${Math.round(ratio)}x higher than your normal ${t.category} spend`,
+                    });
+                }
+            }
+
+            if (flags.length > 0) {
+                anomalies.push({ id: t._id, description: t.description, category: t.category, amount: t.amount, time: t.time, flags });
+            }
+        });
+
+        anomalies.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+        res.status(200).json(BaseResponseDTO.success('Anomaly detection complete', { count: anomalies.length, anomalies }));
+    } catch (error) {
+        logger.error(`Get anomalies error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to get anomalies', error.message));
+    }
+};
+
+const getExplainability = async (req, res) => {
+    try {
+        const now = moment.tz('Asia/Jakarta');
+        const monthParam = req.query.month; // optional YYYY-MM
+
+        let periodStart, periodEnd;
+        if (monthParam) {
+            periodStart = moment.tz(monthParam, 'YYYY-MM', 'Asia/Jakarta').startOf('month').toDate();
+            periodEnd   = moment.tz(monthParam, 'YYYY-MM', 'Asia/Jakarta').endOf('month').toDate();
+        } else {
+            periodStart = now.clone().startOf('month').toDate();
+            periodEnd   = now.clone().endOf('month').toDate();
+        }
+        const prevStart = moment(periodStart).subtract(1, 'month').toDate();
+
+        const [currentTxns, prevTxns] = await Promise.all([
+            Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: periodStart, $lte: periodEnd } }).lean(),
+            Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: prevStart, $lt: periodStart } }).lean(),
+        ]);
+
+        const totalOutcome = currentTxns.reduce((s, t) => s + t.amount, 0);
+
+        const catMap = {};
+        currentTxns.forEach(t => {
+            if (!catMap[t.category]) catMap[t.category] = { total: 0, count: 0 };
+            catMap[t.category].total += t.amount;
+            catMap[t.category].count++;
+        });
+
+        const prevCatMap = {};
+        prevTxns.forEach(t => {
+            if (!prevCatMap[t.category]) prevCatMap[t.category] = { total: 0 };
+            prevCatMap[t.category].total += t.amount;
+        });
+
+        const topCategories = Object.entries(catMap)
+            .sort((a, b) => b[1].total - a[1].total)
+            .slice(0, 5)
+            .map(([cat, v]) => {
+                const prevTotal = prevCatMap[cat]?.total || 0;
+                const pct       = totalOutcome > 0 ? Math.round((v.total / totalOutcome) * 100) : 0;
+                const delta     = prevTotal > 0 ? Math.round(((v.total - prevTotal) / prevTotal) * 100) : null;
+                return { category: cat, total: Math.round(v.total), count: v.count, pct, prevTotal: Math.round(prevTotal), delta };
+            });
+
+        const top3Names = topCategories.slice(0, 3).map(c => c.category).join(', ');
+        const summary = topCategories.length > 0
+            ? `Your spending is mainly driven by: ${top3Names}`
+            : 'No spending data for this period';
+
+        res.status(200).json(BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalOutcome), summary, topCategories }));
+    } catch (error) {
+        logger.error(`Get explainability error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to get explainability', error.message));
+    }
+};
+
+const getTimeToZero = async (req, res) => {
+    try {
+        const balance = await Balance.findOne({ user: req.user.id });
+        if (!balance) {
+            return res.status(404).json(BaseResponseDTO.error('User balance not found'));
+        }
+
+        const now = moment.tz('Asia/Jakarta');
+        const thirtyDaysAgo = now.clone().subtract(30, 'days').toDate();
+
+        const recentOutcomes = await Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: thirtyDaysAgo } }).lean();
+        const totalSpent     = recentOutcomes.reduce((s, t) => s + t.amount, 0);
+        const dailyBurnRate  = totalSpent / 30;
+
+        let daysToZero = null, projectedZeroDate = null, status = 'no_spend';
+
+        if (dailyBurnRate > 0) {
+            if (balance.amount <= 0) {
+                daysToZero = 0;
+                projectedZeroDate = now.toDate();
+                status = 'already_zero';
+            } else {
+                daysToZero = Math.floor(balance.amount / dailyBurnRate);
+                projectedZeroDate = now.clone().add(daysToZero, 'days').toDate();
+                status = daysToZero <= 7 ? 'critical' : daysToZero <= 30 ? 'warning' : 'safe';
+            }
+        }
+
+        res.status(200).json(BaseResponseDTO.success('Time to zero calculated', {
+            balance: balance.amount,
+            dailyBurnRate: Math.round(dailyBurnRate),
+            daysToZero,
+            projectedZeroDate,
+            status,
+        }));
+    } catch (error) {
+        logger.error(`Get time to zero error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to calculate time to zero', error.message));
+    }
+};
+
 module.exports = {
     addTransaction,
     getUserTransaction,
@@ -635,4 +793,7 @@ module.exports = {
     getRecommendation,
     importCsv,
     getAnalytics,
+    getAnomalies,
+    getExplainability,
+    getTimeToZero,
 };

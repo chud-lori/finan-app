@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { href: '/add', label: 'Add', icon: '➕' },
   { href: '/range', label: 'Range', icon: '📅' },
   { href: '/recommendation', label: 'Budget', icon: '💡' },
+  { href: '/insights', label: 'Insights', icon: '🔍' },
   { href: '/import', label: 'Import CSV', icon: '📤' },
 ];
 

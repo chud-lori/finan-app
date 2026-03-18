@@ -84,6 +84,23 @@ export const getAnalytics = (year, month = null) => {
   }).then(handleResponse);
 };
 
+export const getAnomalies = () =>
+  fetch(`${BASE_URL}/api/transaction/anomalies`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+
+export const getExplainability = (month = null) => {
+  const q = month ? `?month=${month}` : '';
+  return fetch(`${BASE_URL}/api/transaction/explain${q}`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+};
+
+export const getTimeToZero = () =>
+  fetch(`${BASE_URL}/api/transaction/time-to-zero`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 export const importCsv = (file) => {
   const form = new FormData();
   form.append('file', file);

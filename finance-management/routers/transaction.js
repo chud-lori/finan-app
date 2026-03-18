@@ -14,6 +14,9 @@ const {
     getRecommendation,
     importCsv,
     getAnalytics,
+    getAnomalies,
+    getExplainability,
+    getTimeToZero,
 } = require('../controllers/transaction');
 
 const upload = multer({
@@ -66,6 +69,9 @@ const upload = multer({
  */
 router.get('/outcomes', authenticateJWT, getOutcomes);
 router.get('/analytics', authenticateJWT, getAnalytics);
+router.get('/anomalies', authenticateJWT, getAnomalies);
+router.get('/explain', authenticateJWT, getExplainability);
+router.get('/time-to-zero', authenticateJWT, getTimeToZero);
 
 /**
  * @openapi
