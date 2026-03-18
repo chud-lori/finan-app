@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getAnalytics } from '@/lib/api';
 import { formatIDR } from '@/lib/format';
+import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 
 const DonutChart = dynamic(() => import('@/components/charts/DonutChart'), { ssr: false });
 const HBarChart  = dynamic(() => import('@/components/charts/HBarChart'),  { ssr: false });
@@ -220,8 +221,30 @@ export default function AnalyticsPage() {
           )}
 
           {loading ? (
-            <div className="flex items-center justify-center py-32">
-              <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[0,1,2,3].map(i => (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-200 p-4">
+                    <SkeletonLine className="h-3 w-16 mb-2" />
+                    <SkeletonLine className="h-5 w-24" />
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="bg-white rounded-2xl border border-gray-200 p-5">
+                  <SkeletonLine className="h-4 w-32 mb-4" />
+                  <SkeletonBox className="h-48 w-48 rounded-full mx-auto" />
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 p-5">
+                  <SkeletonLine className="h-4 w-40 mb-4" />
+                  {[0,1,2,3,4].map(i => (
+                    <div key={i} className="flex gap-3 mb-3">
+                      <SkeletonLine className="h-5 w-24 flex-shrink-0" />
+                      <SkeletonLine className="h-5 flex-1" style={{ width: `${40 + i * 10}%` }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <>
