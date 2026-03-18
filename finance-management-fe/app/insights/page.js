@@ -4,6 +4,7 @@ import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getAnomalies, getExplainability, getTimeToZero } from '@/lib/api';
 import { formatIDR } from '@/lib/format';
+import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 
 // ── Time-to-Zero card ────────────────────────────────────────────────────────
 
@@ -153,6 +154,17 @@ function AnomalyList({ data }) {
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
+function SectionSkeleton() {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3 animate-pulse">
+      <SkeletonLine className="h-4 w-32" />
+      <SkeletonLine className="h-3 w-full" />
+      <SkeletonLine className="h-3 w-3/4" />
+      <SkeletonBox className="h-20 w-full rounded-xl" />
+    </div>
+  );
+}
+
 function Section({ title, subtitle, children, loading, error }) {
   return (
     <section>
@@ -160,9 +172,7 @@ function Section({ title, subtitle, children, loading, error }) {
       {subtitle && <p className="text-xs text-gray-500 mt-0.5 mb-3">{subtitle}</p>}
       {!subtitle && <div className="mb-3" />}
       {loading ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 flex justify-center">
-          <span className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <SectionSkeleton />
       ) : error ? (
         <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
       ) : children}
