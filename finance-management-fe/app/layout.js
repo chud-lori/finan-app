@@ -19,7 +19,9 @@ export default function RootLayout({ children }) {
           (function(){
             try {
               var t = localStorage.getItem('theme');
-              if (t === 'dark') document.documentElement.classList.add('dark');
+              if (t === 'dark' && window.location.pathname !== '/') {
+                document.documentElement.classList.add('dark');
+              }
             } catch(e) {}
           })();
         `}} />

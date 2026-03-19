@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Reveal from '@/components/Reveal';
 import LandingNav from '@/components/LandingNav';
 import LandingHeroCTA from '@/components/LandingHeroCTA';
+import ForceLightMode from '@/components/ForceLightMode';
 
 export const metadata = {
   title: 'Finan App — Personal Finance Tracker & Planner',
@@ -176,6 +177,7 @@ function LandingFooter() {
 export default function LandingPage() {
   return (
     <>
+      <ForceLightMode />
       <div className="bg-white overflow-x-hidden">
 
         {/* ── Sticky nav ── */}
