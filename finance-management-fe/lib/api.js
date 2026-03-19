@@ -113,6 +113,19 @@ export const deleteAccount = () =>
     headers: authHeaders(),
   }).then(handleResponse);
 
+export const changePassword = (body) =>
+  fetch(`${BASE_URL}/api/auth/password`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  }).then(handleResponse);
+
+export const logoutAllDevices = () =>
+  fetch(`${BASE_URL}/api/auth/logout-all`, {
+    method: 'POST',
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 export const getAnomalies = () =>
   fetch(`${BASE_URL}/api/transaction/anomalies?tz=${encodeURIComponent(browserTz())}`, {
     headers: authHeaders(),

@@ -27,7 +27,11 @@ const UserSchema = new Schema({
         type: String,
         sparse: true, // allows multiple null values while keeping uniqueness for non-null
         unique: true,
-    }
+    },
+    lastLoginAt: { type: Date },
+    lastActivityAt: { type: Date },
+    lastActivityType: { type: String },
+    tokenVersion: { type: Number, default: 0 },
 }, {
     timestamps: { 
         currentTime: () => {

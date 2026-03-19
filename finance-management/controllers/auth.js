@@ -107,6 +107,7 @@ const loginUser = async (req, res, next) => {
     const payload = {
       id: user._id,
       name: user.name,
+      tv: user.tokenVersion || 0,
     };
 
     // Sign token
@@ -115,6 +116,8 @@ const loginUser = async (req, res, next) => {
     });
 
     logger.info(`Auth Login Response: ${token}`);
+
+    User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
 
     // Return DTO response
     const responseDTO = new LoginResponseDTO(token, user);
@@ -192,8 +195,10 @@ const verifyGoogleToken = async (req, res) => {
     const { sub: googleId, email, name } = ticket.getPayload();
     const user = await findOrCreateGoogleUser(googleId, email, name);
 
-    const token = jwt.sign({ id: user._id, name: user.name }, SECRET_TOKEN, { expiresIn: 31556926 });
+    const token = jwt.sign({ id: user._id, name: user.name, tv: user.tokenVersion || 0 }, SECRET_TOKEN, { expiresIn: 31556926 });
     logger.info(`Google verify: issued token for user ${user._id}`);
+
+    User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
 
     res.status(200).json(BaseResponseDTO.success('Login successful', {
       token,
@@ -227,4 +232,43 @@ const deleteAccount = async (req, res) => {
     }
 };
 
-module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount };
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json(BaseResponseDTO.error('New password must be at least 8 characters'));
+    }
+
+    const user = await User.findById(userId).select('password googleId');
+    if (!user) return res.status(404).json(BaseResponseDTO.error('User not found'));
+    if (!user.password) {
+      return res.status(400).json(BaseResponseDTO.error('Google accounts cannot change password here'));
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) return res.status(400).json(BaseResponseDTO.error('Current password is incorrect'));
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(newPassword, salt);
+    await User.findByIdAndUpdate(userId, { password: hash, $inc: { tokenVersion: 1 } });
+
+    res.status(200).json(BaseResponseDTO.success('Password changed. Please log in again.'));
+  } catch (e) {
+    logger.error(`Change password error: ${e.message}`);
+    res.status(500).json(BaseResponseDTO.error('Failed to change password', e.message));
+  }
+};
+
+const logoutAllDevices = async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.user.id, { $inc: { tokenVersion: 1 } });
+    res.status(200).json(BaseResponseDTO.success('All sessions invalidated. Please log in again.'));
+  } catch (e) {
+    logger.error(`Logout all error: ${e.message}`);
+    res.status(500).json(BaseResponseDTO.error('Failed to logout all devices', e.message));
+  }
+};
+
+module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices };

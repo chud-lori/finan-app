@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { loginValidatorRules, registerValidatorRules, validate } = require('../helpers/validator');
-const { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount } = require('../controllers/auth');
+const { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices } = require('../controllers/auth');
 const authenticateJWT = require('../middleware/authJWT');
 const limiter = require('../middleware/rateLimit');
 
@@ -214,5 +214,7 @@ router.get('/check', checkAuth);
  */
 router.post('/google/verify', limiter.byIp(20), verifyGoogleToken);
 router.delete('/account', authenticateJWT, deleteAccount);
+router.patch('/password', authenticateJWT, limiter.byUser(5), changePassword);
+router.post('/logout-all', authenticateJWT, limiter.byUser(5), logoutAllDevices);
 
 module.exports = router;

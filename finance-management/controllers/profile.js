@@ -44,7 +44,7 @@ const getProfile = async (req, res) => {
         const userId = req.user.id;
 
         const [user, snapshots, prefs] = await Promise.all([
-            User.findById(userId).select('name username email').lean(),
+            User.findById(userId).select('name username email createdAt lastLoginAt lastActivityAt lastActivityType googleId').lean(),
             Snapshot.find({ user: userId }).sort({ yearMonth: -1 }).limit(12).lean(),
             Preference.findOne({ user: userId }).lean(),
         ]);
@@ -93,6 +93,13 @@ const getProfile = async (req, res) => {
 
         res.status(200).json(BaseResponseDTO.success('Profile retrieved', {
             user:        { name: user.name, username: user.username, email: user.email },
+            account: {
+                memberSince:      user.createdAt,
+                lastLoginAt:      user.lastLoginAt || null,
+                lastActivityAt:   user.lastActivityAt || null,
+                lastActivityType: user.lastActivityType || null,
+                hasPassword:      !user.googleId || !!user.password,  // false for pure Google OAuth users
+            },
             identity,
             preferences,
             recentSnapshots: snapshots.slice(0, 6),

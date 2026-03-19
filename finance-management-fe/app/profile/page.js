@@ -9,6 +9,8 @@ import {
   exportTransactions,
   importCsv,
   deleteAccount,
+  changePassword,
+  logoutAllDevices,
 } from '@/lib/api';
 import { formatIDR, toTitleCase } from '@/lib/format';
 
@@ -37,6 +39,22 @@ const CSV_COLUMNS = [
 ];
 
 const IMPORT_STEPS = ['Reading file', 'Uploading', 'Processing rows', 'Saving'];
+
+// ─── Relative time helper ─────────────────────────────────────────────────────
+function timeAgo(date) {
+  if (!date) return null;
+  const secs = Math.floor((Date.now() - new Date(date)) / 1000);
+  if (secs < 60)   return 'just now';
+  if (secs < 3600) return `${Math.floor(secs / 60)} minute${Math.floor(secs / 60) !== 1 ? 's' : ''} ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)} hour${Math.floor(secs / 3600) !== 1 ? 's' : ''} ago`;
+  if (secs < 86400 * 30) return `${Math.floor(secs / 86400)} day${Math.floor(secs / 86400) !== 1 ? 's' : ''} ago`;
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+function memberSince(date) {
+  if (!date) return '—';
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
 
 // ─── Spending style badge color ───────────────────────────────────────────────
 function styleColor(label = '') {
@@ -259,6 +277,15 @@ export default function ProfilePage() {
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  // Change password
+  const [pwForm,    setPwForm]    = useState({ current: '', next: '', confirm: '' });
+  const [pwSaving,  setPwSaving]  = useState(false);
+  const [pwMsg,     setPwMsg]     = useState(null); // { ok, text }
+  const [showPwForm, setShowPwForm] = useState(false);
+
+  // Logout all devices
+  const [logoutAllLoading, setLogoutAllLoading] = useState(false);
+
   // ── Load profile ──────────────────────────────────────────────────────────
   useEffect(() => {
     getProfile()
@@ -336,6 +363,47 @@ export default function ProfilePage() {
     }
   };
 
+  // ── Change password ───────────────────────────────────────────────────────
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (pwForm.next !== pwForm.confirm) {
+      setPwMsg({ ok: false, text: 'New passwords do not match' }); return;
+    }
+    if (pwForm.next.length < 8) {
+      setPwMsg({ ok: false, text: 'New password must be at least 8 characters' }); return;
+    }
+    setPwSaving(true); setPwMsg(null);
+    try {
+      await changePassword({ currentPassword: pwForm.current, newPassword: pwForm.next });
+      setPwMsg({ ok: true, text: 'Password changed. Please log in again.' });
+      setPwForm({ current: '', next: '', confirm: '' });
+      setTimeout(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('username');
+        router.replace('/login');
+      }, 1500);
+    } catch (e) {
+      setPwMsg({ ok: false, text: e.message || 'Failed to change password' });
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  // ── Logout all devices ────────────────────────────────────────────────────
+  const handleLogoutAll = async () => {
+    if (!confirm('This will sign you out of all devices. Continue?')) return;
+    setLogoutAllLoading(true);
+    try {
+      await logoutAllDevices();
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      router.replace('/login');
+    } catch (e) {
+      alert(e.message || 'Failed to logout all devices');
+      setLogoutAllLoading(false);
+    }
+  };
+
   // ── Delete account ────────────────────────────────────────────────────────
   const handleDeleteConfirmed = () => {
     localStorage.removeItem('token');
@@ -387,6 +455,35 @@ export default function ProfilePage() {
           {profileError && (
             <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">{profileError}</div>
           )}
+
+          {/* ── Account Info ── */}
+          <Card title="Account">
+            <div className="space-y-2.5">
+              {[
+                {
+                  label: 'Member since',
+                  value: memberSince(profile?.account?.memberSince),
+                },
+                {
+                  label: 'Last activity',
+                  value: profile?.account?.lastActivityAt
+                    ? `${profile.account.lastActivityType || 'Activity'} · ${timeAgo(profile.account.lastActivityAt)}`
+                    : 'No activity yet',
+                },
+                {
+                  label: 'Last login',
+                  value: profile?.account?.lastLoginAt
+                    ? timeAgo(profile.account.lastLoginAt)
+                    : 'Unknown',
+                },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex items-center justify-between gap-4">
+                  <span className="text-xs text-gray-500 shrink-0">{label}</span>
+                  <span className="text-xs font-medium text-gray-800 text-right">{loadingProfile ? '…' : value}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
 
           {/* ── Financial Identity ── */}
           <Card title="Financial Identity" subtitle="Avg across months with activity">
@@ -590,6 +687,76 @@ export default function ProfilePage() {
                   Import
                 </button>
               </form>
+            </div>
+          </Card>
+
+          {/* ── Security ── */}
+          <Card title="Security">
+            <div className="space-y-3">
+              {/* Change password — only for password accounts */}
+              {profile?.account?.hasPassword !== false && (
+                <div>
+                  <button
+                    onClick={() => { setShowPwForm(v => !v); setPwMsg(null); }}
+                    className="w-full flex items-center justify-between py-2 text-sm font-medium text-gray-800 hover:text-teal-600 transition-colors"
+                  >
+                    <span>Change password</span>
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${showPwForm ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showPwForm && (
+                    <form onSubmit={handleChangePassword} className="mt-2 space-y-2">
+                      {[
+                        { key: 'current',  placeholder: 'Current password',     label: 'Current' },
+                        { key: 'next',     placeholder: 'New password (8+ chars)', label: 'New' },
+                        { key: 'confirm',  placeholder: 'Confirm new password', label: 'Confirm' },
+                      ].map(({ key, placeholder }) => (
+                        <input
+                          key={key}
+                          type="password"
+                          placeholder={placeholder}
+                          value={pwForm[key]}
+                          onChange={e => setPwForm(f => ({ ...f, [key]: e.target.value }))}
+                          required
+                          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                        />
+                      ))}
+                      {pwMsg && (
+                        <p className={`text-xs ${pwMsg.ok ? 'text-emerald-600' : 'text-red-600'}`}>{pwMsg.text}</p>
+                      )}
+                      <button type="submit" disabled={pwSaving}
+                        className="w-full py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                        {pwSaving && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                        Update password
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              <div className="border-t border-gray-100 pt-3 space-y-2.5">
+                {/* Logout all devices */}
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Logout all devices</p>
+                    {profile?.account?.lastLoginAt && (
+                      <p className="text-xs text-gray-400 mt-0.5">Last login: {timeAgo(profile.account.lastLoginAt)}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleLogoutAll}
+                    disabled={logoutAllLoading}
+                    className="shrink-0 px-3 py-1.5 rounded-xl border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {logoutAllLoading
+                      ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin inline-block" />
+                      : 'Sign out all'
+                    }
+                  </button>
+                </div>
+              </div>
             </div>
           </Card>
 

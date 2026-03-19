@@ -8,6 +8,7 @@ const csv = require('csv-parser');
 const Balance = require('../models/balance.model');
 const Transaction = require('../models/transaction.model');
 const Category = require('../models/category.model');
+const User = require('../models/user.model');
 const logger = require("../helpers/logger");
 const cache = require('../helpers/cache');
 const { refreshSnapshot } = require('../helpers/snapshot');
@@ -109,6 +110,7 @@ const addTransaction = async (req, res, next) => {
         cache.invalidateUser(user.id);
         const txYearMonth = moment(transactionTime).tz(transactionDTO.transaction_timezone).format('YYYY-MM');
         refreshSnapshot(user.id, txYearMonth, transactionDTO.transaction_timezone); // fire-and-forget
+        User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {});
         logger.info(`Add transaction response: ${user.id} success`);
 
         // Return DTO response
@@ -282,6 +284,7 @@ const deleteTransaction = async (req, res, next) => {
         const delTxTz = deletedTransaction.transaction_timezone || 'UTC';
         const delYearMonth = moment(deletedTransaction.time).tz(delTxTz).format('YYYY-MM');
         refreshSnapshot(req.user.id, delYearMonth, delTxTz); // fire-and-forget
+        User.findByIdAndUpdate(req.user.id, { lastActivityAt: new Date(), lastActivityType: 'Deleted transaction' }).catch(() => {});
 
         // Return DTO response
         const responseDTO = new DeleteTransactionResponseDTO(deletedTransaction);
@@ -636,6 +639,7 @@ const importCsv = async (req, res, next) => {
             for (const [ym, tz] of affectedMonths) {
                 refreshSnapshot(user.id, ym, tz);
             }
+            User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Imported CSV' }).catch(() => {});
         }
 
         logger.info(`Import CSV: user ${user.id} — ${results.success} imported, ${results.failed} failed`);
