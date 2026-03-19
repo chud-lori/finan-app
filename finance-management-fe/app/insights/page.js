@@ -133,6 +133,7 @@ const TTZ_CONFIG = {
 function TimeToZeroCard({ data }) {
   const cfg = TTZ_CONFIG[data.status] ?? TTZ_CONFIG.safe;
   return (
+    <div className="p-4">
     <div className={`rounded-2xl border p-5 ${cfg.bg} ${cfg.border}`}>
       <div className="flex items-center gap-2 mb-4">
         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
@@ -176,6 +177,7 @@ function TimeToZeroCard({ data }) {
         </div>
       </div>
     </div>
+    </div>
   );
 }
 
@@ -185,7 +187,7 @@ function ExplainCard({ data }) {
   const maxPct = Math.max(...data.topCategories.map(c => c.pct), 1);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 h-full">
+    <div className="p-5">
       <p className="text-sm text-gray-500 mb-5 italic leading-relaxed">"{data.summary}"</p>
 
       <div className="space-y-4">
@@ -252,7 +254,7 @@ function AnomalyBadge({ flag }) {
 function AnomalyList({ data }) {
   if (data.count === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
+      <div className="p-8 text-center">
         <p className="text-3xl mb-3">✅</p>
         <p className="text-sm font-semibold text-gray-700">No anomalies this month</p>
         <p className="text-xs text-gray-400 mt-1">All transactions look normal compared to your history</p>
@@ -261,7 +263,7 @@ function AnomalyList({ data }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
+    <div className="divide-y divide-gray-100">
       {data.anomalies.map((a) => (
         <div key={String(a.id)} className="p-4 sm:p-5 hover:bg-gray-50 transition-colors">
           <div className="flex items-start justify-between gap-2">
@@ -287,8 +289,7 @@ function AnomalyList({ data }) {
 
 function SectionSkeleton() {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4 animate-pulse">
-      <SkeletonLine className="h-4 w-32" />
+    <div className="p-5 space-y-3 animate-pulse">
       <SkeletonLine className="h-3 w-full" />
       <SkeletonLine className="h-3 w-3/4" />
       <SkeletonBox className="h-24 w-full rounded-xl" />
@@ -298,19 +299,20 @@ function SectionSkeleton() {
 
 function Section({ title, subtitle, tooltip, children, loading, error }) {
   return (
-    <section>
-      <div className="flex items-center gap-2">
-        <h2 className="text-base font-bold text-gray-900">{title}</h2>
-        {tooltip && <Tooltip text={tooltip} align="left" fixed />}
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-bold text-gray-900">{title}</h2>
+          {tooltip && <Tooltip text={tooltip} align="left" fixed />}
+        </div>
+        {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
       </div>
-      {subtitle && <p className="text-xs text-gray-500 mt-0.5 mb-3">{subtitle}</p>}
-      {!subtitle && <div className="mb-3" />}
       {loading ? (
         <SectionSkeleton />
       ) : error ? (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
+        <div className="p-4 text-sm text-red-700 bg-red-50 border-t border-red-200">{error}</div>
       ) : children}
-    </section>
+    </div>
   );
 }
 
@@ -381,7 +383,7 @@ export default function InsightsPage() {
             >
               {explain && (explain.topCategories?.length > 0
                 ? <ExplainCard data={explain} />
-                : <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-sm text-gray-500">No spending data for this month yet.</div>
+                : <div className="p-8 text-center text-sm text-gray-500">No spending data for this month yet.</div>
               )}
             </Section>
 

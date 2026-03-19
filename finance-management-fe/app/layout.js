@@ -13,15 +13,17 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Declare we handle both schemes so browsers don't force their own dark mode */}
-        <meta name="color-scheme" content="light dark" />
+        {/* Default light — JS below will switch to dark if user saved that preference */}
+        <meta name="color-scheme" content="light" />
         {/* Synchronously apply saved theme before first paint to avoid flash */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function(){
             try {
               var t = localStorage.getItem('theme');
+              var meta = document.querySelector('meta[name="color-scheme"]');
               if (t === 'dark' && window.location.pathname !== '/') {
                 document.documentElement.classList.add('dark');
+                if (meta) meta.setAttribute('content', 'dark');
               }
             } catch(e) {}
           })();
