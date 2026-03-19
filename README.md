@@ -1,78 +1,98 @@
 # Finan App
 
-Personal finance tracker for recording income, tracking spending by category, and staying on top of your monthly budget.
+A personal finance tracker for recording income, monitoring spending by category, and staying on top of your monthly budget — all from a clean, mobile-friendly web app.
 
 ---
 
-## Features
+## What it does
 
-- **Dashboard** — See your current balance alongside monthly income and outcome totals at a glance
-- **Transaction log** — Browse all transactions filtered by month, with timestamps and categories
-- **Add transaction** — Log income or outcome with description, amount, category, and datetime
-- **Date range report** — Query any date range and get a summary of income vs. outcome
-- **Budget recommendation** — Enter your monthly budget and a planned spend; the app tells you whether you can afford it based on your last 7 days of spending
-- **CSV import** — Export any sheet from your spreadsheet as CSV and upload it to bulk-import historical transactions
+Finan gives you a single place to understand your money:
 
----
-
-## Tech stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 16, Tailwind CSS |
-| Backend | Node.js, Express.js |
-| Database | MongoDB |
-| Auth | JWT (Bearer token) |
-| Container | Docker, Docker Compose |
+- **Know your balance at a glance** — the dashboard shows your running balance, income this month, and spending this month side by side.
+- **Log every transaction** — record income or an expense with a description, amount, category, and exact datetime.
+- **Browse by date range** — pull up any period and see a breakdown of every transaction alongside the income/expense totals for that window.
+- **Track spending categories** — every expense goes into a category (Food, Transport, Health, etc.) so you can see where money actually goes.
+- **Get a budget recommendation** — enter your monthly budget and a planned purchase; the app projects your spending trajectory and tells you whether you can afford it.
+- **Import from a spreadsheet** — export your bank or budget sheet as CSV and bulk-import months of history in one upload.
+- **Set savings goals** — create a goal (e.g. buy a laptop for Rp 10,000,000), and the app calculates how long it will take based on your 20% savings rate.
+- **Spot anomalies** — the Insights page flags transactions that are unusually large compared to your baseline.
+- **Understand your spending** — the "Why You're Spending" breakdown explains which categories are driving your costs and by how much.
+- **See your runway** — Time-to-Zero tells you roughly when your balance hits zero if current spending continues.
+- **Analytics deep-dive** — monthly and yearly charts show income vs. expense trends and a category-level breakdown with share percentages.
+- **Dark mode** — follows your system preference; toggle manually from Settings.
 
 ---
 
-## Quick start (Docker)
+## Features at a glance
+
+| Feature | Description |
+|---------|-------------|
+| Dashboard | Balance, monthly income, monthly expense summary |
+| Transaction log | Filterable list by month and category |
+| Add transaction | Income or expense with category, amount, and datetime |
+| Date range report | Custom start/end date with income/expense summary |
+| Budget recommendation | Affordability check based on last 7-day burn rate |
+| CSV import | Bulk-import from Excel or Google Sheets export |
+| Savings goals | Price targets with progress and time-to-achieve |
+| Insights | Anomaly detection, spending explainability, time-to-zero runway |
+| Analytics | Monthly/yearly charts, category breakdown, savings rate |
+| Settings | Theme toggle, delete account |
+
+---
+
+## CSV import format
+
+Export any sheet from your spreadsheet (Excel, Google Sheets) as CSV. The importer accepts these columns (column names are case-insensitive):
+
+| Column | Required | Accepted names | Example |
+|--------|----------|---------------|---------|
+| Description | Yes | `Title`, `Description` | Grocery shopping |
+| Amount | Yes | `Amount` | `250000` or `Rp250,000` |
+| Type | Yes | `Type` | `income` or `expense` |
+| Category | Yes | `Category` | Food |
+| Date/Time | Yes | `Timestamp`, `Date`, `Time` | `1/15/2026 14:30:00` |
+| Timezone | No | `Timezone` | `Asia/Jakarta` (default) |
+
+Supported date formats: `M/D/YYYY H:mm:ss` · `YYYY-MM-DD HH:mm:ss` · `D/M/YYYY H:mm:ss` · ISO 8601
+
+For the Type column, anything that isn't `income` is treated as an expense — so `expense`, `outcome`, `debit`, etc. all work.
+
+---
+
+## Expense categories
+
+The app ships with a default set of categories you can seed with one click (or one API call):
+
+Food · Transport · Entertainment · Personal Care · Living Budget · Monthly Budget · Household · Fashion · Gadget · Grocery · Health · Bill · Self Improve · Sharing
+
+You can also type any custom category when adding a transaction and it will be created automatically.
+
+---
+
+## Getting started
+
+The fastest way to run Finan is with Docker Compose:
 
 ```bash
 git clone <repo-url>
 cd finan-app
 
 cp .env.example .env
-# edit .env — set SECRET_TOKEN at minimum
+# Open .env and set SECRET_TOKEN to any long random string
 
 docker compose up --build
 ```
 
-| Service | URL |
-|---------|-----|
-| App (frontend) | http://localhost:3000 |
-| API (backend) | http://localhost:3001 |
-| API docs (Swagger) | http://localhost:3001/api-docs |
+Then open your browser:
 
-Register an account at `/login`, then seed the transaction categories from the Swagger UI (`POST /api/transaction/category`) or via the Makefile:
+| Page | URL |
+|------|-----|
+| App | http://localhost:3000 |
+| API | http://localhost:3001 |
 
-```bash
-make seed TOKEN=<your_jwt_token>
-```
+Register an account at `/login`, then seed the default categories from Settings or via the API.
 
----
-
-## CSV import format
-
-Export any sheet from your spreadsheet (Excel, Google Sheets) as CSV. The importer accepts these column names (case-insensitive):
-
-| Column | Required | Example |
-|--------|----------|---------|
-| `Title` or `Description` | Yes | Grocery shopping |
-| `Amount` | Yes | `250000` or `Rp250,000` |
-| `Type` | Yes | `income` or `outcome` |
-| `Category` | Yes | Food |
-| `Timestamp`, `Date`, or `Time` | Yes | `1/15/2026 14:30:00` |
-| `Timezone` | No | `Asia/Jakarta` (default) |
-
-Supported date formats: `M/D/YYYY H:mm:ss` · `YYYY-MM-DD HH:mm:ss` · ISO 8601
-
----
-
-## Categories
-
-Food · Entertainment · Personal Care · Living Budget · Monthly Budget · Household · Transport · Fashion · Gadget · Grocery · Health · Bill · Self Improve · Sharing
+> For local development without Docker, see [DEVELOPER.md](./DEVELOPER.md).
 
 ---
 
