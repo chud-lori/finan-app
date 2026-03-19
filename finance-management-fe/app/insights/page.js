@@ -5,6 +5,7 @@ import AuthGuard from '@/components/AuthGuard';
 import { getAnomalies, getExplainability, getTimeToZero } from '@/lib/api';
 import { formatIDR } from '@/lib/format';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
+import Tooltip from '@/components/Tooltip';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -97,8 +98,9 @@ function InsightFeed({ explain, ttz, anomaly, loading }) {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
-      <div className="px-5 py-3 border-b border-gray-100">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">What your data is saying</p>
+        <Tooltip text="Auto-generated highlights from your spending data — ranked by urgency. Alert = action needed, Watch = keep an eye on it, Good = positive progress." position="bottom" />
       </div>
       <div className="divide-y divide-gray-50">
         {top.map((ins, i) => {
@@ -159,11 +161,17 @@ function TimeToZeroCard({ data }) {
 
       <div className="mt-5 pt-4 border-t border-black/5 grid grid-cols-2 gap-3">
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Current balance</p>
+          <div className="flex items-center gap-1 mb-0.5">
+            <p className="text-xs text-gray-400">Current balance</p>
+            <Tooltip text="Your total income minus total expenses across all time — the net balance in your account." />
+          </div>
           <p className="text-sm font-bold text-gray-800">{formatIDR(data.balance)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Daily burn</p>
+          <div className="flex items-center gap-1 mb-0.5">
+            <p className="text-xs text-gray-400">Daily burn</p>
+            <Tooltip text="Your average daily spending over the last 30 days. Used to calculate how long your balance will last." />
+          </div>
           <p className="text-sm font-bold text-gray-800">{formatIDR(data.dailyBurnRate)}/day</p>
         </div>
       </div>
@@ -191,10 +199,11 @@ function ExplainCard({ data }) {
                   <span className="text-xs text-gray-400 flex-shrink-0">{c.count}×</span>
                 )}
                 {c.delta !== null && (
-                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                  <span className={`inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
                     c.delta > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
                   }`}>
                     {c.delta > 0 ? '+' : ''}{c.delta}%
+                    <Tooltip text={`Change vs last month. ${c.delta > 0 ? 'You spent more' : 'You spent less'} on ${cap(c.category)} compared to the previous month.`} />
                   </span>
                 )}
               </div>
@@ -226,14 +235,16 @@ function ExplainCard({ data }) {
 function AnomalyBadge({ flag }) {
   if (flag.type === 'first_time') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">
         New category
+        <Tooltip text="This is the first time you've spent in this category — it may be intentional, but worth reviewing." />
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
       {flag.ratio}× above avg
+      <Tooltip text={`This transaction is ${flag.ratio}× higher than your usual spending amount in this category. Your average is used as the baseline.`} />
     </span>
   );
 }
@@ -285,10 +296,13 @@ function SectionSkeleton() {
   );
 }
 
-function Section({ title, subtitle, children, loading, error }) {
+function Section({ title, subtitle, tooltip, children, loading, error }) {
   return (
     <section>
-      <h2 className="text-base font-bold text-gray-900">{title}</h2>
+      <div className="flex items-center gap-2">
+        <h2 className="text-base font-bold text-gray-900">{title}</h2>
+        {tooltip && <Tooltip text={tooltip} />}
+      </div>
       {subtitle && <p className="text-xs text-gray-500 mt-0.5 mb-3">{subtitle}</p>}
       {!subtitle && <div className="mb-3" />}
       {loading ? (
@@ -350,6 +364,7 @@ export default function InsightsPage() {
             <Section
               title="⏳ Runway"
               subtitle="How long until your balance runs out at current burn rate"
+              tooltip="Calculated by dividing your current net balance by your average daily spending over the last 30 days. Assumes consistent spending going forward."
               loading={loading.ttz}
               error={errors.ttz}
             >
@@ -360,6 +375,7 @@ export default function InsightsPage() {
             <Section
               title="🧠 Where It's Going"
               subtitle="Top categories driving your spending this month"
+              tooltip="Your top expense categories this month, sorted by total amount. The % change shows how each category compares to last month."
               loading={loading.explain}
               error={errors.explain}
             >
@@ -374,6 +390,7 @@ export default function InsightsPage() {
               <Section
                 title="🚨 Unusual Transactions"
                 subtitle="Flagged this month — significantly higher than your normal or brand new categories"
+                tooltip="A transaction is flagged if its amount is significantly higher than your usual spending in that category, or if it's a category you've never spent in before."
                 loading={loading.anomaly}
                 error={errors.anomaly}
               >

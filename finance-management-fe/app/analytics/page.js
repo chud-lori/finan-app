@@ -7,6 +7,7 @@ import AuthGuard from '@/components/AuthGuard';
 import { getAnalytics } from '@/lib/api';
 import { formatIDR } from '@/lib/format';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
+import Tooltip from '@/components/Tooltip';
 
 const DonutChart = dynamic(() => import('@/components/charts/DonutChart'), { ssr: false });
 const HBarChart  = dynamic(() => import('@/components/charts/HBarChart'),  { ssr: false });
@@ -158,11 +159,42 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
               <tr className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
                 <th className="py-2 text-left font-medium">Category</th>
                 <th className="py-2 text-right font-medium">Total</th>
-                {showAvg  && <th className="py-2 text-right font-medium">Avg / Mo.</th>}
-                {showAvg  && <th className="py-2 text-right font-medium hidden sm:table-cell">Months</th>}
-                {!showAvg && <th className="py-2 text-right font-medium">Txns</th>}
-                {showCompare && <th className="py-2 text-right font-medium">vs {compLabel}</th>}
-                <th className="py-2 text-right font-medium">Share</th>
+                {showAvg  && (
+                  <th className="py-2 text-right font-medium">
+                    <span className="inline-flex items-center gap-1 justify-end">
+                      Avg / Mo.
+                      <Tooltip text="Average monthly spend in this category, counted only across months where you had activity." position="top" />
+                    </span>
+                  </th>
+                )}
+                {showAvg  && <th className="py-2 text-right font-medium hidden sm:table-cell">
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    Months
+                    <Tooltip text="Number of months in this year where you had at least one transaction in this category." position="top" />
+                  </span>
+                </th>}
+                {!showAvg && (
+                  <th className="py-2 text-right font-medium">
+                    <span className="inline-flex items-center gap-1 justify-end">
+                      Txns
+                      <Tooltip text="Number of individual transactions in this category during the selected period." position="top" />
+                    </span>
+                  </th>
+                )}
+                {showCompare && (
+                  <th className="py-2 text-right font-medium">
+                    <span className="inline-flex items-center gap-1 justify-end">
+                      vs {compLabel}
+                      <Tooltip text={compareMode === 'last_month' ? 'Change vs the previous month. Red = spending more, green = spending less.' : 'Change vs your average monthly spend this year.'} position="top" />
+                    </span>
+                  </th>
+                )}
+                <th className="py-2 text-right font-medium">
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    Share
+                    <Tooltip text="What percentage of your total spending this category represents." position="top" />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -413,10 +445,11 @@ export default function AnalyticsPage() {
                   {data?.categories?.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-gray-500 mr-1">Compare:</span>
+                      <Tooltip text="Show how each category changed vs a reference period. Positive % = spending more, negative % = spending less." />
                       {[
-                        { value: 'none',       label: 'None' },
-                        { value: 'last_month', label: 'vs Last Month' },
-                        { value: 'average',    label: 'vs My Average' },
+                        { value: 'none',       label: 'None',          tip: null },
+                        { value: 'last_month', label: 'vs Last Month', tip: 'Show how much each category changed compared to the previous month.' },
+                        { value: 'average',    label: 'vs My Average', tip: 'Show how each category compares to your average monthly spending for this year.' },
                       ].map(opt => (
                         <button
                           key={opt.value}
@@ -426,6 +459,7 @@ export default function AnalyticsPage() {
                               ? 'bg-teal-600 text-white border-teal-600'
                               : 'bg-white border-gray-200 text-gray-600 hover:border-teal-300 hover:text-teal-700'
                           }`}
+                          title={opt.tip ?? undefined}
                         >
                           {opt.label}
                           {compareMode === opt.value && loadingComp && (
@@ -544,11 +578,25 @@ function ChartCard({ title, children }) {
   );
 }
 
+const SUMMARY_TIPS = {
+  'Income':              'Total money received this period from all income transactions.',
+  'Expense':             'Total money spent this period across all expense categories.',
+  'Net':                 'Income minus expenses. Positive (green) means you saved money; negative (red) means you overspent.',
+  'Savings rate':        'Percentage of income you kept. Formula: (Income − Expense) ÷ Income × 100. Aim for 20%+.',
+  'Total Income':        'Sum of all income transactions across every month of this year.',
+  'Total Expense':       'Sum of all expense transactions across every month of this year.',
+  'Avg monthly expense': 'Your total expenses divided by 12 — a rough benchmark for how much you spend each month.',
+};
+
 function SummaryCard({ label, value, color }) {
   const cls = { emerald: 'text-emerald-700', rose: 'text-rose-600', teal: 'text-teal-700' }[color] ?? 'text-gray-800';
+  const tip = SUMMARY_TIPS[label];
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
+      <div className="flex items-center gap-1.5 mb-1">
+        <p className="text-xs text-gray-500">{label}</p>
+        {tip && <Tooltip text={tip} />}
+      </div>
       <p className={`text-lg font-bold ${cls}`}>{value}</p>
     </div>
   );
