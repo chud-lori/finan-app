@@ -237,14 +237,14 @@ function AnomalyBadge({ flag }) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">
         New category
-        <Tooltip text="This is the first time you've spent in this category — it may be intentional, but worth reviewing." align="left" />
+        <Tooltip text="This is the first time you've spent in this category — it may be intentional, but worth reviewing." align="left" fixed />
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
       {flag.ratio}× above avg
-      <Tooltip text={`This transaction is ${flag.ratio}× higher than your usual spending amount in this category. Your average is used as the baseline.`} align="left" />
+      <Tooltip text={`This transaction is ${flag.ratio}× higher than your usual spending amount in this category. Your average is used as the baseline.`} align="left" fixed />
     </span>
   );
 }

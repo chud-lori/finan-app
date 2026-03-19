@@ -54,12 +54,16 @@ export default function Tooltip({ text, trigger, position = 'top', align = 'cent
     } else {
       style.top = `${rect.bottom + 8}px`;
     }
+    const bubbleW = 224 + 8; // 14rem = 224px + 8px margin
     if (align === 'right') {
-      style.right = `${window.innerWidth - rect.right}px`;
+      const r = window.innerWidth - rect.right;
+      style.right = `${Math.max(8, r)}px`;
     } else if (align === 'left') {
-      style.left = `${rect.left}px`;
+      style.left = `${Math.min(rect.left, window.innerWidth - bubbleW)}px`;
     } else {
-      style.left  = `${rect.left + rect.width / 2}px`;
+      const center = rect.left + rect.width / 2;
+      const clamped = Math.min(Math.max(center, bubbleW / 2 + 8), window.innerWidth - bubbleW / 2 - 8);
+      style.left  = `${clamped}px`;
       style.transform = 'translateX(-50%)';
     }
     return style;
