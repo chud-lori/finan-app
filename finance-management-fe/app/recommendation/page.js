@@ -1,8 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getRecommendation } from '@/lib/api';
+import { getRecommendation, getProfile } from '@/lib/api';
 import { formatIDR } from '@/lib/format';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ function StatRow({ label, value, sub, valueClass = 'text-gray-900' }) {
   );
 }
 
-function AmountInput({ label, value, onChange, placeholder = '0' }) {
+function AmountInput({ label, value, onChange, placeholder = '0', hint }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
@@ -50,6 +50,7 @@ function AmountInput({ label, value, onChange, placeholder = '0' }) {
           placeholder={placeholder}
           className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
       </div>
+      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -68,6 +69,17 @@ function SubmitBtn({ loading, label = 'Calculate' }) {
   );
 }
 
+// Saved-budget auto-fill button
+function UseSavedBudgetBtn({ savedBudget, onUse }) {
+  if (!savedBudget) return null;
+  return (
+    <button type="button" onClick={onUse}
+      className="text-xs text-teal-600 hover:text-teal-700 font-medium underline underline-offset-2 mb-2 block">
+      Use my saved budget ({formatIDR(savedBudget)})
+    </button>
+  );
+}
+
 // ─── Tool 1: Can I Afford This? ───────────────────────────────────────────────
 const VELOCITY_CONFIG = {
   on_track:  { label: 'On track',          color: 'text-emerald-600', bg: 'bg-emerald-50', dot: 'bg-emerald-400' },
@@ -75,7 +87,7 @@ const VELOCITY_CONFIG = {
   very_fast: { label: 'Spending very fast', color: 'text-rose-600',   bg: 'bg-rose-50',    dot: 'bg-rose-400'   },
 };
 
-function AffordTool() {
+function AffordTool({ savedBudget }) {
   const [monthly, setMonthly] = useState('');
   const [spend,   setSpend]   = useState('');
   const [result,  setResult]  = useState(null);
@@ -115,7 +127,10 @@ function AffordTool() {
       <ToolCard>
         {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label="Monthly budget (IDR)" value={monthly} onChange={setMonthly} placeholder="5,000,000" />
+          <div>
+            <UseSavedBudgetBtn savedBudget={savedBudget} onUse={() => setMonthly(fmtInput(String(savedBudget)))} />
+            <AmountInput label="Monthly budget (IDR)" value={monthly} onChange={setMonthly} placeholder="5,000,000" />
+          </div>
           <AmountInput label="Amount you want to spend (IDR)" value={spend} onChange={setSpend} placeholder="500,000" />
           <SubmitBtn loading={loading} label="Analyse" />
         </form>
@@ -326,7 +341,7 @@ function SavingsGoalTool() {
 }
 
 // ─── Tool 4: Safe Daily Budget ────────────────────────────────────────────────
-function DailyBudgetTool() {
+function DailyBudgetTool({ savedBudget }) {
   const [monthly, setMonthly] = useState('');
   const [result,  setResult]  = useState(null);
   const [loading, setLoading] = useState(false);
@@ -362,7 +377,10 @@ function DailyBudgetTool() {
         </p>
         {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label="Monthly budget (IDR)" value={monthly} onChange={setMonthly} placeholder="5,000,000" />
+          <div>
+            <UseSavedBudgetBtn savedBudget={savedBudget} onUse={() => setMonthly(fmtInput(String(savedBudget)))} />
+            <AmountInput label="Monthly budget (IDR)" value={monthly} onChange={setMonthly} placeholder="5,000,000" />
+          </div>
           <SubmitBtn loading={loading} label="Check Daily Limit" />
         </form>
       </ToolCard>
@@ -503,7 +521,6 @@ function EmergencyFundTool() {
               </ToolCard>
             );
           })}
-
           <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
             <p className="text-xs text-gray-500">Based on {formatIDR(result.monthlyExp)}/month in essential expenses</p>
           </div>
@@ -513,19 +530,764 @@ function EmergencyFundTool() {
   );
 }
 
+// ─── Tool 6: Debt Snowball / Avalanche ────────────────────────────────────────
+function DebtTool() {
+  const [method, setMethod] = useState('avalanche'); // 'snowball' | 'avalanche'
+  const [extra,  setExtra]  = useState('');
+  const [debts,  setDebts]  = useState([
+    { id: 1, name: '', balance: '', rate: '', minPay: '' },
+    { id: 2, name: '', balance: '', rate: '', minPay: '' },
+  ]);
+  const [result, setResult] = useState(null);
+
+  const addDebt = () => setDebts(d => [...d, { id: Date.now(), name: '', balance: '', rate: '', minPay: '' }]);
+  const removeDebt = (id) => setDebts(d => d.filter(x => x.id !== id));
+  const updateDebt = (id, field, val) => setDebts(d => d.map(x => x.id === id ? { ...x, [field]: val } : x));
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const parsed = debts
+      .map(d => ({ name: d.name || 'Debt', balance: parseNum(d.balance), rate: parseFloat(d.rate) || 0, minPay: parseNum(d.minPay) }))
+      .filter(d => d.balance > 0 && d.minPay > 0);
+    if (!parsed.length) return;
+
+    const extraAmt = parseNum(extra);
+    const totalMin = parsed.reduce((s, d) => s + d.minPay, 0);
+
+    // Sort by method
+    const sorted = [...parsed].sort((a, b) =>
+      method === 'snowball' ? a.balance - b.balance : b.rate - a.rate
+    );
+
+    // Simulate payoff month by month
+    let debtsState = sorted.map(d => ({ ...d, paid: false }));
+    let month = 0;
+    const MAX_MONTHS = 360;
+    while (debtsState.some(d => !d.paid) && month < MAX_MONTHS) {
+      month++;
+      let available = totalMin + extraAmt;
+      // Pay minimums first
+      debtsState = debtsState.map(d => {
+        if (d.paid) return d;
+        const interest = d.balance * (d.rate / 100 / 12);
+        let bal = d.balance + interest - d.minPay;
+        available -= d.minPay;
+        return { ...d, balance: Math.max(bal, 0) };
+      });
+      // Put extra on first unpaid
+      for (let i = 0; i < debtsState.length; i++) {
+        if (!debtsState[i].paid && debtsState[i].balance > 0) {
+          debtsState[i] = { ...debtsState[i], balance: Math.max(debtsState[i].balance - available, 0) };
+          break;
+        }
+      }
+      // Mark paid
+      debtsState = debtsState.map(d => ({ ...d, paid: d.balance <= 0 }));
+    }
+
+    const totalInterest = parsed.reduce((s, d) => {
+      const months2 = month;
+      return s + (d.minPay * months2 - d.balance); // rough estimate
+    }, 0);
+
+    setResult({ months: month, completion: monthsFromNow(month), sorted, totalMin, extraAmt, totalDebt: parsed.reduce((s,d)=>s+d.balance,0) });
+  };
+
+  return (
+    <div className="space-y-4">
+      <ToolCard>
+        <p className="text-xs text-gray-500 mb-4">
+          <strong className="text-gray-700">Snowball</strong> pays smallest balance first (quick wins).{' '}
+          <strong className="text-gray-700">Avalanche</strong> pays highest interest first (saves more money).
+        </p>
+
+        {/* Method toggle */}
+        <div className="grid grid-cols-2 gap-2 mb-4 p-1 bg-gray-100 rounded-xl">
+          {[['avalanche', '❄️ Avalanche', 'Highest rate first'], ['snowball', '⛄ Snowball', 'Smallest balance first']].map(([val, label, sub]) => (
+            <button key={val} type="button" onClick={() => setMethod(val)}
+              className={`py-2 rounded-lg text-xs font-semibold transition-all text-center ${method === val ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+              <div>{label}</div>
+              <div className={`text-xs font-normal mt-0.5 ${method === val ? 'text-gray-500' : 'text-gray-300'}`}>{sub}</div>
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Debt rows */}
+          <div className="space-y-3">
+            {debts.map((d, i) => (
+              <div key={d.id} className="rounded-xl border border-gray-200 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-600">Debt {i + 1}</span>
+                  {debts.length > 1 && (
+                    <button type="button" onClick={() => removeDebt(d.id)}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors">Remove</button>
+                  )}
+                </div>
+                <input type="text" placeholder="Name (e.g. Credit card)" value={d.name}
+                  onChange={e => updateDebt(d.id, 'name', e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Balance (Rp)</label>
+                    <input type="text" placeholder="10,000,000" value={d.balance}
+                      onChange={e => updateDebt(d.id, 'balance', fmtInput(e.target.value))}
+                      className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Rate (%/yr)</label>
+                    <input type="number" placeholder="18" step="0.1" min="0" max="100" value={d.rate}
+                      onChange={e => updateDebt(d.id, 'rate', e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Min pay (Rp)</label>
+                    <input type="text" placeholder="300,000" value={d.minPay}
+                      onChange={e => updateDebt(d.id, 'minPay', fmtInput(e.target.value))}
+                      className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button type="button" onClick={addDebt}
+            className="w-full py-2 rounded-xl border border-dashed border-gray-300 text-xs text-gray-500 hover:border-teal-400 hover:text-teal-600 transition-colors">
+            + Add another debt
+          </button>
+
+          <div className="relative">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">Rp</span>
+            <input type="text" placeholder="Extra monthly payment (optional)" value={extra}
+              onChange={e => setExtra(fmtInput(e.target.value))}
+              className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+          </div>
+
+          <SubmitBtn label="Calculate Payoff" />
+        </form>
+      </ToolCard>
+
+      {result && (
+        <div className="space-y-3">
+          <div className={`rounded-2xl border-2 p-5 text-center ${result.months >= 360 ? 'border-rose-300 bg-rose-50' : 'border-teal-300 bg-teal-50'}`}>
+            <p className="text-xs font-medium text-gray-500 mb-1">Debt-free in</p>
+            <p className={`text-3xl font-black ${result.months >= 360 ? 'text-rose-700' : 'text-teal-700'}`}>
+              {result.months >= 360 ? '30+ years' : result.months < 12 ? `${result.months} months` : `${Math.floor(result.months/12)}y ${result.months%12}m`}
+            </p>
+            {result.months < 360 && <p className="text-sm text-teal-600 mt-1">Estimated: <strong>{result.completion}</strong></p>}
+          </div>
+
+          <ToolCard>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Payoff order ({method === 'avalanche' ? 'highest rate first' : 'smallest balance first'})</h4>
+            {result.sorted.map((d, i) => (
+              <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
+                <span className="w-5 h-5 rounded-full bg-teal-600 text-white text-xs font-bold flex items-center justify-center shrink-0">{i+1}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{d.name}</p>
+                  <p className="text-xs text-gray-400">{formatIDR(d.balance)} · {d.rate}% p.a.</p>
+                </div>
+                <p className="text-xs text-gray-500 shrink-0">{formatIDR(d.minPay)}/mo</p>
+              </div>
+            ))}
+            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
+              <span className="text-gray-600">Total debt</span>
+              <span className="font-bold text-gray-900">{formatIDR(result.totalDebt)}</span>
+            </div>
+            {result.extraAmt > 0 && (
+              <div className="flex justify-between text-sm mt-1">
+                <span className="text-gray-600">Extra/month</span>
+                <span className="font-bold text-teal-700">+{formatIDR(result.extraAmt)}</span>
+              </div>
+            )}
+          </ToolCard>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tool 7: FIRE Calculator ──────────────────────────────────────────────────
+function FireTool() {
+  const [annualExpense, setAnnualExpense] = useState('');
+  const [currentSaved,  setCurrentSaved]  = useState('');
+  const [annualSaving,  setAnnualSaving]  = useState('');
+  const [returnRate,    setReturnRate]    = useState('7');
+  const [withdrawRate,  setWithdrawRate]  = useState('4');
+  const [result,        setResult]        = useState(null);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const expense  = parseNum(annualExpense);
+    const saved    = parseNum(currentSaved);
+    const saving   = parseNum(annualSaving);
+    const r        = parseFloat(returnRate) / 100 || 0.07;
+    const wr       = parseFloat(withdrawRate) / 100 || 0.04;
+    if (!expense) return;
+
+    const fireNumber = expense / wr;
+    let portfolio = saved;
+    let years = 0;
+    while (portfolio < fireNumber && years < 100) {
+      portfolio = portfolio * (1 + r) + saving;
+      years++;
+    }
+    const monthly = Math.round(expense / 12);
+    setResult({ fireNumber, years, portfolio: Math.round(portfolio), expense, monthly, wr, r, saving });
+  };
+
+  return (
+    <div className="space-y-4">
+      <ToolCard>
+        <p className="text-xs text-gray-500 mb-4">
+          <strong className="text-gray-700">FIRE</strong> = Financial Independence, Retire Early. Your FIRE number is the portfolio size that funds your lifestyle forever.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <AmountInput label="Annual living expenses (IDR)" value={annualExpense} onChange={setAnnualExpense} placeholder="240,000,000"
+            hint="12× your monthly expenses" />
+          <AmountInput label="Current investments / savings (IDR)" value={currentSaved} onChange={setCurrentSaved} placeholder="0" />
+          <AmountInput label="Annual savings / investments (IDR)" value={annualSaving} onChange={setAnnualSaving} placeholder="60,000,000" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Expected return (%/yr)</label>
+              <input type="number" value={returnRate} onChange={e => setReturnRate(e.target.value)}
+                step="0.5" min="1" max="20" placeholder="7"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Withdrawal rate (%)</label>
+              <input type="number" value={withdrawRate} onChange={e => setWithdrawRate(e.target.value)}
+                step="0.1" min="1" max="10" placeholder="4"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+            </div>
+          </div>
+          <SubmitBtn label="Calculate FIRE Number" />
+        </form>
+      </ToolCard>
+
+      {result && (
+        <div className="space-y-4">
+          <div className="rounded-2xl border-2 border-teal-300 bg-teal-50 p-5 text-center">
+            <p className="text-xs text-teal-500 font-medium mb-1">Your FIRE number</p>
+            <p className="text-3xl font-black text-teal-700">{formatIDR(result.fireNumber)}</p>
+            <p className="text-sm text-teal-600 mt-1">
+              {result.years >= 100 ? 'Increase savings to reach FIRE' : `Reach in ~${result.years} year${result.years !== 1 ? 's' : ''}`}
+            </p>
+          </div>
+
+          <ToolCard>
+            <StatRow label="Annual expenses" value={formatIDR(result.expense)} />
+            <StatRow label="Monthly expenses" value={formatIDR(result.monthly)} />
+            <StatRow label="Annual savings" value={formatIDR(result.saving)} />
+            <StatRow label="Expected return" value={`${(result.r * 100).toFixed(1)}% / yr`} />
+            <StatRow label="Withdrawal rate" value={`${(result.wr * 100).toFixed(1)}%`}
+              sub="% of portfolio withdrawn per year" />
+          </ToolCard>
+
+          {result.years < 100 && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3">
+              <p className="text-xs text-emerald-700">
+                <strong>Rule of 25:</strong> You need 25× your annual expenses ({formatIDR(result.expense)} × 25 = {formatIDR(result.expense * 25)}).
+                At {(result.wr * 100).toFixed(1)}% withdrawal that&apos;s {formatIDR(result.monthly)}/month for life.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tool 8: Inflation Impact ─────────────────────────────────────────────────
+function InflationTool() {
+  const [amount,    setAmount]    = useState('');
+  const [years,     setYears]     = useState('10');
+  const [inflation, setInflation] = useState('5');
+  const [result,    setResult]    = useState(null);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const amt  = parseNum(amount);
+    const yrs  = parseInt(years) || 10;
+    const rate = parseFloat(inflation) / 100 || 0.05;
+    if (!amt || yrs < 1) return;
+
+    const futureValue  = amt * Math.pow(1 + rate, yrs);
+    const presentValue = amt / Math.pow(1 + rate, yrs); // what today's amount is worth in the future
+    const loss         = futureValue - amt;
+    const lossPct      = Math.round(((futureValue - amt) / amt) * 100);
+
+    // Year-by-year breakdown (every 5 years)
+    const milestones = [];
+    for (let y = 5; y <= yrs; y += 5) {
+      milestones.push({ year: y, value: Math.round(amt * Math.pow(1 + rate, y)) });
+    }
+    if (!milestones.find(m => m.year === yrs)) milestones.push({ year: yrs, value: Math.round(futureValue) });
+
+    setResult({ amt, yrs, rate, futureValue: Math.round(futureValue), loss: Math.round(loss), lossPct, presentPower: Math.round(presentValue), milestones });
+  };
+
+  return (
+    <div className="space-y-4">
+      <ToolCard>
+        <p className="text-xs text-gray-500 mb-4">
+          See how inflation erodes purchasing power over time — and what today&apos;s money will actually be worth.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <AmountInput label="Amount today (IDR)" value={amount} onChange={setAmount} placeholder="10,000,000" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Years ahead</label>
+              <input type="number" value={years} onChange={e => setYears(e.target.value)}
+                min="1" max="50" placeholder="10"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Inflation rate (%/yr)</label>
+              <input type="number" value={inflation} onChange={e => setInflation(e.target.value)}
+                step="0.5" min="0" max="30" placeholder="5"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+            </div>
+          </div>
+          <SubmitBtn label="Calculate Impact" />
+        </form>
+      </ToolCard>
+
+      {result && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border-2 border-gray-200 bg-white p-4 text-center">
+              <p className="text-xs text-gray-400 mb-1">Today&apos;s value</p>
+              <p className="text-xl font-black text-gray-800">{formatIDR(result.amt)}</p>
+            </div>
+            <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 text-center">
+              <p className="text-xs text-rose-500 mb-1">Costs in {result.yrs} years</p>
+              <p className="text-xl font-black text-rose-700">{formatIDR(result.futureValue)}</p>
+            </div>
+          </div>
+
+          <ToolCard>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Purchasing power erosion</h4>
+            <div className="mb-4">
+              <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+                <span>Real value remaining</span>
+                <span>{100 - Math.min(result.lossPct, 100)}%</span>
+              </div>
+              <ProgressBar value={result.amt} max={result.futureValue} color="rose" />
+            </div>
+            <StatRow label="Price increase" value={`+${formatIDR(result.loss)} (+${result.lossPct}%)`}
+              valueClass="text-rose-600" />
+            <StatRow label="Inflation rate" value={`${(result.rate * 100).toFixed(1)}% / yr`} />
+            <StatRow label="Years" value={result.yrs} />
+          </ToolCard>
+
+          {result.milestones.length > 0 && (
+            <ToolCard>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Cost over time</h4>
+              {result.milestones.map(({ year, value }) => (
+                <div key={year} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                  <span className="text-sm text-gray-600">Year {year}</span>
+                  <span className="text-sm font-semibold text-rose-600">{formatIDR(value)}</span>
+                </div>
+              ))}
+            </ToolCard>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tool 9: Tax Estimator (PPh 21 Indonesia) ─────────────────────────────────
+const PPH21_BRACKETS = [
+  { max: 60_000_000,   rate: 0.05 },
+  { max: 250_000_000,  rate: 0.15 },
+  { max: 500_000_000,  rate: 0.25 },
+  { max: 5_000_000_000, rate: 0.30 },
+  { max: Infinity,     rate: 0.35 },
+];
+const PTKP = { tk: 54_000_000, k0: 58_500_000, k1: 63_000_000, k2: 67_500_000, k3: 72_000_000 };
+
+function TaxTool() {
+  const [gross,    setGross]    = useState('');
+  const [status,   setStatus]   = useState('tk');
+  const [result,   setResult]   = useState(null);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const annualGross = parseNum(gross) * 12;
+    const ptkp = PTKP[status];
+    const jobCost = Math.min(annualGross * 0.05, 6_000_000);
+    const pkp = Math.max(annualGross - ptkp - jobCost, 0);
+
+    let tax = 0, prev = 0;
+    const details = [];
+    for (const { max, rate } of PPH21_BRACKETS) {
+      if (pkp <= prev) break;
+      const taxable = Math.min(pkp - prev, max - prev);
+      const t = Math.round(taxable * rate);
+      details.push({ range: `Up to ${formatIDR(max === Infinity ? pkp : max)}`, rate: `${rate * 100}%`, taxable, tax: t });
+      tax += t;
+      prev = max;
+    }
+
+    const monthlyTax = Math.round(tax / 12);
+    const effectiveRate = annualGross > 0 ? ((tax / annualGross) * 100).toFixed(2) : 0;
+    const takeHome = annualGross - tax;
+
+    setResult({ annualGross, ptkp, pkp, tax, monthlyTax, effectiveRate, takeHome, details });
+  };
+
+  const STATUS_OPTIONS = [
+    { val: 'tk',  label: 'TK/0 — Single' },
+    { val: 'k0',  label: 'K/0 — Married' },
+    { val: 'k1',  label: 'K/1 — +1 dependent' },
+    { val: 'k2',  label: 'K/2 — +2 dependents' },
+    { val: 'k3',  label: 'K/3 — +3 dependents' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <ToolCard>
+        <p className="text-xs text-gray-500 mb-4">
+          Estimates PPh 21 income tax under Indonesian tax law (UU HPP 2021 rates). This is an estimate — consult a tax professional for exact figures.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <AmountInput label="Monthly gross salary (IDR)" value={gross} onChange={setGross} placeholder="10,000,000" />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">PTKP status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+              {STATUS_OPTIONS.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
+            </select>
+          </div>
+          <SubmitBtn label="Estimate Tax" />
+        </form>
+      </ToolCard>
+
+      {result && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center">
+              <p className="text-xs text-gray-400 mb-1">Gross/yr</p>
+              <p className="text-sm font-black text-gray-800">{formatIDR(result.annualGross)}</p>
+            </div>
+            <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-3 text-center">
+              <p className="text-xs text-rose-500 mb-1">Annual tax</p>
+              <p className="text-sm font-black text-rose-700">{formatIDR(result.tax)}</p>
+            </div>
+            <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-3 text-center">
+              <p className="text-xs text-emerald-500 mb-1">Monthly tax</p>
+              <p className="text-sm font-black text-emerald-700">{formatIDR(result.monthlyTax)}</p>
+            </div>
+          </div>
+
+          <ToolCard>
+            <StatRow label="Annual gross" value={formatIDR(result.annualGross)} />
+            <StatRow label="PTKP deduction" value={`−${formatIDR(result.ptkp)}`} />
+            <StatRow label="Taxable income (PKP)" value={formatIDR(result.pkp)} />
+            <StatRow label="Annual tax" value={formatIDR(result.tax)} valueClass="text-rose-600" />
+            <StatRow label="Effective rate" value={`${result.effectiveRate}%`} />
+            <StatRow label="Take-home / yr" value={formatIDR(result.takeHome)} valueClass="text-emerald-600" />
+          </ToolCard>
+
+          {result.details.filter(d => d.taxable > 0).length > 0 && (
+            <ToolCard>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Tax bracket breakdown</h4>
+              {result.details.filter(d => d.taxable > 0).map((d, i) => (
+                <div key={i} className="py-2 border-b border-gray-100 last:border-0">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-600">{d.rate} on {formatIDR(d.taxable)}</span>
+                    <span className="font-semibold text-gray-800">{formatIDR(d.tax)}</span>
+                  </div>
+                </div>
+              ))}
+            </ToolCard>
+          )}
+
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+            <p className="text-xs text-amber-700">
+              This estimate uses the standard 5% job-cost deduction (max Rp 6 jt/yr) and 2021 UU HPP progressive rates.
+              Actual tax may differ based on other deductions or allowances.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tool 10: Net Worth Tracker ───────────────────────────────────────────────
+function NetWorthTool() {
+  const [assets,      setAssets]      = useState([{ id: 1, name: '', value: '' }]);
+  const [liabilities, setLiabilities] = useState([{ id: 1, name: '', value: '' }]);
+  const [result,      setResult]      = useState(null);
+
+  const addRow = (setter) => setter(r => [...r, { id: Date.now(), name: '', value: '' }]);
+  const removeRow = (setter, id) => setter(r => r.filter(x => x.id !== id));
+  const updateRow = (setter, id, field, val) => setter(r => r.map(x => x.id === id ? { ...x, [field]: val } : x));
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const a = assets.map(x => ({ name: x.name || 'Asset', value: parseNum(x.value) })).filter(x => x.value > 0);
+    const l = liabilities.map(x => ({ name: x.name || 'Liability', value: parseNum(x.value) })).filter(x => x.value > 0);
+    const totalAssets = a.reduce((s, x) => s + x.value, 0);
+    const totalLiabilities = l.reduce((s, x) => s + x.value, 0);
+    const netWorth = totalAssets - totalLiabilities;
+    setResult({ assets: a, liabilities: l, totalAssets, totalLiabilities, netWorth });
+  };
+
+  const RowInput = ({ rows, setter, placeholder }) => (
+    <div className="space-y-2">
+      {rows.map((r, i) => (
+        <div key={r.id} className="flex gap-2 items-center">
+          <input type="text" placeholder={`${placeholder} ${i+1}`} value={r.name}
+            onChange={e => updateRow(setter, r.id, 'name', e.target.value)}
+            className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+          <div className="relative w-36">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">Rp</span>
+            <input type="text" placeholder="0" value={r.value}
+              onChange={e => updateRow(setter, r.id, 'value', fmtInput(e.target.value))}
+              className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+          </div>
+          {rows.length > 1 && (
+            <button type="button" onClick={() => removeRow(setter, r.id)}
+              className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={() => addRow(setter)}
+        className="text-xs text-teal-600 hover:text-teal-700 font-medium">+ Add row</button>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <ToolCard>
+        <p className="text-xs text-gray-500 mb-4">
+          Net worth = what you own minus what you owe. Tracking it over time is the clearest measure of financial progress.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <h4 className="text-sm font-semibold text-emerald-700 mb-2">Assets — what you own</h4>
+            <RowInput rows={assets} setter={setAssets} placeholder="Asset" />
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-rose-600 mb-2">Liabilities — what you owe</h4>
+            <RowInput rows={liabilities} setter={setLiabilities} placeholder="Liability" />
+          </div>
+          <SubmitBtn label="Calculate Net Worth" />
+        </form>
+      </ToolCard>
+
+      {result && (
+        <div className="space-y-4">
+          <div className={`rounded-2xl border-2 p-5 text-center ${result.netWorth >= 0 ? 'border-teal-300 bg-teal-50' : 'border-rose-300 bg-rose-50'}`}>
+            <p className="text-xs font-medium text-gray-500 mb-1">Net Worth</p>
+            <p className={`text-3xl font-black ${result.netWorth >= 0 ? 'text-teal-700' : 'text-rose-700'}`}>
+              {result.netWorth >= 0 ? '' : '−'}{formatIDR(Math.abs(result.netWorth))}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <ToolCard>
+              <p className="text-xs font-semibold text-emerald-700 mb-2">Assets</p>
+              {result.assets.map((a, i) => (
+                <div key={i} className="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
+                  <span className="text-gray-600 truncate mr-2">{a.name}</span>
+                  <span className="font-medium text-emerald-700 shrink-0">{formatIDR(a.value)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between text-sm font-bold pt-2 mt-1 border-t border-gray-200">
+                <span>Total</span>
+                <span className="text-emerald-700">{formatIDR(result.totalAssets)}</span>
+              </div>
+            </ToolCard>
+            <ToolCard>
+              <p className="text-xs font-semibold text-rose-600 mb-2">Liabilities</p>
+              {result.liabilities.length > 0 ? result.liabilities.map((l, i) => (
+                <div key={i} className="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
+                  <span className="text-gray-600 truncate mr-2">{l.name}</span>
+                  <span className="font-medium text-rose-600 shrink-0">{formatIDR(l.value)}</span>
+                </div>
+              )) : <p className="text-xs text-gray-400 italic">None</p>}
+              <div className="flex justify-between text-sm font-bold pt-2 mt-1 border-t border-gray-200">
+                <span>Total</span>
+                <span className="text-rose-600">{formatIDR(result.totalLiabilities)}</span>
+              </div>
+            </ToolCard>
+          </div>
+
+          {result.totalAssets > 0 && (
+            <ToolCard>
+              <div className="mb-2 flex justify-between text-xs text-gray-500">
+                <span>Asset coverage ratio</span>
+                <span>{result.totalLiabilities > 0 ? `${(result.totalAssets / result.totalLiabilities).toFixed(1)}×` : '∞'}</span>
+              </div>
+              <ProgressBar value={result.totalAssets - result.totalLiabilities} max={result.totalAssets} color={result.netWorth >= 0 ? 'teal' : 'rose'} />
+              <p className="text-xs text-gray-400 mt-1.5">
+                {result.netWorth >= 0 ? `${Math.round((result.netWorth / result.totalAssets) * 100)}% of assets are unencumbered` : 'Liabilities exceed assets'}
+              </p>
+            </ToolCard>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Right panel: tips + quick reference per tool ─────────────────────────────
+const TOOL_INFO = {
+  afford: {
+    tip:   { title: 'Pay yourself first', body: 'Transfer savings on payday before you can spend it. Automating savings removes willpower from the equation.' },
+    refs:  [
+      { label: 'Savings rate target', value: '≥ 20%' },
+      { label: 'Healthy burn rate',   value: 'Budget ÷ 30' },
+      { label: 'Warning threshold',   value: '> 80% spent' },
+    ],
+  },
+  rule: {
+    tip:   { title: 'Rule of 72', body: 'Divide 72 by your annual return to find years to double money. At 7%: 72 ÷ 7 ≈ 10 years.' },
+    refs:  [
+      { label: 'Needs',   value: '50% of income' },
+      { label: 'Wants',   value: '30% of income' },
+      { label: 'Savings', value: '20% of income' },
+    ],
+  },
+  goal: {
+    tip:   { title: 'Small boosts matter', body: 'Saving 20% more per month cuts your timeline by about 17%. Even small increases compound into months saved.' },
+    refs:  [
+      { label: 'Formula', value: 'Remaining ÷ Monthly' },
+      { label: '+20% saving', value: '−17% timeline' },
+      { label: '+50% saving', value: '−33% timeline' },
+    ],
+  },
+  daily: {
+    tip:   { title: 'Latte factor', body: 'Skipping one Rp 50k coffee daily = Rp 1.5 jt/month = Rp 18 jt/year. Small habits compound fast.' },
+    refs:  [
+      { label: 'Safe daily',  value: 'Remaining ÷ Days left' },
+      { label: 'Ideal daily', value: 'Budget ÷ 30' },
+      { label: 'On track if', value: 'Burn ≤ Ideal × 1.05' },
+    ],
+  },
+  emergency: {
+    tip:   { title: 'Build in stages', body: 'Start with a Rp 1 jt starter fund, then grow to 3 months. Most emergencies cost under Rp 5 jt.' },
+    refs:  [
+      { label: 'Minimum target', value: '3× monthly expenses' },
+      { label: 'Ideal target',   value: '6× monthly expenses' },
+      { label: 'Indonesian avg', value: '~3 months recommended' },
+    ],
+  },
+  debt: {
+    tip:   { title: 'Avalanche vs Snowball', body: 'Avalanche (highest rate first) saves the most money. Snowball (smallest balance first) gives faster motivational wins.' },
+    refs:  [
+      { label: 'Avalanche',  value: 'Highest rate first' },
+      { label: 'Snowball',   value: 'Smallest balance first' },
+      { label: 'Extra pay',  value: 'Goes to top priority' },
+    ],
+  },
+  fire: {
+    tip:   { title: 'The 4% rule', body: 'A diversified portfolio can sustain 4% annual withdrawal indefinitely based on historical data. You need 25× annual expenses.' },
+    refs:  [
+      { label: 'FIRE number',    value: 'Annual expenses ÷ 4%' },
+      { label: 'Rule of 25',     value: 'Expenses × 25' },
+      { label: 'Lean FIRE rate', value: '3.5% (more conservative)' },
+    ],
+  },
+  inflation: {
+    tip:   { title: 'Real vs nominal', body: 'At 5% inflation prices double every ~14 years (72 ÷ 5). Cash loses half its value in 14 years without investment.' },
+    refs:  [
+      { label: 'Indonesia avg inflation', value: '~3–5% / yr' },
+      { label: 'Doubling formula',        value: '72 ÷ inflation rate' },
+      { label: 'At 5% for 10 yrs',        value: '+62.9% price rise' },
+    ],
+  },
+  tax: {
+    tip:   { title: 'Gross vs net', body: 'Always negotiate salary in gross. Plan expenses in net (take-home). A 10% gross raise is often much less than 10% more cash.' },
+    refs:  [
+      { label: 'Up to Rp 60 jt/yr',    value: '5%' },
+      { label: 'Rp 60–250 jt/yr',      value: '15%' },
+      { label: 'Rp 250–500 jt/yr',     value: '25%' },
+      { label: 'Rp 500 jt–5 M/yr',     value: '30%' },
+      { label: 'Above Rp 5 M/yr',      value: '35%' },
+    ],
+  },
+  networth: {
+    tip:   { title: 'Track monthly', body: 'Update your net worth monthly. Even when a month feels bad, your long-term trajectory is what matters most.' },
+    refs:  [
+      { label: 'Net worth',       value: 'Assets − Liabilities' },
+      { label: 'Good ratio',      value: 'Assets > 2× Liabilities' },
+      { label: 'Target by 30',    value: '~1× annual income' },
+    ],
+  },
+};
+
+function RightPanel({ toolId }) {
+  const info = TOOL_INFO[toolId];
+  if (!info) return null;
+  return (
+    <div className="space-y-4">
+      {/* Tip */}
+      <div className="rounded-2xl border border-teal-100 bg-teal-50 p-4">
+        <div className="flex items-start gap-2.5">
+          <span className="text-base shrink-0 mt-0.5">💡</span>
+          <div>
+            <p className="text-xs font-semibold text-teal-700 mb-1">{info.tip.title}</p>
+            <p className="text-xs text-teal-600 leading-relaxed">{info.tip.body}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick reference */}
+      {info.refs?.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick reference</p>
+          <div className="space-y-2">
+            {info.refs.map(({ label, value }) => (
+              <div key={label} className="flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-500 leading-tight">{label}</span>
+                <span className="text-xs font-semibold text-gray-800 text-right shrink-0">{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Navigate tip */}
+      <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+        <p className="text-xs text-gray-400 leading-relaxed">
+          <span className="font-medium text-gray-500">10 tools available.</span> Use the sidebar to switch between budgeting, saving, debt, investing, and tax tools.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 const TOOLS = [
-  { id: 'afford',    label: 'Can I Afford This?', icon: '🛒', desc: 'Check if a purchase fits your budget',        Component: AffordTool      },
-  { id: 'rule',      label: '50/30/20 Rule',       icon: '📊', desc: 'Split income into needs, wants & savings',   Component: BudgetRuleTool  },
-  { id: 'goal',      label: 'Savings Goal',         icon: '🎯', desc: 'Timeline to reach a savings target',        Component: SavingsGoalTool },
-  { id: 'daily',     label: 'Daily Budget',         icon: '📅', desc: 'Safe daily spend for the rest of the month', Component: DailyBudgetTool },
-  { id: 'emergency', label: 'Emergency Fund',       icon: '🛡️', desc: 'Check your safety net coverage',            Component: EmergencyFundTool },
+  { id: 'afford',    label: 'Can I Afford This?', icon: '🛒', desc: 'Check if a purchase fits your budget',         Component: AffordTool,     passbudget: true  },
+  { id: 'rule',      label: '50/30/20 Rule',       icon: '📊', desc: 'Split income into needs, wants & savings',    Component: BudgetRuleTool, passbudget: false },
+  { id: 'goal',      label: 'Savings Goal',         icon: '🎯', desc: 'Timeline to reach a savings target',         Component: SavingsGoalTool, passbudget: false },
+  { id: 'daily',     label: 'Daily Budget',         icon: '📅', desc: 'Safe daily spend for the rest of the month', Component: DailyBudgetTool, passbudget: true  },
+  { id: 'emergency', label: 'Emergency Fund',       icon: '🛡️', desc: 'Check your safety net coverage',             Component: EmergencyFundTool, passbudget: false },
+  { id: 'debt',      label: 'Debt Payoff',          icon: '💳', desc: 'Snowball or avalanche your debts',           Component: DebtTool,       passbudget: false },
+  { id: 'fire',      label: 'FIRE Calculator',      icon: '🔥', desc: 'Find your financial independence number',    Component: FireTool,       passbudget: false },
+  { id: 'inflation', label: 'Inflation Impact',     icon: '📉', desc: 'How inflation erodes purchasing power',      Component: InflationTool,  passbudget: false },
+  { id: 'tax',       label: 'Tax Estimator',        icon: '🧾', desc: 'Estimate PPh 21 income tax (Indonesia)',     Component: TaxTool,        passbudget: false },
+  { id: 'networth',  label: 'Net Worth',            icon: '📋', desc: 'Track assets vs liabilities',               Component: NetWorthTool,   passbudget: false },
 ];
 
 export default function RecommendationPage() {
-  const [active, setActive] = useState('afford');
+  const [active,      setActive]      = useState('afford');
+  const [savedBudget, setSavedBudget] = useState(0);
+
+  useEffect(() => {
+    getProfile()
+      .then(res => setSavedBudget(res.data?.preferences?.monthlyBudget ?? 0))
+      .catch(() => {});
+  }, []);
+
   const tool = TOOLS.find(t => t.id === active);
-  const { Component } = tool;
+  const { Component, passbudget } = tool;
 
   return (
     <AuthGuard>
@@ -571,16 +1333,28 @@ export default function RecommendationPage() {
               </div>
             </div>
 
-            {/* Tool content */}
-            <div className="flex-1 min-w-0 w-full max-w-lg">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-2xl">{tool.icon}</span>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">{tool.label}</h2>
-                  <p className="text-xs text-gray-500">{tool.desc}</p>
+            {/* Tool content + right panel */}
+            <div className="flex-1 min-w-0 flex gap-5 items-start">
+              {/* Tool area */}
+              <div className="flex-1 min-w-0 space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{tool.icon}</span>
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">{tool.label}</h2>
+                    <p className="text-xs text-gray-500">{tool.desc}</p>
+                  </div>
+                </div>
+                <Component {...(passbudget ? { savedBudget } : {})} />
+                {/* Tip shown inline on mobile/tablet */}
+                <div className="xl:hidden">
+                  <RightPanel toolId={active} />
                 </div>
               </div>
-              <Component />
+
+              {/* Right panel — desktop only */}
+              <div className="hidden xl:block w-64 shrink-0">
+                <RightPanel toolId={active} />
+              </div>
             </div>
           </div>
         </main>

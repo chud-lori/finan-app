@@ -83,12 +83,13 @@ const getProfile = async (req, res) => {
         };
 
         const preferences = prefs ? {
-            currency:     prefs.currency,
-            timezone:     prefs.timezone,
-            weekStartsOn: prefs.weekStartsOn,
-            numberFormat: prefs.numberFormat,
+            currency:      prefs.currency,
+            timezone:      prefs.timezone,
+            weekStartsOn:  prefs.weekStartsOn,
+            numberFormat:  prefs.numberFormat,
+            monthlyBudget: prefs.monthlyBudget ?? 0,
         } : {
-            currency: 'IDR', timezone: 'Asia/Jakarta', weekStartsOn: 'monday', numberFormat: 'dot',
+            currency: 'IDR', timezone: 'Asia/Jakarta', weekStartsOn: 'monday', numberFormat: 'dot', monthlyBudget: 0,
         };
 
         res.status(200).json(BaseResponseDTO.success('Profile retrieved', {
@@ -115,7 +116,7 @@ const getProfile = async (req, res) => {
 const updatePreferences = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { currency, timezone, weekStartsOn, numberFormat } = req.body;
+        const { currency, timezone, weekStartsOn, numberFormat, monthlyBudget } = req.body;
 
         const allowed = {};
         if (currency && typeof currency === 'string') {
@@ -125,6 +126,7 @@ const updatePreferences = async (req, res) => {
         if (timezone && moment.tz.zone(timezone)) allowed.timezone = timezone;
         if (['monday', 'sunday'].includes(weekStartsOn))   allowed.weekStartsOn = weekStartsOn;
         if (['dot', 'comma'].includes(numberFormat))        allowed.numberFormat = numberFormat;
+        if (typeof monthlyBudget === 'number' && monthlyBudget >= 0) allowed.monthlyBudget = Math.round(monthlyBudget);
 
         const prefs = await Preference.findOneAndUpdate(
             { user: userId },
@@ -133,10 +135,11 @@ const updatePreferences = async (req, res) => {
         );
 
         res.status(200).json(BaseResponseDTO.success('Preferences updated', {
-            currency:     prefs.currency,
-            timezone:     prefs.timezone,
-            weekStartsOn: prefs.weekStartsOn,
-            numberFormat: prefs.numberFormat,
+            currency:      prefs.currency,
+            timezone:      prefs.timezone,
+            weekStartsOn:  prefs.weekStartsOn,
+            numberFormat:  prefs.numberFormat,
+            monthlyBudget: prefs.monthlyBudget ?? 0,
         }));
     } catch (e) {
         logger.error(`Update preferences error: ${e.message}`);
