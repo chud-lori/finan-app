@@ -821,7 +821,7 @@ const getExplainability = async (req, res) => {
             .slice(0, 5)
             .map(([cat, v]) => {
                 const prevTotal = prevCatMap[cat]?.total || 0;
-                const pct       = totalOutcome > 0 ? Math.round((v.total / totalExpense) * 100) : 0;
+                const pct       = totalExpense > 0 ? Math.round((v.total / totalExpense) * 100) : 0;
                 const delta     = prevTotal > 0 ? Math.round(((v.total - prevTotal) / prevTotal) * 100) : null;
                 return { category: cat, total: Math.round(v.total), count: v.count, pct, prevTotal: Math.round(prevTotal), delta };
             });
