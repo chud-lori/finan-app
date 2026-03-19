@@ -54,8 +54,10 @@ const getProfile = async (req, res) => {
         // Financial identity
         const totalExpense = snapshots.reduce((s, sn) => s + sn.expense, 0);
         const totalIncome  = snapshots.reduce((s, sn) => s + sn.income,  0);
-        const avgMonthlyExpense = snapshots.length ? Math.round(totalExpense / snapshots.length) : 0;
-        const avgMonthlyIncome  = snapshots.length ? Math.round(totalIncome  / snapshots.length) : 0;
+        const incomeMonths  = snapshots.filter(sn => sn.income  > 0).length || 1;
+        const expenseMonths = snapshots.filter(sn => sn.expense > 0).length || 1;
+        const avgMonthlyExpense = Math.round(totalExpense / expenseMonths);
+        const avgMonthlyIncome  = Math.round(totalIncome  / incomeMonths);
         const avgSavingsRate    = totalIncome > 0 ? Math.round(((totalIncome - totalExpense) / totalIncome) * 100) : 0;
 
         const catMap = {};
