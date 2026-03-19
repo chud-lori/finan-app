@@ -7,8 +7,8 @@ import { useTheme } from '@/components/ThemeContext';
 const NAV_LINKS = [
   { href: '/', label: 'Dashboard', icon: '📊' },
   { href: '/analytics', label: 'Analytics', icon: '📈' },
-  { href: '/range', label: 'Range', icon: '📅' },
-  { href: '/recommendation', label: 'Budget', icon: '💡' },
+  { href: '/reports', label: 'Reports', icon: '📅' },
+  { href: '/recommendation', label: 'Planner', icon: '💡' },
   { href: '/insights', label: 'Insights', icon: '🔍' },
 ];
 

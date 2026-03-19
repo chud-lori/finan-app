@@ -532,8 +532,8 @@ export default function RecommendationPage() {
       <div className="min-h-screen bg-gray-50">
         <Navbar />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-          <h1 className="text-xl font-bold text-gray-900 mb-1">Budget Tools</h1>
-          <p className="text-sm text-gray-500 mb-6">Financial calculators to help you plan, save, and spend smarter</p>
+          <h1 className="text-xl font-bold text-gray-900 mb-1">Planner</h1>
+          <p className="text-sm text-gray-500 mb-6">Financial tools to help you plan, save, and spend smarter</p>
 
           <div className="flex gap-6 items-start flex-col lg:flex-row">
             {/* Sidebar — desktop */}
