@@ -4,14 +4,13 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import DateTimePicker from '@/components/DateTimePicker';
-import { addTransaction, getCategories, getCategorySuggestions } from '@/lib/api';
-import { toTitleCase } from '@/lib/format';
+import { addTransaction, getCategories, getCategorySuggestions, getTransactions } from '@/lib/api';
+import { toTitleCase, formatIDR, formatDate } from '@/lib/format';
 
 // ─── Category picker ─────────────────────────────────────────────────────────
 function CategoryCombobox({ value, onChange, categories, suggestions = [], disabled }) {
   const [query, setQuery] = useState('');
 
-  // Sync display when value is reset externally (type switch)
   useEffect(() => {
     if (!value) setQuery('');
   }, [value]);
@@ -21,9 +20,8 @@ function CategoryCombobox({ value, onChange, categories, suggestions = [], disab
   const exactMatch = categories.some(c => c.toLowerCase() === trimmed);
   const showCreate = trimmed && !exactMatch;
 
-  // Suggestions: only show when no search query and there are suggestions
   const visibleSuggestions = !query && suggestions.length > 0
-    ? suggestions.filter(s => s !== value)   // don't duplicate the already-selected one
+    ? suggestions.filter(s => s !== value)
     : [];
 
   const select = (cat) => {
@@ -33,7 +31,6 @@ function CategoryCombobox({ value, onChange, categories, suggestions = [], disab
 
   return (
     <div>
-      {/* Suggested chips — shown above the list when not searching */}
       {!disabled && visibleSuggestions.length > 0 && (
         <div className="mb-2">
           <p className="text-xs text-gray-400 mb-1.5">✨ Suggested for now</p>
@@ -52,7 +49,6 @@ function CategoryCombobox({ value, onChange, categories, suggestions = [], disab
         </div>
       )}
 
-      {/* Search filter */}
       <input
         type="text"
         disabled={disabled}
@@ -63,10 +59,8 @@ function CategoryCombobox({ value, onChange, categories, suggestions = [], disab
         className={`${inputCls} disabled:opacity-50 disabled:cursor-not-allowed mb-2`}
       />
 
-      {/* Always-visible list */}
       {!disabled && (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
-          {/* Selected badge */}
           {value && (
             <div className="px-3.5 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
               <span className="text-xs text-indigo-500 font-medium">Selected</span>
@@ -115,6 +109,115 @@ function CategoryCombobox({ value, onChange, categories, suggestions = [], disab
   );
 }
 
+// ─── Side panel ───────────────────────────────────────────────────────────────
+function SidePanel() {
+  const [recent, setRecent]   = useState([]);
+  const [todayIncome, setTodayIncome]   = useState(0);
+  const [todayExpense, setTodayExpense] = useState(0);
+  const [loadingPanel, setLoadingPanel] = useState(true);
+
+  useEffect(() => {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    getTransactions({ month, sortBy: 'time', order: 'desc', limit: 10 })
+      .then(res => {
+        const txns = res.data?.transactions || [];
+        const todayStr = now.toDateString();
+        let inc = 0, exp = 0;
+        txns.forEach(t => {
+          if (new Date(t.time).toDateString() === todayStr) {
+            if (t.type === 'income')  inc += t.amount;
+            if (t.type === 'expense') exp += t.amount;
+          }
+        });
+        setTodayIncome(inc);
+        setTodayExpense(exp);
+        setRecent(txns.slice(0, 5));
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPanel(false));
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      {/* Today summary */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Today&apos;s Summary</h3>
+        {loadingPanel ? (
+          <div className="space-y-2">
+            <div className="h-4 bg-gray-100 rounded animate-pulse w-3/4" />
+            <div className="h-4 bg-gray-100 rounded animate-pulse w-1/2" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                Income
+              </span>
+              <span className="text-sm font-semibold text-emerald-600">{formatIDR(todayIncome)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
+                Expense
+              </span>
+              <span className="text-sm font-semibold text-rose-600">{formatIDR(todayExpense)}</span>
+            </div>
+            <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-400">Net</span>
+              <span className={`text-sm font-bold ${todayIncome - todayExpense >= 0 ? 'text-gray-800' : 'text-rose-600'}`}>
+                {formatIDR(todayIncome - todayExpense)}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Recent transactions */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Transactions</h3>
+        {loadingPanel ? (
+          <div className="space-y-3">
+            {[1,2,3].map(i => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full bg-gray-100 animate-pulse shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-3 bg-gray-100 rounded animate-pulse w-3/4" />
+                  <div className="h-3 bg-gray-100 rounded animate-pulse w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : recent.length === 0 ? (
+          <p className="text-xs text-gray-400 text-center py-4">No transactions this month</p>
+        ) : (
+          <ul className="space-y-3">
+            {recent.map(t => (
+              <li key={t.id || t._id} className="flex items-center gap-3">
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 ${
+                  t.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                }`}>
+                  {t.type === 'income' ? '↑' : '↓'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-800 truncate">{t.description}</p>
+                  <p className="text-xs text-gray-400">{toTitleCase(t.category)}</p>
+                </div>
+                <span className={`text-xs font-semibold shrink-0 ${
+                  t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'
+                }`}>
+                  {formatIDR(t.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function AddPage() {
   const router = useRouter();
@@ -133,7 +236,6 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Fetch categories + suggestions whenever a type is selected
   useEffect(() => {
     if (!form.type) return;
     getCategories()
@@ -149,7 +251,6 @@ export default function AddPage() {
     setError('');
     setLoading(true);
     try {
-      // Format the Date object to "YYYY-MM-DDTHH:mm:ss" (local time, no Z)
       const d = form.time;
       const pad = (n) => String(n).padStart(2, '0');
       const timeValue = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
@@ -182,106 +283,125 @@ export default function AddPage() {
     <AuthGuard>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-80">
-          <div className="max-w-lg">
-            <h1 className="text-xl font-bold text-gray-900 mb-6">Add Transaction</h1>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+          <h1 className="text-xl font-bold text-gray-900 mb-6">Add Transaction</h1>
 
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-              {success && (
-                <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm flex items-center gap-2">
-                  <span>✓</span> Transaction added! Redirecting…
-                </div>
-              )}
-              {error && (
-                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                  {error}
-                </div>
-              )}
+          <div className="flex flex-col lg:flex-row gap-6 items-start">
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <Field label="Description">
-                  <input
-                    type="text"
-                    required
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    placeholder="e.g. Grocery shopping"
-                    className={inputCls}
-                  />
-                </Field>
+            {/* ── Left: form ── */}
+            <div className="flex-1 min-w-0">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                {success && (
+                  <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm flex items-center gap-2">
+                    <span>✓</span> Transaction added! Redirecting…
+                  </div>
+                )}
+                {error && (
+                  <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
 
-                <Field label="Amount (IDR)">
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">Rp</span>
+                <form onSubmit={handleSubmit} className="space-y-5">
+
+                  {/* Type toggle — pill style, prominent */}
+                  <Field label="Type">
+                    <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 rounded-xl">
+                      {['income', 'expense'].map((t) => (
+                        <button
+                          type="button"
+                          key={t}
+                          onClick={() => setForm({ ...form, type: t, category: '' })}
+                          className={`py-3 rounded-lg text-sm font-bold transition-all ${
+                            form.type === t
+                              ? t === 'income'
+                                ? 'bg-emerald-500 text-white shadow-sm'
+                                : 'bg-rose-500 text-white shadow-sm'
+                              : 'text-gray-400 hover:text-gray-600'
+                          }`}
+                        >
+                          {t === 'income' ? '↑ Income' : '↓ Expense'}
+                        </button>
+                      ))}
+                    </div>
+                    <input type="hidden" name="type" value={form.type} required />
+                  </Field>
+
+                  {/* Amount — large, prominent */}
+                  <Field label="Amount (IDR)">
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">Rp</span>
+                      <input
+                        type="text"
+                        required
+                        value={form.amount}
+                        onChange={(e) => setForm({ ...form, amount: formatAmountDisplay(e.target.value) })}
+                        placeholder="0"
+                        className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-300 text-2xl font-bold text-gray-900 placeholder:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-white"
+                      />
+                    </div>
+                  </Field>
+
+                  <Field label="Description">
                     <input
                       type="text"
                       required
-                      value={form.amount}
-                      onChange={(e) => setForm({ ...form, amount: formatAmountDisplay(e.target.value) })}
-                      placeholder="1,000,000"
-                      className={`${inputCls} pl-9`}
-                    />
-                  </div>
-                </Field>
-
-                {/* Type toggle */}
-                <Field label="Type">
-                  <div className="flex gap-2">
-                    {['income', 'expense'].map((t) => (
-                      <button
-                        type="button"
-                        key={t}
-                        onClick={() => setForm({ ...form, type: t, category: '' })}
-                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
-                          form.type === t
-                            ? t === 'income'
-                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                              : 'border-rose-500 bg-rose-50 text-rose-700'
-                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                        }`}
-                      >
-                        {t === 'income' ? '↑ Income' : '↓ Expense'}
-                      </button>
-                    ))}
-                  </div>
-                  <input type="hidden" name="type" value={form.type} required />
-                </Field>
-
-                {/* Category combobox — shown for both income and expense */}
-                {form.type && (
-                  <Field label="Category">
-                    <CategoryCombobox
-                      value={form.category}
-                      onChange={(val) => setForm(f => ({ ...f, category: val }))}
-                      categories={categories}
-                      suggestions={suggestions}
-                      disabled={false}
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      placeholder="e.g. Grocery shopping"
+                      className={inputCls}
                     />
                   </Field>
-                )}
 
-                <Field label="Date & Time">
-                  <DateTimePicker
-                    value={form.time}
-                    onChange={(date) => setForm(f => ({ ...f, time: date }))}
-                    timezone={tz}
-                  />
-                </Field>
+                  {form.type && (
+                    <Field label="Category">
+                      <CategoryCombobox
+                        value={form.category}
+                        onChange={(val) => setForm(f => ({ ...f, category: val }))}
+                        categories={categories}
+                        suggestions={suggestions}
+                        disabled={false}
+                      />
+                    </Field>
+                  )}
 
-                <button
-                  type="submit"
-                  disabled={loading || success || !form.type || !form.category.trim()}
-                  className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Saving…
-                    </>
-                  ) : 'Add Transaction'}
-                </button>
-              </form>
+                  <Field label="Date & Time">
+                    <DateTimePicker
+                      value={form.time}
+                      onChange={(date) => setForm(f => ({ ...f, time: date }))}
+                      timezone={tz}
+                    />
+                  </Field>
+
+                  {/* Submit — dominant */}
+                  <button
+                    type="submit"
+                    disabled={loading || success || !form.type || !form.category.trim()}
+                    className="w-full py-3.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-indigo-200"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Saving…
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Transaction
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
             </div>
+
+            {/* ── Right: side panel ── */}
+            <div className="w-full lg:w-72 shrink-0">
+              <SidePanel />
+            </div>
+
           </div>
         </main>
       </div>
