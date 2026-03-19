@@ -420,6 +420,8 @@ const getSuggestedCategories = async (req, res, next) => {
         const userId = req.user.id;
         // Client sends its local hour (0-23) so we score against the user's actual time of day
         const hour = Math.min(23, Math.max(0, parseInt(req.query.hour) || new Date().getHours()));
+        // Optional type filter — suggestions are scoped to income or expense separately
+        const type = ['income', 'expense'].includes(req.query.type) ? req.query.type : null;
 
         // Map hour → named bucket
         const bucket =
@@ -427,10 +429,13 @@ const getSuggestedCategories = async (req, res, next) => {
             hour >= 11 && hour < 16 ? 'afternoon'  :
             hour >= 16 && hour < 21 ? 'evening'    : 'night';
 
-        // Aggregate all user transactions grouped by category.
+        const matchFilter = { user: Transaction.base.Types.ObjectId.createFromHexString(userId) };
+        if (type) matchFilter.type = type;
+
+        // Aggregate user transactions for the given type grouped by category.
         // Score = overall frequency  +  2× bonus when the transaction's hour bucket matches now.
         const agg = await Transaction.aggregate([
-            { $match: { user: Transaction.base.Types.ObjectId.createFromHexString(userId) } },
+            { $match: matchFilter },
             { $addFields: {
                 // Extract hour in each transaction's own recorded timezone so past
                 // breakfast / dinner categories match regardless of where they were recorded

@@ -61,7 +61,7 @@ export default function DateTimePicker({ value, onChange, timezone }) {
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1.5 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden" style={{ minWidth: 300 }}>
+        <div className="absolute z-30 bottom-full mb-1.5 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden" style={{ minWidth: 300 }}>
           <div className="rdp-themed p-2">
             <DayPicker
               mode="single"

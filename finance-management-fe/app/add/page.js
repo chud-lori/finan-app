@@ -238,10 +238,13 @@ export default function AddPage() {
 
   useEffect(() => {
     if (!form.type) return;
+    // Reset when type changes
+    setCategories([]);
+    setSuggestions([]);
     getCategories()
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
-    getCategorySuggestions()
+    getCategorySuggestions(form.type)
       .then(res => setSuggestions(res.data?.suggestions || []))
       .catch(() => {});
   }, [form.type]);
@@ -358,7 +361,7 @@ export default function AddPage() {
                       <CategoryCombobox
                         value={form.category}
                         onChange={(val) => setForm(f => ({ ...f, category: val }))}
-                        categories={categories}
+                        categories={[...new Set([...categories, ...suggestions])]}
                         suggestions={suggestions}
                         disabled={false}
                       />
