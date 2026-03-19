@@ -445,7 +445,7 @@ export default function AnalyticsPage() {
                   {data?.categories?.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-gray-500 mr-1">Compare:</span>
-                      <Tooltip text="Show how each category changed vs a reference period. Positive % = spending more, negative % = spending less." />
+                      <Tooltip text="Show how each category changed vs a reference period. Positive % = spending more, negative % = spending less." align="left" />
                       {[
                         { value: 'none',       label: 'None',          tip: null },
                         { value: 'last_month', label: 'vs Last Month', tip: 'Show how much each category changed compared to the previous month.' },

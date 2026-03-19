@@ -100,7 +100,7 @@ function InsightFeed({ explain, ttz, anomaly, loading }) {
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">What your data is saying</p>
-        <Tooltip text="Auto-generated highlights from your spending data — ranked by urgency. Alert = action needed, Watch = keep an eye on it, Good = positive progress." position="bottom" />
+        <Tooltip text="Auto-generated highlights from your spending data — ranked by urgency. Alert = action needed, Watch = keep an eye on it, Good = positive progress." position="bottom" align="left" />
       </div>
       <div className="divide-y divide-gray-50">
         {top.map((ins, i) => {
@@ -163,14 +163,14 @@ function TimeToZeroCard({ data }) {
         <div>
           <div className="flex items-center gap-1 mb-0.5">
             <p className="text-xs text-gray-400">Current balance</p>
-            <Tooltip text="Your total income minus total expenses across all time — the net balance in your account." />
+            <Tooltip text="Your total income minus total expenses across all time — the net balance in your account." align="left" />
           </div>
           <p className="text-sm font-bold text-gray-800">{formatIDR(data.balance)}</p>
         </div>
         <div>
           <div className="flex items-center gap-1 mb-0.5">
             <p className="text-xs text-gray-400">Daily burn</p>
-            <Tooltip text="Your average daily spending over the last 30 days. Used to calculate how long your balance will last." />
+            <Tooltip text="Your average daily spending over the last 30 days. Used to calculate how long your balance will last." align="right" />
           </div>
           <p className="text-sm font-bold text-gray-800">{formatIDR(data.dailyBurnRate)}/day</p>
         </div>
@@ -203,7 +203,7 @@ function ExplainCard({ data }) {
                     c.delta > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
                   }`}>
                     {c.delta > 0 ? '+' : ''}{c.delta}%
-                    <Tooltip text={`Change vs last month. ${c.delta > 0 ? 'You spent more' : 'You spent less'} on ${cap(c.category)} compared to the previous month.`} />
+                    <Tooltip text={`Change vs last month. ${c.delta > 0 ? 'You spent more' : 'You spent less'} on ${cap(c.category)} compared to the previous month.`} align="left" />
                   </span>
                 )}
               </div>
@@ -237,14 +237,14 @@ function AnomalyBadge({ flag }) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">
         New category
-        <Tooltip text="This is the first time you've spent in this category — it may be intentional, but worth reviewing." />
+        <Tooltip text="This is the first time you've spent in this category — it may be intentional, but worth reviewing." align="left" />
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
       {flag.ratio}× above avg
-      <Tooltip text={`This transaction is ${flag.ratio}× higher than your usual spending amount in this category. Your average is used as the baseline.`} />
+      <Tooltip text={`This transaction is ${flag.ratio}× higher than your usual spending amount in this category. Your average is used as the baseline.`} align="left" />
     </span>
   );
 }
@@ -301,7 +301,7 @@ function Section({ title, subtitle, tooltip, children, loading, error }) {
     <section>
       <div className="flex items-center gap-2">
         <h2 className="text-base font-bold text-gray-900">{title}</h2>
-        {tooltip && <Tooltip text={tooltip} />}
+        {tooltip && <Tooltip text={tooltip} align="left" />}
       </div>
       {subtitle && <p className="text-xs text-gray-500 mt-0.5 mb-3">{subtitle}</p>}
       {!subtitle && <div className="mb-3" />}
