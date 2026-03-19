@@ -261,15 +261,15 @@ function AnomalyList({ data }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-50">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-50 overflow-hidden">
       {data.anomalies.map((a) => (
         <div key={String(a.id)} className="p-4 hover:bg-gray-50 transition-colors">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">{a.description}</p>
+              <p className="text-sm font-semibold text-gray-900 break-words">{a.description}</p>
               <p className="text-xs text-gray-400 mt-0.5 capitalize">{a.category}</p>
             </div>
-            <p className="text-sm font-bold text-gray-900 flex-shrink-0">{formatIDR(a.amount)}</p>
+            <p className="text-sm font-bold text-gray-900 flex-shrink-0 whitespace-nowrap tabular-nums">{formatIDR(a.amount)}</p>
           </div>
           <div className="flex flex-wrap gap-1.5 mt-2.5">
             {a.flags.map((f, i) => <AnomalyBadge key={i} flag={f} />)}

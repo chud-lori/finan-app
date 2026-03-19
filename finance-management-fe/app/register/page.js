@@ -73,9 +73,9 @@ export default function RegisterPage() {
         <div className="w-full max-w-sm">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-600 text-white text-2xl font-bold mb-4 shadow-lg">
+            <Link href="/" className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-600 text-white text-2xl font-bold mb-4 shadow-lg hover:bg-teal-700 transition-colors">
               FA
-            </div>
+            </Link>
             <h1 className="text-2xl font-bold text-gray-900">Create account</h1>
             <p className="text-gray-500 text-sm mt-1">Start tracking your finances</p>
           </div>
