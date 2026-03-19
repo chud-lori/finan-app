@@ -50,6 +50,12 @@ const TransactionSchema = new Schema({
     timestamps: true
  });
 
+// Compound indexes for the most common query patterns.
+// { user, time } covers dashboard list, monthly totals, analytics, anomalies, explain, ttz.
+// { user, type, time } covers expense-only queries and type-filtered listing.
+TransactionSchema.index({ user: 1, time: -1 });
+TransactionSchema.index({ user: 1, type: 1, time: -1 });
+
 const Transaction = mongoose.model("Transaction", TransactionSchema);
 
 module.exports = Transaction;

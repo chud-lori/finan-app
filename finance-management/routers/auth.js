@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { loginValidatorRules, registerValidatorRules, validate } = require('../helpers/validator');
 const { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount } = require('../controllers/auth');
 const authenticateJWT = require('../middleware/authJWT');
+const limiter = require('../middleware/rateLimit');
 
 /**
  * @openapi
@@ -62,7 +63,7 @@ const authenticateJWT = require('../middleware/authJWT');
  *       500:
  *         description: Server error
  */
-router.post('/login', loginValidatorRules(), validate, loginUser);
+router.post('/login', limiter.byIp(10), loginValidatorRules(), validate, loginUser);
 
 /**
  * @openapi
@@ -141,7 +142,7 @@ router.post('/login', loginValidatorRules(), validate, loginUser);
  *       500:
  *         description: Server error
  */
-router.post('/register', registerValidatorRules(), validate, registerUser)
+router.post('/register', limiter.byIp(10), registerValidatorRules(), validate, registerUser)
 
 /**
  * @openapi
@@ -211,7 +212,7 @@ router.get('/check', checkAuth);
  *       401:
  *         description: Invalid Google token
  */
-router.post('/google/verify', verifyGoogleToken);
+router.post('/google/verify', limiter.byIp(20), verifyGoogleToken);
 router.delete('/account', authenticateJWT, deleteAccount);
 
 module.exports = router;

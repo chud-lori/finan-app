@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const multer = require('multer');
 const authenticateJWT = require('../middleware/authJWT');
+const limiter = require('../middleware/rateLimit');
 const { transactionValidatorRules, validate } = require('../helpers/validator');
 const {
     addTransaction,
@@ -68,11 +69,11 @@ const upload = multer({
  *       500:
  *         description: Server error
  */
-router.get('/expense', authenticateJWT, getExpense);
-router.get('/analytics', authenticateJWT, getAnalytics);
-router.get('/anomalies', authenticateJWT, getAnomalies);
-router.get('/explain', authenticateJWT, getExplainability);
-router.get('/time-to-zero', authenticateJWT, getTimeToZero);
+router.get('/expense',     authenticateJWT, limiter.byUser(60), getExpense);
+router.get('/analytics',   authenticateJWT, limiter.byUser(60), getAnalytics);
+router.get('/anomalies',   authenticateJWT, limiter.byUser(60), getAnomalies);
+router.get('/explain',     authenticateJWT, limiter.byUser(60), getExplainability);
+router.get('/time-to-zero', authenticateJWT, limiter.byUser(60), getTimeToZero);
 
 /**
  * @openapi
@@ -137,7 +138,7 @@ router.get('/time-to-zero', authenticateJWT, getTimeToZero);
  *       500:
  *         description: Server error
  */
-router.post('/import/csv', authenticateJWT, upload.single('file'), importCsv);
+router.post('/import/csv', authenticateJWT, limiter.byUser(10), upload.single('file'), importCsv);
 
 /**
  * @openapi
@@ -257,7 +258,7 @@ router.post('/import/csv', authenticateJWT, upload.single('file'), importCsv);
  *         description: Server error
  */
 
-router.post('', transactionValidatorRules(), validate, authenticateJWT, addTransaction);
+router.post('', transactionValidatorRules(), validate, authenticateJWT, limiter.byUser(30), addTransaction);
 
 /**
  * @openapi

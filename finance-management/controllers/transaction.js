@@ -9,6 +9,7 @@ const Balance = require('../models/balance.model');
 const Transaction = require('../models/transaction.model');
 const Category = require('../models/category.model');
 const logger = require("../helpers/logger");
+const cache = require('../helpers/cache');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -104,6 +105,7 @@ const addTransaction = async (req, res, next) => {
         await balance.save();
         const savedTransaction = await newTransaction.save();
 
+        cache.invalidateUser(user.id);
         logger.info(`Add transaction response: ${user.id} success`);
 
         // Return DTO response
@@ -273,6 +275,7 @@ const deleteTransaction = async (req, res, next) => {
         }
 
         await balance.save();
+        cache.invalidateUser(req.user.id);
 
         // Return DTO response
         const responseDTO = new DeleteTransactionResponseDTO(deletedTransaction);
@@ -617,6 +620,7 @@ const importCsv = async (req, res, next) => {
         }
 
         await balance.save();
+        if (results.success > 0) cache.invalidateUser(user.id);
 
         logger.info(`Import CSV: user ${user.id} — ${results.success} imported, ${results.failed} failed`);
         res.status(200).json(BaseResponseDTO.success('CSV import completed', results));
@@ -633,6 +637,10 @@ const getAnalytics = async (req, res) => {
         const year   = parseInt(req.query.year)  || new Date().getFullYear();
         const month  = req.query.month ? parseInt(req.query.month) : null; // 1-12, null = yearly view
         const userTz = validTz(req.query.tz);
+
+        const cacheParams = `${year}:${month ?? 'all'}:${userTz}`;
+        const cached = cache.get(userId, 'analytics', cacheParams);
+        if (cached) return res.status(200).json(cached);
 
         // Period window in the user's local timezone
         let periodStart, periodEnd;
@@ -705,14 +713,16 @@ const getAnalytics = async (req, res) => {
 
         const availableYears = [...new Set(allTxns.map(t => moment(t.time).tz(t.transaction_timezone || userTz).year()))].sort();
 
-        res.status(200).json(BaseResponseDTO.success('Analytics retrieved', {
+        const analyticsResponse = BaseResponseDTO.success('Analytics retrieved', {
             year, month,
             monthly,    // array[12] when yearly view, null when monthly
             monthStats, // { income, expense } when monthly view, null when yearly
             yearly,
             categories,
             availableYears,
-        }));
+        });
+        cache.set(userId, 'analytics', cacheParams, analyticsResponse);
+        res.status(200).json(analyticsResponse);
     } catch (error) {
         logger.error(`Get analytics error: ${error.message}`);
         res.status(500).json(BaseResponseDTO.error('Failed to get analytics', error.message));
@@ -722,6 +732,10 @@ const getAnalytics = async (req, res) => {
 const getAnomalies = async (req, res) => {
     try {
         const userTz = validTz(req.query.tz);
+        const cacheParams = `${userTz}`;
+        const cached = cache.get(req.user.id, 'anomalies', cacheParams);
+        if (cached) return res.status(200).json(cached);
+
         const now = moment().tz(userTz);
         const startOfMonth = now.clone().startOf('month').toDate();
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
@@ -773,7 +787,9 @@ const getAnomalies = async (req, res) => {
 
         anomalies.sort((a, b) => new Date(b.time) - new Date(a.time));
 
-        res.status(200).json(BaseResponseDTO.success('Anomaly detection complete', { count: anomalies.length, anomalies }));
+        const anomalyResponse = BaseResponseDTO.success('Anomaly detection complete', { count: anomalies.length, anomalies });
+        cache.set(req.user.id, 'anomalies', cacheParams, anomalyResponse);
+        res.status(200).json(anomalyResponse);
     } catch (error) {
         logger.error(`Get anomalies error: ${error.message}`);
         res.status(500).json(BaseResponseDTO.error('Failed to get anomalies', error.message));
@@ -783,6 +799,9 @@ const getAnomalies = async (req, res) => {
 const getExplainability = async (req, res) => {
     try {
         const userTz = validTz(req.query.tz);
+        const cacheParams = `${req.query.month ?? 'current'}:${userTz}`;
+        const cached = cache.get(req.user.id, 'explain', cacheParams);
+        if (cached) return res.status(200).json(cached);
         const now = moment().tz(userTz);
         const monthParam = req.query.month; // optional YYYY-MM
 
@@ -831,7 +850,9 @@ const getExplainability = async (req, res) => {
             ? `Your spending is mainly driven by: ${top3Names}`
             : 'No spending data for this period';
 
-        res.status(200).json(BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalExpense), summary, topCategories }));
+        const explainResponse = BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalExpense), summary, topCategories });
+        cache.set(req.user.id, 'explain', cacheParams, explainResponse);
+        res.status(200).json(explainResponse);
     } catch (error) {
         logger.error(`Get explainability error: ${error.message}`);
         res.status(500).json(BaseResponseDTO.error('Failed to get explainability', error.message));
@@ -840,12 +861,16 @@ const getExplainability = async (req, res) => {
 
 const getTimeToZero = async (req, res) => {
     try {
+        const userTz = validTz(req.query.tz);
+        const cacheParams = `${userTz}`;
+        const cached = cache.get(req.user.id, 'ttz', cacheParams);
+        if (cached) return res.status(200).json(cached);
+
         const balance = await Balance.findOne({ user: req.user.id });
         if (!balance) {
             return res.status(404).json(BaseResponseDTO.error('User balance not found'));
         }
 
-        const userTz = validTz(req.query.tz);
         const now = moment().tz(userTz);
         const thirtyDaysAgo = now.clone().subtract(30, 'days').toDate();
 
@@ -867,13 +892,15 @@ const getTimeToZero = async (req, res) => {
             }
         }
 
-        res.status(200).json(BaseResponseDTO.success('Time to zero calculated', {
+        const ttzResponse = BaseResponseDTO.success('Time to zero calculated', {
             balance: balance.amount,
             dailyBurnRate: Math.round(dailyBurnRate),
             daysToZero,
             projectedZeroDate,
             status,
-        }));
+        });
+        cache.set(req.user.id, 'ttz', cacheParams, ttzResponse);
+        res.status(200).json(ttzResponse);
     } catch (error) {
         logger.error(`Get time to zero error: ${error.message}`);
         res.status(500).json(BaseResponseDTO.error('Failed to calculate time to zero', error.message));
