@@ -448,7 +448,7 @@ const importCsv = async (req, res, next) => {
                 const description = (row['Title'] || row['Description'] || row['title'] || row['description'] || '').trim();
                 const categoryRaw = (row['Category'] || row['category'] || '').trim();
                 const amountRaw = row['Amount'] || row['amount'] || '0';
-                const typeRaw = (row['Type'] || row['type'] || 'outcome').trim().toLowerCase();
+                const typeRaw = (row['Type'] || row['type'] || '').trim().toLowerCase();
                 const timeRaw = (row['Timestamp'] || row['Date'] || row['Time'] || row['time'] || '').trim();
                 const timezone = (row['Timezone'] || row['timezone'] || DEFAULT_TZ).trim();
 
@@ -465,12 +465,8 @@ const importCsv = async (req, res, next) => {
                     continue;
                 }
 
-                const type = ['income', 'outcome'].includes(typeRaw) ? typeRaw : null;
-                if (!type) {
-                    results.failed++;
-                    results.errors.push(`Row ${rowNum}: type must be "income" or "outcome", got "${typeRaw}"`);
-                    continue;
-                }
+                // Treat only 'income' as income; anything else (expense, outcome, debit, etc.) → outcome
+                const type = typeRaw === 'income' ? 'income' : 'outcome';
 
                 const categoryLower = categoryRaw.trim().toLowerCase();
                 const safeCategory = escapeRegex(categoryLower);
