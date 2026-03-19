@@ -1,6 +1,7 @@
 import Link from 'next/link';
-import AuthRedirect from '@/components/AuthRedirect';
 import Reveal from '@/components/Reveal';
+import LandingNav from '@/components/LandingNav';
+import LandingHeroCTA from '@/components/LandingHeroCTA';
 
 export const metadata = {
   title: 'Finan App — Personal Finance Tracker & Planner',
@@ -171,34 +172,10 @@ function LandingFooter() {
 export default function LandingPage() {
   return (
     <>
-      <AuthRedirect to="/dashboard" />
-
       <div className="bg-white overflow-x-hidden">
 
         {/* ── Sticky nav ── */}
-        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-100">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-            <span className="font-bold text-xl text-teal-600 tracking-tight">Finan App</span>
-            <nav className="hidden sm:flex items-center gap-6 text-sm text-gray-600 font-medium">
-              {[['#features','Features'],['#tools','Tools'],['#how','How it works']].map(([href, label]) => (
-                <a key={href} href={href}
-                  className="relative py-1 hover:text-teal-600 transition-colors after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-teal-500 after:transition-all hover:after:w-full">
-                  {label}
-                </a>
-              ))}
-            </nav>
-            <div className="flex items-center gap-2">
-              <Link href="/login"
-                className="px-3.5 py-1.5 rounded-xl text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">
-                Sign in
-              </Link>
-              <Link href="/register"
-                className="px-3.5 py-1.5 rounded-xl text-sm font-semibold bg-teal-600 text-white hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-200 active:scale-95 transition-all">
-                Get started
-              </Link>
-            </div>
-          </div>
-        </header>
+        <LandingNav />
 
         {/* ── Hero ── */}
         <section className="relative overflow-hidden bg-gradient-to-br from-teal-50 via-white to-emerald-50 pt-20 pb-24 sm:pt-28 sm:pb-32">
@@ -228,19 +205,7 @@ export default function LandingPage() {
             </p>
 
             {/* CTAs */}
-            <div className="animate-fade-in-up delay-300 flex flex-col sm:flex-row gap-3 justify-center">
-              <Link href="/register"
-                className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl bg-teal-600 text-white font-semibold text-base hover:bg-teal-700 hover:shadow-xl hover:shadow-teal-200/70 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
-                Start for free
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                </svg>
-              </Link>
-              <Link href="/login"
-                className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-semibold text-base hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all duration-200">
-                Sign in
-              </Link>
-            </div>
+            <LandingHeroCTA />
 
             <p className="animate-fade-in delay-400 text-xs text-gray-400 mt-4">
               No credit card · Free account · Google OAuth supported
