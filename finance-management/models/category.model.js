@@ -26,4 +26,10 @@ CategorySchema.index({ user: 1, name: 1 }, { unique: true });
 
 const Category = mongoose.model("Category", CategorySchema);
 
+// Drop the old global unique index on name (existed before user-scoped index was added).
+// Silent no-op if the index no longer exists.
+mongoose.connection.on('connected', () => {
+    Category.collection.dropIndex('name_1').catch(() => {});
+});
+
 module.exports = Category;

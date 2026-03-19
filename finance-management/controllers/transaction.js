@@ -40,11 +40,20 @@ const addTransaction = async (req, res, next) => {
         if (!nameLower) {
             return res.status(400).json(BaseResponseDTO.error('Category is required'));
         }
-        const category = await Category.findOneAndUpdate(
-            { user: user.id, name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') } },
-            { $setOnInsert: { user: user.id, name: nameLower } },
-            { upsert: true, new: true }
-        );
+        let category;
+        try {
+            category = await Category.findOneAndUpdate(
+                { user: user.id, name: nameLower },
+                { $setOnInsert: { user: user.id, name: nameLower } },
+                { upsert: true, new: true }
+            );
+        } catch (e) {
+            if (e.code === 11000) {
+                category = await Category.findOne({ user: user.id, name: nameLower });
+            } else {
+                throw e;
+            }
+        }
         const resolvedCategory = category.name;
 
         // Validate currency
@@ -549,12 +558,21 @@ const importCsv = async (req, res, next) => {
                 const type = typeRaw === 'income' ? 'income' : 'expense';
 
                 const categoryLower = categoryRaw.trim().toLowerCase();
-                const safeCategory = escapeRegex(categoryLower);
-                const categoryDoc = await Category.findOneAndUpdate(
-                    { user: req.user.id, name: { $regex: new RegExp(`^${safeCategory}$`, 'i') } },
-                    { $setOnInsert: { user: req.user.id, name: categoryLower, type: type === 'income' ? 'income' : 'expense' } },
-                    { upsert: true, new: true }
-                );
+                let categoryDoc;
+                try {
+                    categoryDoc = await Category.findOneAndUpdate(
+                        { user: req.user.id, name: categoryLower },
+                        { $setOnInsert: { user: req.user.id, name: categoryLower, type: type === 'income' ? 'income' : 'expense' } },
+                        { upsert: true, new: true }
+                    );
+                } catch (e) {
+                    if (e.code === 11000) {
+                        // Category already exists (race or stale index) — reuse it
+                        categoryDoc = await Category.findOne({ user: req.user.id, name: categoryLower });
+                    } else {
+                        throw e;
+                    }
+                }
 
                 let transactionTime = null;
                 for (const fmt of TIME_FORMATS_IMPORT) {
