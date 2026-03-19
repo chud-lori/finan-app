@@ -94,9 +94,40 @@ function DeleteModal({ username, onCancel, onConfirmed }) {
           </svg>
         </div>
         <h3 className="text-base font-bold text-gray-900 text-center">Delete account</h3>
-        <p className="text-xs text-gray-500 text-center mt-1 mb-4">
-          Permanently deletes your account and all transactions. Cannot be undone.
+        <p className="text-xs text-gray-500 text-center mt-1">
+          This action is permanent and cannot be undone.
         </p>
+
+        {/* What gets deleted */}
+        <div className="mt-3 mb-3 rounded-xl bg-red-50 border border-red-200 p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-red-700 mb-1">The following will be permanently deleted:</p>
+          {[
+            'Your account and login credentials',
+            'All transactions (income & expense)',
+            'All custom categories',
+            'All preferences and settings',
+          ].map(item => (
+            <div key={item} className="flex items-start gap-1.5">
+              <svg className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span className="text-xs text-red-700">{item}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Export suggestion */}
+        <div className="mb-3 rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-start gap-2">
+          <svg className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01M10.293 4.293a1 1 0 011.414 0L21 14.586A2 2 0 0119.586 17H4.414A2 2 0 013 14.586L10.293 4.293z" />
+          </svg>
+          <p className="text-xs text-amber-800">
+            <span className="font-semibold">Export your data first.</span>{' '}
+            Use the <span className="font-medium">Export Data</span> section above to download a CSV backup of all your transactions before deleting.
+          </p>
+        </div>
+
         <p className="text-xs text-gray-700 mb-1.5">
           Type <span className="font-semibold">{username}</span> to confirm:
         </p>
