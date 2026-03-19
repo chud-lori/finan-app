@@ -35,6 +35,7 @@ const addTransaction = async (req, res, next) => {
         // Income transactions use a fixed 'income' category — no DB lookup needed
         // Expense transactions must reference an existing category
         const nameLower = (transactionDTO.category || 'income').trim().toLowerCase();
+        let resolvedCategory = nameLower;
         if (transactionDTO.type === 'expense') {
             const categoryExists = await Category.findOne({
                 name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') }
@@ -42,6 +43,7 @@ const addTransaction = async (req, res, next) => {
             if (!categoryExists) {
                 return res.status(400).json(BaseResponseDTO.error('Invalid category'));
             }
+            resolvedCategory = categoryExists.name;
         }
 
         // Validate currency
@@ -68,7 +70,7 @@ const addTransaction = async (req, res, next) => {
             user: user.id,
             description: transactionDTO.description,
             amount: transactionDTO.amount,
-            category: categoryExists.name,
+            category: resolvedCategory,
             type: transactionDTO.type,
             currency: processedCurrency,
             time: transactionTime,
@@ -262,7 +264,8 @@ const getExpense = async (req, res, next) => {
         }).exec();
 
         const sum = expenses.reduce((total, curVal) => total + curVal.amount, 0);
-        res.status(200).json(BaseResponseDTO.success('Total expense retrieved', { totalExpense: sum }));
+        const responseDTO = new GetTransactionsResponseDTO(expenses, null);
+        res.status(200).json(BaseResponseDTO.success('Total expense retrieved', { totalExpense: sum, transactions: responseDTO.transactions }));
     } catch (error) {
         logger.error(`Get expense error: ${error.message}`);
         res.status(500).json(BaseResponseDTO.error('Failed to get expense', error.message));
