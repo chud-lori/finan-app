@@ -107,10 +107,10 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Fetch expense categories only (income has no category picker)
+  // Fetch all categories whenever a type is selected
   useEffect(() => {
-    if (form.type !== 'expense') return;
-    getCategories('expense')
+    if (!form.type) return;
+    getCategories()
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
   }, [form.type]);
@@ -126,7 +126,7 @@ export default function AddPage() {
       const timeValue = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
       const payload = {
         description: form.description,
-        category:    form.type === 'income' ? 'income' : form.category.trim().toLowerCase(),
+        category:    form.category.trim().toLowerCase(),
         amount:      Number(form.amount.replace(/[^0-9]/g, '')),
         type:        form.type,
         time:        timeValue,
@@ -218,8 +218,8 @@ export default function AddPage() {
                   <input type="hidden" name="type" value={form.type} required />
                 </Field>
 
-                {/* Category combobox — expense only */}
-                {form.type === 'expense' && (
+                {/* Category combobox — shown for both income and expense */}
+                {form.type && (
                   <Field label="Category">
                     <CategoryCombobox
                       value={form.category}
@@ -228,7 +228,7 @@ export default function AddPage() {
                       disabled={false}
                     />
                     <p className="text-xs text-gray-400 mt-1">
-                      Showing expense categories · Type to search or create new
+                      Type to search or create a new category
                     </p>
                   </Field>
                 )}
@@ -243,7 +243,7 @@ export default function AddPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || success || !form.type || (form.type === 'expense' && !form.category.trim())}
+                  disabled={loading || success || !form.type || !form.category.trim()}
                   className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
