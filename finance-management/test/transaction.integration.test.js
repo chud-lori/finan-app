@@ -27,7 +27,7 @@ describe('Transaction Integration Tests', () => {
             description: 'Test transaction',
             amount: 100000,
             category: 'Food & Dining',
-            type: 'outcome',
+            type: 'expense',
             time: '1/15/2025 10:30:00',
             transaction_timezone: 'Asia/Jakarta',
             currency: 'IDR'
@@ -71,7 +71,7 @@ describe('Transaction Integration Tests', () => {
             expect(res.body.data.transaction).to.have.property('type', testTransaction.type);
         });
 
-        it('should update balance for outcome transaction', async () => {
+        it('should update balance for expense transaction', async () => {
             const initialBalance = await Balance.findOne({ user: userId });
             const initialAmount = initialBalance.amount;
 
@@ -143,8 +143,8 @@ describe('Transaction Integration Tests', () => {
         beforeEach(async () => {
             // Create some test transactions
             await Transaction.create([
-                { user: userId, description: 'Food', amount: 50000, category: 'Food & Dining', type: 'outcome', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
-                { user: userId, description: 'Transport', amount: 25000, category: 'Transportation', type: 'outcome', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
+                { user: userId, description: 'Food', amount: 50000, category: 'Food & Dining', type: 'expense', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
+                { user: userId, description: 'Transport', amount: 25000, category: 'Transportation', type: 'expense', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
                 { user: userId, description: 'Salary', amount: 1000000, category: 'Income', type: 'income', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' }
             ]);
         });
@@ -227,7 +227,7 @@ describe('Transaction Integration Tests', () => {
         beforeEach(async () => {
             // Create test transactions
             await Transaction.create([
-                { user: userId, description: 'Food', amount: 50000, category: 'Food & Dining', type: 'outcome', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
+                { user: userId, description: 'Food', amount: 50000, category: 'Food & Dining', type: 'expense', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
                 { user: userId, description: 'Salary', amount: 1000000, category: 'Income', type: 'income', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' }
             ]);
         });
@@ -244,15 +244,15 @@ describe('Transaction Integration Tests', () => {
             expect(res.body.data.transactions).to.be.an('array');
         });
 
-        it('should return only outcome transactions', async () => {
+        it('should return only expense transactions', async () => {
             const res = await chai.request(server)
-                .get('/api/transaction/outcome')
+                .get('/api/transaction/expense')
                 .set('Authorization', `Bearer ${authToken}`);
 
             expect(res).to.have.status(200);
             expect(res.body.data.transactions).to.be.an('array');
             res.body.data.transactions.forEach(transaction => {
-                expect(transaction.type).to.equal('outcome');
+                expect(transaction.type).to.equal('expense');
             });
         });
 
@@ -294,7 +294,7 @@ describe('Transaction Integration Tests', () => {
                 description: 'Test transaction',
                 amount: 100000,
                 category: 'Food & Dining',
-                type: 'outcome',
+                type: 'expense',
                 currency: 'IDR',
                 time: new Date(),
                 transaction_timezone: 'Asia/Jakarta'
@@ -313,7 +313,7 @@ describe('Transaction Integration Tests', () => {
             expect(res.body.data).to.have.property('description', 'Test transaction');
         });
 
-        it('should update balance when deleting outcome transaction', async () => {
+        it('should update balance when deleting expense transaction', async () => {
             const initialBalance = await Balance.findOne({ user: userId });
             const initialAmount = initialBalance.amount;
 
@@ -337,7 +337,7 @@ describe('Transaction Integration Tests', () => {
 
     describe('GET /api/transaction/recommendation/{monthly}/{spend}', () => {
         beforeEach(async () => {
-            // Create some recent outcome transactions
+            // Create some recent expense transactions
             const weekAgo = new Date();
             weekAgo.setDate(weekAgo.getDate() - 7);
 
@@ -346,7 +346,7 @@ describe('Transaction Integration Tests', () => {
                 description: 'Recent expense',
                 amount: 200000,
                 category: 'Food & Dining',
-                type: 'outcome',
+                type: 'expense',
                 currency: 'IDR',
                 time: weekAgo,
                 transaction_timezone: 'Asia/Jakarta'

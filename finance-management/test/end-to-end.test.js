@@ -73,13 +73,13 @@ describe('End-to-End Integration Tests', () => {
             expect(incomeRes).to.have.status(201);
             expect(incomeRes.body.data.balance.amount).to.equal(5000000);
 
-            // Step 5: Create outcome transactions
-            const outcomeTransactions = [
+            // Step 5: Create expense transactions
+            const expenseTransactions = [
                 {
                     description: 'Grocery shopping',
                     amount: 250000,
                     category: 'Food',
-                    type: 'outcome',
+                    type: 'expense',
                     time: '1/15/2025 10:30:00',
                     transaction_timezone: 'Asia/Jakarta',
                     currency: 'IDR'
@@ -88,14 +88,14 @@ describe('End-to-End Integration Tests', () => {
                     description: 'Gas',
                     amount: 100000,
                     category: 'Transport',
-                    type: 'outcome',
+                    type: 'expense',
                     time: '1/15/2025 11:00:00',
                     transaction_timezone: 'Asia/Jakarta',
                     currency: 'IDR'
                 }
             ];
 
-            for (const transaction of outcomeTransactions) {
+            for (const transaction of expenseTransactions) {
                 const res = await chai.request(server)
                     .post('/api/transaction')
                     .set('Authorization', `Bearer ${authToken}`)
@@ -118,12 +118,12 @@ describe('End-to-End Integration Tests', () => {
             expect(transactionsRes.body.data.balance.amount).to.equal(4650000);
 
             // Step 8: Get expense summary
-            const outcomesRes = await chai.request(server)
+            const expenseRes = await chai.request(server)
                 .get('/api/transaction/expense')
                 .set('Authorization', `Bearer ${authToken}`);
 
-            expect(outcomesRes).to.have.status(200);
-            expect(outcomesRes.body.data.totalExpense).to.equal(350000);
+            expect(expenseRes).to.have.status(200);
+            expect(expenseRes.body.data.totalExpense).to.equal(350000);
 
             // Step 9: Create a financial goal
             const goal = {
@@ -158,7 +158,7 @@ describe('End-to-End Integration Tests', () => {
             expect(recommendationRes.body.data).to.have.property('resultRecommendation');
 
             // Step 12: Delete a transaction
-            const transactionToDelete = transactionsRes.body.data.transactions.find(t => t.type === 'outcome');
+            const transactionToDelete = transactionsRes.body.data.transactions.find(t => t.type === 'expense');
             const deleteRes = await chai.request(server)
                 .delete(`/api/transaction/${transactionToDelete.id}`)
                 .set('Authorization', `Bearer ${authToken}`);
@@ -224,7 +224,7 @@ describe('End-to-End Integration Tests', () => {
                 description: 'User 1 transaction',
                 amount: 100000,
                 category: 'Food & Dining',
-                type: 'outcome',
+                type: 'expense',
                 time: '1/15/2025 10:00:00',
                 transaction_timezone: 'Asia/Jakarta',
                 currency: 'IDR'
@@ -242,7 +242,7 @@ describe('End-to-End Integration Tests', () => {
                 description: 'User 2 transaction',
                 amount: 200000,
                 category: 'Food & Dining',
-                type: 'outcome',
+                type: 'expense',
                 time: '1/15/2025 11:00:00',
                 transaction_timezone: 'Asia/Jakarta',
                 currency: 'IDR'
@@ -299,7 +299,7 @@ describe('End-to-End Integration Tests', () => {
                 description: 'Invalid transaction',
                 amount: 100000,
                 category: 'Non-existent Category',
-                type: 'outcome',
+                type: 'expense',
                 time: '1/15/2025 10:00:00',
                 transaction_timezone: 'Asia/Jakarta',
                 currency: 'IDR'
