@@ -1,11 +1,12 @@
 const router = require('express').Router();
 const authenticateJWT = require('../middleware/authJWT');
+const limiter = require('../middleware/rateLimit');
 // const { transactionValidatorRules, validate } = require('../helpers/validator');
 const Goal = require('../models/goal.model');
 const User = require('../models/user.model');
-const { 
-    addGoal, 
-    getGoalDetail, 
+const {
+    addGoal,
+    getGoalDetail,
     getAllGoals
  } = require('../controllers/goal');
 
@@ -76,7 +77,7 @@ const {
  *       500:
  *         description: Server error
  */
-router.post('/add', authenticateJWT, addGoal);
+router.post('/add', authenticateJWT, limiter.byUser(20), addGoal);
 /**
  * @openapi
  * /api/goal/goals:
@@ -124,7 +125,7 @@ router.post('/add', authenticateJWT, addGoal);
  *       500:
  *         description: Server error
  */
-router.get('/goals', authenticateJWT, getAllGoals);
+router.get('/goals', authenticateJWT, limiter.byUser(60), getAllGoals);
 /**
  * @openapi
  * /api/goal/goal/{goal}:
@@ -201,6 +202,6 @@ router.get('/goals', authenticateJWT, getAllGoals);
  *       500:
  *         description: Server error
  */
-router.get('/goal/:goal', authenticateJWT, getGoalDetail);
+router.get('/goal/:goal', authenticateJWT, limiter.byUser(60), getGoalDetail);
 
 module.exports = router;
