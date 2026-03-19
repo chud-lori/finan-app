@@ -154,7 +154,8 @@ const getUserTransaction = async (req, res, next) => {
         }
 
         // Monthly totals use only the month filter (not search/category) so stat cards reflect the whole month
-        const monthFilter = { user: req.user.id };
+        // aggregate() does not auto-cast string IDs to ObjectId — must cast explicitly
+        const monthFilter = { user: Transaction.base.Types.ObjectId.createFromHexString(req.user.id) };
         if (month) monthFilter.time = filter.time;
 
         const [total, transactions, balance, monthTotals] = await Promise.all([
