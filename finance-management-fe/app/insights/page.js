@@ -222,9 +222,9 @@ function ExplainCard({ data }) {
         ))}
       </div>
 
-      <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between">
-        <p className="text-xs text-gray-400">Total this month</p>
-        <p className="text-sm font-bold text-gray-700">{formatIDR(data.totalOutcome)}</p>
+      <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+        <p className="text-xs text-gray-400 dark:text-gray-500">Total this month</p>
+        <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{formatIDR(data.totalOutcome)}</p>
       </div>
     </div>
   );
@@ -261,7 +261,7 @@ function AnomalyList({ data }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-50 overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
       {data.anomalies.map((a) => (
         <div key={String(a.id)} className="p-4 hover:bg-gray-50 transition-colors">
           <div className="flex items-start justify-between gap-2">

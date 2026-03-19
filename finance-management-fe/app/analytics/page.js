@@ -88,7 +88,14 @@ function DeltaBadge({ delta }) {
       up ? 'text-rose-600' : 'text-emerald-600'
     }`}>
       {up ? '↑' : '↓'}{Math.abs(delta)}%
-      {spike && <span title="Significant change" className="ml-0.5 text-amber-500">⚠</span>}
+      {spike && (
+        <Tooltip
+          text={`Large ${up ? 'increase' : 'decrease'} — ${Math.abs(delta)}% change vs reference period.`}
+          trigger={<span className="text-amber-500 cursor-help">⚠</span>}
+          align="left"
+          fixed
+        />
+      )}
     </span>
   );
 }
@@ -163,21 +170,21 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                   <th className="py-2 text-right font-medium">
                     <span className="inline-flex items-center gap-1 justify-end">
                       Avg / Mo.
-                      <Tooltip text="Average monthly spend in this category, counted only across months where you had activity." position="top" align="right" />
+                      <Tooltip text="Average monthly spend in this category, counted only across months where you had activity." position="top" align="right" fixed />
                     </span>
                   </th>
                 )}
                 {showAvg  && <th className="py-2 text-right font-medium hidden sm:table-cell">
                   <span className="inline-flex items-center gap-1 justify-end">
                     Months
-                    <Tooltip text="Number of months in this year where you had at least one transaction in this category." position="top" align="right" />
+                    <Tooltip text="Number of months in this year where you had at least one transaction in this category." position="top" align="right" fixed />
                   </span>
                 </th>}
                 {!showAvg && (
                   <th className="py-2 text-right font-medium">
                     <span className="inline-flex items-center gap-1 justify-end">
                       Txns
-                      <Tooltip text="Number of individual transactions in this category during the selected period." position="top" align="right" />
+                      <Tooltip text="Number of individual transactions in this category during the selected period." position="top" align="right" fixed />
                     </span>
                   </th>
                 )}
@@ -185,14 +192,14 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                   <th className="py-2 text-right font-medium">
                     <span className="inline-flex items-center gap-1 justify-end">
                       vs {compLabel}
-                      <Tooltip text={compareMode === 'last_month' ? 'Change vs the previous month. Red = spending more, green = spending less.' : 'Change vs your average monthly spend this year.'} position="top" align="right" />
+                      <Tooltip text={compareMode === 'last_month' ? 'Change vs the previous month. Red = spending more, green = spending less.' : 'Change vs your average monthly spend this year.'} position="top" align="right" fixed />
                     </span>
                   </th>
                 )}
                 <th className="py-2 text-right font-medium">
                   <span className="inline-flex items-center gap-1 justify-end">
                     Share
-                    <Tooltip text="What percentage of your total spending this category represents." position="top" align="right" />
+                    <Tooltip text="What percentage of your total spending this category represents." position="top" align="right" fixed />
                   </span>
                 </th>
               </tr>
@@ -208,7 +215,7 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                         <button
                           onClick={() => onCategoryClick?.(c.category)}
-                          className="font-medium text-gray-700 capitalize hover:text-teal-600 hover:underline decoration-dotted transition-colors text-left"
+                          className="font-medium text-gray-700 dark:text-gray-200 capitalize hover:text-teal-600 dark:hover:text-teal-400 hover:underline decoration-dotted transition-colors text-left"
                           title="View transactions in this category"
                         >
                           {c.category}
