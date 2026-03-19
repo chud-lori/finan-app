@@ -4,11 +4,11 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import DateTimePicker from '@/components/DateTimePicker';
-import { addTransaction, getCategories } from '@/lib/api';
+import { addTransaction, getCategories, getCategorySuggestions } from '@/lib/api';
 import { toTitleCase } from '@/lib/format';
 
 // ─── Category picker ─────────────────────────────────────────────────────────
-function CategoryCombobox({ value, onChange, categories, disabled }) {
+function CategoryCombobox({ value, onChange, categories, suggestions = [], disabled }) {
   const [query, setQuery] = useState('');
 
   // Sync display when value is reset externally (type switch)
@@ -21,6 +21,11 @@ function CategoryCombobox({ value, onChange, categories, disabled }) {
   const exactMatch = categories.some(c => c.toLowerCase() === trimmed);
   const showCreate = trimmed && !exactMatch;
 
+  // Suggestions: only show when no search query and there are suggestions
+  const visibleSuggestions = !query && suggestions.length > 0
+    ? suggestions.filter(s => s !== value)   // don't duplicate the already-selected one
+    : [];
+
   const select = (cat) => {
     onChange(cat.toLowerCase());
     setQuery('');
@@ -28,6 +33,25 @@ function CategoryCombobox({ value, onChange, categories, disabled }) {
 
   return (
     <div>
+      {/* Suggested chips — shown above the list when not searching */}
+      {!disabled && visibleSuggestions.length > 0 && (
+        <div className="mb-2">
+          <p className="text-xs text-gray-400 mb-1.5">✨ Suggested for now</p>
+          <div className="flex flex-wrap gap-1.5">
+            {visibleSuggestions.map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => select(s)}
+                className="px-3 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors"
+              >
+                {toTitleCase(s)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Search filter */}
       <input
         type="text"
@@ -61,7 +85,12 @@ function CategoryCombobox({ value, onChange, categories, disabled }) {
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                {toTitleCase(c)}
+                <span className="flex items-center gap-2">
+                  {suggestions.includes(c) && !query && (
+                    <span className="text-xs text-indigo-300" title="Suggested">✨</span>
+                  )}
+                  {toTitleCase(c)}
+                </span>
                 {value === c.toLowerCase() && <span className="text-indigo-400 text-xs">✓</span>}
               </li>
             ))}
@@ -89,7 +118,8 @@ function CategoryCombobox({ value, onChange, categories, disabled }) {
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function AddPage() {
   const router = useRouter();
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories]   = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [tz] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [form, setForm] = useState({
     description: '',
@@ -103,11 +133,14 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Fetch all categories whenever a type is selected
+  // Fetch categories + suggestions whenever a type is selected
   useEffect(() => {
     if (!form.type) return;
     getCategories()
       .then(res => setCategories(res.data?.categories || []))
+      .catch(() => {});
+    getCategorySuggestions()
+      .then(res => setSuggestions(res.data?.suggestions || []))
       .catch(() => {});
   }, [form.type]);
 
@@ -221,11 +254,9 @@ export default function AddPage() {
                       value={form.category}
                       onChange={(val) => setForm(f => ({ ...f, category: val }))}
                       categories={categories}
+                      suggestions={suggestions}
                       disabled={false}
                     />
-                    <p className="text-xs text-gray-400 mt-1">
-                      Type to search or create a new category
-                    </p>
                   </Field>
                 )}
 

@@ -408,6 +408,54 @@ const getCategory = async (req, res, next) => {
 }
 
 
+const getSuggestedCategories = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        // Client sends its local hour (0-23) so we score against the user's actual time of day
+        const hour = Math.min(23, Math.max(0, parseInt(req.query.hour) || new Date().getHours()));
+
+        // Map hour → named bucket
+        const bucket =
+            hour >= 5  && hour < 11 ? 'morning'   :
+            hour >= 11 && hour < 16 ? 'afternoon'  :
+            hour >= 16 && hour < 21 ? 'evening'    : 'night';
+
+        // Aggregate all user transactions grouped by category.
+        // Score = overall frequency  +  2× bonus when the transaction's hour bucket matches now.
+        const agg = await Transaction.aggregate([
+            { $match: { user: Transaction.base.Types.ObjectId.createFromHexString(userId) } },
+            { $addFields: {
+                txHour: { $hour: { date: '$time', timezone: 'Asia/Jakarta' } }
+            }},
+            { $addFields: {
+                txBucket: { $switch: {
+                    branches: [
+                        { case: { $and: [{ $gte: ['$txHour', 5]  }, { $lt: ['$txHour', 11] }] }, then: 'morning'   },
+                        { case: { $and: [{ $gte: ['$txHour', 11] }, { $lt: ['$txHour', 16] }] }, then: 'afternoon'  },
+                        { case: { $and: [{ $gte: ['$txHour', 16] }, { $lt: ['$txHour', 21] }] }, then: 'evening'    },
+                    ],
+                    default: 'night'
+                }}
+            }},
+            { $group: {
+                _id: '$category',
+                freq:      { $sum: 1 },
+                timeMatch: { $sum: { $cond: [{ $eq: ['$txBucket', bucket] }, 1, 0] } }
+            }},
+            { $addFields: { score: { $add: ['$freq', { $multiply: ['$timeMatch', 2] }] } } },
+            { $sort: { score: -1 } },
+            { $limit: 3 }
+        ]);
+
+        const suggestions = agg.map(r => r._id);
+        res.status(200).json(BaseResponseDTO.success('Suggested categories', { suggestions, bucket }));
+
+    } catch (error) {
+        logger.error(`Get suggested categories error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to get suggestions', error.message));
+    }
+}
+
 const parseCsvBuffer = (buffer) => {
     return new Promise((resolve, reject) => {
         const rows = [];
@@ -794,6 +842,7 @@ module.exports = {
     getUserTransaction,
     seedCategory,
     getCategory,
+    getSuggestedCategories,
     getByDate,
     getByTimeRange,
     getExpense,

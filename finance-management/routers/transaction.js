@@ -17,6 +17,7 @@ const {
     getAnomalies,
     getExplainability,
     getTimeToZero,
+    getSuggestedCategories,
 } = require('../controllers/transaction');
 
 const upload = multer({
@@ -338,6 +339,7 @@ router.post('/category', authenticateJWT, seedCategory)
  *       500:
  *         description: Server error
  */
+router.get('/category/suggestions', authenticateJWT, getSuggestedCategories);
 router.get(`/category`, authenticateJWT, getCategory);
 
 /**

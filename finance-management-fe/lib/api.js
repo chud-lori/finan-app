@@ -81,6 +81,13 @@ export const getRecommendation = (monthly, spend) =>
     headers: authHeaders(),
   }).then(handleResponse);
 
+export const getCategorySuggestions = () => {
+  const hour = new Date().getHours();
+  return fetch(`${BASE_URL}/api/transaction/category/suggestions?hour=${hour}`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+};
+
 export const getCategories = (type = null) => {
   const q = type ? `?type=${type}` : '';
   return fetch(`${BASE_URL}/api/transaction/category${q}`, {
