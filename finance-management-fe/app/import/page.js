@@ -11,7 +11,7 @@ const CSV_COLUMNS = [
   { col: 'Type', required: true, note: '"income" or "expense"' },
   { col: 'Category', required: true, note: 'Auto-created if not found' },
   { col: 'Timestamp / Date / Time', required: true, note: 'M/D/YYYY H:mm:ss, YYYY-MM-DD HH:mm:ss, or ISO 8601' },
-  { col: 'Timezone', required: false, note: 'IANA timezone, defaults to Asia/Jakarta' },
+  { col: 'Timezone', required: false, note: 'IANA timezone (e.g. Asia/Tokyo). Defaults to your browser timezone if omitted.' },
 ];
 
 // ─── Upload progress overlay ────────────────────────────────────────────────

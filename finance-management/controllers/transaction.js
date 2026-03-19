@@ -1,5 +1,8 @@
 const moment = require('moment-timezone');
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Returns tz if it's a valid IANA timezone, otherwise 'UTC'
+const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 const { Readable } = require('stream');
 const csv = require('csv-parser');
 const Balance = require('../models/balance.model');
@@ -116,12 +119,13 @@ const getUserTransaction = async (req, res, next) => {
         const order    = req.query.order === 'asc' ? 1 : -1;
         const page     = Math.max(1, parseInt(req.query.page)  || 1);
         const limit    = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+        const userTz   = validTz(req.query.tz);
 
         let filter = { user: req.user.id };
 
         if (month) {
-            const startDate = moment.tz(month, 'YYYY-MM', 'Asia/Jakarta').startOf('month').toDate();
-            const endDate   = moment.tz(month, 'YYYY-MM', 'Asia/Jakarta').endOf('month').toDate();
+            const startDate = moment.tz(month, 'YYYY-MM', userTz).startOf('month').toDate();
+            const endDate   = moment.tz(month, 'YYYY-MM', userTz).endOf('month').toDate();
             filter.time = { $gte: startDate, $lte: endDate };
         }
 
@@ -181,14 +185,15 @@ const getUserTransaction = async (req, res, next) => {
 
 const getByDate = async (req, res, next) => {
     try {
-        const date = req.params.date;
+        const date   = req.params.date;
+        const userTz = validTz(req.query.tz);
+
+        const startOfDay = moment.tz(date, 'YYYY-MM-DD', userTz).startOf('day').toDate();
+        const endOfDay   = moment.tz(date, 'YYYY-MM-DD', userTz).endOf('day').toDate();
 
         const transactions = await Transaction.find({
             user: req.user.id,
-            time: {
-                $gte: new Date(new Date(date).setHours(0, 0, 0)),
-                $lt: new Date(new Date(date).setHours(23, 59, 59))
-            }
+            time: { $gte: startOfDay, $lte: endOfDay }
         }).exec();
 
         // Return DTO response
@@ -203,15 +208,16 @@ const getByDate = async (req, res, next) => {
 
 const getByTimeRange = async (req, res, next) => {
     try {
-        const start = req.params.start;
-        const end = req.params.end;
+        const start  = req.params.start;
+        const end    = req.params.end;
+        const userTz = validTz(req.query.tz);
+
+        const startDate = moment.tz(start, userTz).startOf('day').toDate();
+        const endDate   = moment.tz(end,   userTz).endOf('day').toDate();
 
         const transactions = await Transaction.find({
             user: req.user.id,
-            time: {
-                $gte: new Date(new Date(moment.tz(start, 'Asia/Jakarta')).setHours(0, 0, 0)),
-                $lt: new Date(new Date(moment.tz(end, 'Asia/Jakarta')).setHours(23, 59, 59))
-            }
+            time: { $gte: startDate, $lte: endDate }
         }).exec();
 
         // Calculate income and expense totals
@@ -293,7 +299,8 @@ const getRecommendation = async (req, res, next) => {
             return res.status(400).json(BaseResponseDTO.error('Invalid monthly budget'));
         }
 
-        const now = moment.tz('Asia/Jakarta');
+        const userTz = validTz(req.query.tz);
+        const now = moment().tz(userTz);
         const startOfMonth = now.clone().startOf('month').toDate();
         const endOfMonth = now.clone().endOf('month').toDate();
         const daysInMonth = now.daysInMonth();
@@ -425,7 +432,9 @@ const getSuggestedCategories = async (req, res, next) => {
         const agg = await Transaction.aggregate([
             { $match: { user: Transaction.base.Types.ObjectId.createFromHexString(userId) } },
             { $addFields: {
-                txHour: { $hour: { date: '$time', timezone: 'Asia/Jakarta' } }
+                // Extract hour in each transaction's own recorded timezone so past
+                // breakfast / dinner categories match regardless of where they were recorded
+                txHour: { $hour: { date: '$time', timezone: { $ifNull: ['$transaction_timezone', 'UTC'] } } }
             }},
             { $addFields: {
                 txBucket: { $switch: {
@@ -500,7 +509,9 @@ const importCsv = async (req, res, next) => {
         }
 
         const results = { total: rows.length, success: 0, failed: 0, errors: [] };
-        const DEFAULT_TZ = 'Asia/Jakarta';
+        // Fallback timezone: user's current browser timezone (sent with the request),
+        // then UTC. Used when a CSV row has no Timezone column.
+        const fallbackTz = validTz(req.body.userTimezone);
 
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
@@ -512,7 +523,9 @@ const importCsv = async (req, res, next) => {
                 const amountRaw = row['Amount'] || row['amount'] || '0';
                 const typeRaw = (row['Type'] || row['type'] || '').trim().toLowerCase();
                 const timeRaw = (row['Timestamp'] || row['Date'] || row['Time'] || row['time'] || '').trim();
-                const timezone = (row['Timezone'] || row['timezone'] || DEFAULT_TZ).trim();
+                const rowTzRaw = (row['Timezone'] || row['timezone'] || '').trim();
+                // Use per-row timezone if valid, otherwise fall back to user's current timezone
+                const timezone = rowTzRaw ? (validTz(rowTzRaw) || fallbackTz) : fallbackTz;
 
                 if (!description) {
                     results.failed++;
@@ -593,18 +606,19 @@ const importCsv = async (req, res, next) => {
 const getAnalytics = async (req, res) => {
     try {
         const userId = req.user.id;
-        const year  = parseInt(req.query.year)  || new Date().getFullYear();
-        const month = req.query.month ? parseInt(req.query.month) : null; // 1-12, null = yearly view
+        const year   = parseInt(req.query.year)  || new Date().getFullYear();
+        const month  = req.query.month ? parseInt(req.query.month) : null; // 1-12, null = yearly view
+        const userTz = validTz(req.query.tz);
 
-        // Period window
+        // Period window in the user's local timezone
         let periodStart, periodEnd;
         if (month) {
             const pad = String(month).padStart(2, '0');
-            periodStart = moment.tz(`${year}-${pad}-01`, 'YYYY-MM-DD', 'Asia/Jakarta').startOf('month').toDate();
-            periodEnd   = moment.tz(`${year}-${pad}-01`, 'YYYY-MM-DD', 'Asia/Jakarta').endOf('month').toDate();
+            periodStart = moment.tz(`${year}-${pad}-01`, 'YYYY-MM-DD', userTz).startOf('month').toDate();
+            periodEnd   = moment.tz(`${year}-${pad}-01`, 'YYYY-MM-DD', userTz).endOf('month').toDate();
         } else {
-            periodStart = moment.tz(`${year}-01-01`, 'YYYY-MM-DD', 'Asia/Jakarta').startOf('year').toDate();
-            periodEnd   = moment.tz(`${year}-12-31`, 'YYYY-MM-DD', 'Asia/Jakarta').endOf('year').toDate();
+            periodStart = moment.tz(`${year}-01-01`, 'YYYY-MM-DD', userTz).startOf('year').toDate();
+            periodEnd   = moment.tz(`${year}-12-31`, 'YYYY-MM-DD', userTz).endOf('year').toDate();
         }
 
         const [periodTxns, allTxns] = await Promise.all([
@@ -613,11 +627,12 @@ const getAnalytics = async (req, res) => {
         ]);
 
         // Category breakdown scoped to the selected period (expense only)
-        const buildCategories = (txns, scoped) => {
+        // Group months in user's local timezone so Jan in Tokyo stays in Jan
+        const buildCategories = (txns) => {
             const map = {};
             txns.filter(t => t.type === 'expense').forEach(t => {
                 const cat = t.category;
-                const mk  = moment(t.time).tz('Asia/Jakarta').format('YYYY-MM');
+                const mk  = moment(t.time).tz(t.transaction_timezone || userTz).format('YYYY-MM');
                 if (!map[cat]) map[cat] = { category: cat, total: 0, months: new Set(), count: 0 };
                 map[cat].total += t.amount;
                 map[cat].months.add(mk);
@@ -635,11 +650,12 @@ const getAnalytics = async (req, res) => {
         const categories = buildCategories(periodTxns);
 
         // Monthly bars — only for yearly view
+        // Use each transaction's own stored timezone so the bar reflects local time
         let monthly = null;
         if (!month) {
             monthly = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, income: 0, expense: 0 }));
             periodTxns.forEach(t => {
-                const m = moment(t.time).tz('Asia/Jakarta').month(); // 0-indexed
+                const m = moment(t.time).tz(t.transaction_timezone || userTz).month(); // 0-indexed
                 if (t.type === 'income') monthly[m].income += t.amount;
                 else monthly[m].expense += t.amount;
             });
@@ -653,17 +669,17 @@ const getAnalytics = async (req, res) => {
             monthStats = { income: Math.round(income), expense: Math.round(expense) };
         }
 
-        // Yearly all-time summary (for Yearly tab header cards)
+        // Yearly all-time summary — group in each transaction's own recorded timezone
         const yearlyMap = {};
         allTxns.forEach(t => {
-            const y = moment(t.time).tz('Asia/Jakarta').year();
+            const y = moment(t.time).tz(t.transaction_timezone || userTz).year();
             if (!yearlyMap[y]) yearlyMap[y] = { year: y, income: 0, expense: 0 };
             if (t.type === 'income') yearlyMap[y].income += t.amount;
             else yearlyMap[y].expense += t.amount;
         });
         const yearly = Object.values(yearlyMap).sort((a, b) => a.year - b.year);
 
-        const availableYears = [...new Set(allTxns.map(t => moment(t.time).tz('Asia/Jakarta').year()))].sort();
+        const availableYears = [...new Set(allTxns.map(t => moment(t.time).tz(t.transaction_timezone || userTz).year()))].sort();
 
         res.status(200).json(BaseResponseDTO.success('Analytics retrieved', {
             year, month,
@@ -681,7 +697,8 @@ const getAnalytics = async (req, res) => {
 
 const getAnomalies = async (req, res) => {
     try {
-        const now = moment.tz('Asia/Jakarta');
+        const userTz = validTz(req.query.tz);
+        const now = moment().tz(userTz);
         const startOfMonth = now.clone().startOf('month').toDate();
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
 
@@ -741,13 +758,14 @@ const getAnomalies = async (req, res) => {
 
 const getExplainability = async (req, res) => {
     try {
-        const now = moment.tz('Asia/Jakarta');
+        const userTz = validTz(req.query.tz);
+        const now = moment().tz(userTz);
         const monthParam = req.query.month; // optional YYYY-MM
 
         let periodStart, periodEnd;
         if (monthParam) {
-            periodStart = moment.tz(monthParam, 'YYYY-MM', 'Asia/Jakarta').startOf('month').toDate();
-            periodEnd   = moment.tz(monthParam, 'YYYY-MM', 'Asia/Jakarta').endOf('month').toDate();
+            periodStart = moment.tz(monthParam, 'YYYY-MM', userTz).startOf('month').toDate();
+            periodEnd   = moment.tz(monthParam, 'YYYY-MM', userTz).endOf('month').toDate();
         } else {
             periodStart = now.clone().startOf('month').toDate();
             periodEnd   = now.clone().endOf('month').toDate();
@@ -803,7 +821,8 @@ const getTimeToZero = async (req, res) => {
             return res.status(404).json(BaseResponseDTO.error('User balance not found'));
         }
 
-        const now = moment.tz('Asia/Jakarta');
+        const userTz = validTz(req.query.tz);
+        const now = moment().tz(userTz);
         const thirtyDaysAgo = now.clone().subtract(30, 'days').toDate();
 
         const recentExpenses = await Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: thirtyDaysAgo } }).lean();

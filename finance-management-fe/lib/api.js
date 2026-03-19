@@ -5,6 +5,8 @@ const getToken = () => {
   return localStorage.getItem('token');
 };
 
+const browserTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 const authHeaders = () => ({
   Authorization: `Bearer ${getToken()}`,
   'Content-Type': 'application/json',
@@ -52,6 +54,7 @@ export const getTransactions = (params = {}) => {
   if (params.order)    qs.set('order',    params.order);
   if (params.page)     qs.set('page',     params.page);
   if (params.limit)    qs.set('limit',    params.limit);
+  qs.set('tz', browserTz());
   const query = qs.toString() ? `?${qs}` : '';
   return fetch(`${BASE_URL}/api/transaction${query}`, {
     headers: authHeaders(),
@@ -77,7 +80,7 @@ export const getRangeTransactions = (start, end) =>
   }).then(handleResponse);
 
 export const getRecommendation = (monthly, spend) =>
-  fetch(`${BASE_URL}/api/transaction/recommendation/${monthly}/${spend}`, {
+  fetch(`${BASE_URL}/api/transaction/recommendation/${monthly}/${spend}?tz=${encodeURIComponent(browserTz())}`, {
     headers: authHeaders(),
   }).then(handleResponse);
 
@@ -96,8 +99,9 @@ export const getCategories = (type = null) => {
 };
 
 export const getAnalytics = (year, month = null) => {
-  const q = month ? `year=${year}&month=${month}` : `year=${year}`;
-  return fetch(`${BASE_URL}/api/transaction/analytics?${q}`, {
+  const qs = new URLSearchParams({ year, tz: browserTz() });
+  if (month) qs.set('month', month);
+  return fetch(`${BASE_URL}/api/transaction/analytics?${qs}`, {
     headers: authHeaders(),
   }).then(handleResponse);
 };
@@ -109,25 +113,27 @@ export const deleteAccount = () =>
   }).then(handleResponse);
 
 export const getAnomalies = () =>
-  fetch(`${BASE_URL}/api/transaction/anomalies`, {
+  fetch(`${BASE_URL}/api/transaction/anomalies?tz=${encodeURIComponent(browserTz())}`, {
     headers: authHeaders(),
   }).then(handleResponse);
 
 export const getExplainability = (month = null) => {
-  const q = month ? `?month=${month}` : '';
-  return fetch(`${BASE_URL}/api/transaction/explain${q}`, {
+  const qs = new URLSearchParams({ tz: browserTz() });
+  if (month) qs.set('month', month);
+  return fetch(`${BASE_URL}/api/transaction/explain?${qs}`, {
     headers: authHeaders(),
   }).then(handleResponse);
 };
 
 export const getTimeToZero = () =>
-  fetch(`${BASE_URL}/api/transaction/time-to-zero`, {
+  fetch(`${BASE_URL}/api/transaction/time-to-zero?tz=${encodeURIComponent(browserTz())}`, {
     headers: authHeaders(),
   }).then(handleResponse);
 
 export const importCsv = (file) => {
   const form = new FormData();
   form.append('file', file);
+  form.append('userTimezone', browserTz());
   return fetch(`${BASE_URL}/api/transaction/import/csv`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${getToken()}` },
