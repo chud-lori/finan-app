@@ -5,6 +5,7 @@ import AuthGuard from '@/components/AuthGuard';
 import { getTransactions, deleteTransaction } from '@/lib/api';
 import { formatIDR, formatDate, toTitleCase } from '@/lib/format';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
+import Tooltip from '@/components/Tooltip';
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LIMIT = 20;
@@ -191,9 +192,12 @@ export default function DashboardPage() {
           {/* Stats */}
           {loading && !data.transactions.length ? <SkeletonStatCards /> : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <StatCard label="Balance"            value={formatIDR(data.balance?.amount ?? 0)} color="teal"  icon="💰" />
-              <StatCard label="Income this month"  value={formatIDR(income)}                    color="emerald" icon="📈" />
-              <StatCard label="Expense this month" value={formatIDR(expense)}                   color="rose"    icon="📉" />
+              <StatCard label="Balance" value={formatIDR(data.balance?.amount ?? 0)} icon="💰"
+                tip="Your all-time net balance — total income ever received minus total expenses ever recorded. Not limited to this month." />
+              <StatCard label="Income this month"  value={formatIDR(income)}  icon="📈"
+                tip="Total income transactions recorded in the selected month." />
+              <StatCard label="Expense this month" value={formatIDR(expense)} icon="📉"
+                tip="Total expense transactions recorded in the selected month." />
             </div>
           )}
 
@@ -216,7 +220,7 @@ export default function DashboardPage() {
 
             {/* Active category filter badge */}
             {categoryFilter && (
-              <div className="flex items-center gap-2 px-5 py-2 border-b border-gray-100 bg-teal-50/60">
+              <div className="flex items-center gap-2 px-5 py-2 border-b border-gray-100 bg-teal-50">
                 <span className="text-xs text-teal-600 font-medium">Filtered by category:</span>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">
                   {toTitleCase(categoryFilter)}
@@ -230,7 +234,7 @@ export default function DashboardPage() {
             )}
 
             {/* Search + sort toolbar */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50">
               {/* Search */}
               <div className="relative flex-1 max-w-xs">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
@@ -345,11 +349,14 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ label, value, color, icon }) {
+function StatCard({ label, value, icon, tip }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-gray-500">{label}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm text-gray-500">{label}</span>
+          {tip && <Tooltip text={tip} />}
+        </div>
         <span className="text-xl">{icon}</span>
       </div>
       <div className="text-xl font-bold text-gray-900">{value}</div>
