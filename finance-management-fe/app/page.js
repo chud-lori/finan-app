@@ -56,14 +56,14 @@ const STEPS = [
 
 const FOOTER_LINKS = {
   Product: [
-    { label: 'Features',     href: '#features' },
+    { label: 'Features',       href: '#features' },
     { label: 'Planning Tools', href: '#tools' },
-    { label: 'How it works', href: '#how' },
-    { label: 'Dashboard',    href: '/dashboard' },
+    { label: 'How it works',   href: '#how' },
+    { label: 'Dashboard',      href: '/dashboard' },
   ],
   Account: [
-    { label: 'Sign in',         href: '/login' },
-    { label: 'Create account',  href: '/register' },
+    { label: 'Sign in',        href: '/login' },
+    { label: 'Create account', href: '/register' },
   ],
   Tools: [
     { label: 'Can I Afford This?', href: '/register' },
@@ -73,6 +73,12 @@ const FOOTER_LINKS = {
     { label: 'Net Worth',          href: '/register' },
   ],
 };
+
+const ABOUT = [
+  'Finan App is a personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.',
+  'Track every transaction, understand your spending patterns, and plan your future with 10 built-in financial tools including FIRE calculator, debt payoff planner, and Indonesian PPh 21 tax estimator.',
+  'Designed and built by Lori as an open-source project. Free forever.',
+];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function FeatureCard({ icon, title, desc, delay }) {
@@ -106,9 +112,21 @@ function ToolPill({ icon, name, desc, delay }) {
 // ─── Landing footer ───────────────────────────────────────────────────────────
 function LandingFooter() {
   return (
-    <footer className="bg-gray-950 text-gray-400">
-      {/* Main grid */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-16 pb-10">
+    <footer className="bg-gray-950">
+      {/* About strip */}
+      <div className="border-b border-gray-800">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
+          <p className="text-xs font-semibold text-teal-500 uppercase tracking-widest mb-4">About</p>
+          <div className="max-w-3xl space-y-3">
+            {ABOUT.map((p, i) => (
+              <p key={i} className="text-sm text-gray-400 leading-relaxed">{p}</p>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Main link grid */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
 
           {/* Brand column — 2 cols wide on lg */}
@@ -131,7 +149,7 @@ function LandingFooter() {
           {/* Link columns */}
           {Object.entries(FOOTER_LINKS).map(([section, links]) => (
             <div key={section}>
-              <p className="text-white text-sm font-semibold mb-4">{section}</p>
+              <p className="text-gray-200 text-sm font-semibold mb-4">{section}</p>
               <ul className="space-y-2.5">
                 {links.map(({ label, href }) => (
                   <li key={label}>
@@ -154,14 +172,15 @@ function LandingFooter() {
 
       {/* Bottom bar */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <p className="text-xs text-gray-600">
+        <p className="text-xs text-gray-500">
           © {new Date().getFullYear()} Finan App. Personal finance tracker.
         </p>
-        <div className="flex items-center gap-5 text-xs text-gray-600">
-          <span>Built with Next.js + Tailwind</span>
-          <span className="w-1 h-1 rounded-full bg-gray-700" />
-          <Link href="/login"  className="hover:text-teal-400 transition-colors">Sign in</Link>
-          <Link href="/register" className="hover:text-teal-400 transition-colors">Register</Link>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span>Built with Next.js + Tailwind · Built by</span>
+          <a href="https://profile.lori.my.id/" target="_blank" rel="noopener noreferrer"
+            className="text-teal-400 font-semibold hover:text-teal-300 transition-colors">
+            Lori
+          </a>
         </div>
       </div>
     </footer>
@@ -251,9 +270,9 @@ export default function LandingPage() {
                     <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">Mar 2026</span>
                   </div>
                   {[
-                    { desc: 'Gaji bulanan',    cat: 'Salary',     amt: '+Rp 30.000.000', type: 'income'  },
-                    { desc: 'Bayar kos',       cat: 'Rent',       amt: '−Rp 3.500.000',  type: 'expense' },
-                    { desc: 'Makan siang',     cat: 'Food',       amt: '−Rp 85.000',     type: 'expense' },
+                    { desc: 'Freelance Job',    cat: 'Salary',     amt: '+Rp 30.000.000', type: 'income'  },
+                    { desc: 'Apartment rent',       cat: 'Rent',       amt: '−Rp 3.500.000',  type: 'expense' },
+                    { desc: 'Lunch',     cat: 'Food',       amt: '−Rp 85.000',     type: 'expense' },
                     { desc: 'Transfer saving', cat: 'Investment', amt: '−Rp 5.000.000',  type: 'expense' },
                   ].map((r, i) => (
                     <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">

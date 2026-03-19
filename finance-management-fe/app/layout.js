@@ -1,6 +1,5 @@
 import "./globals.css";
 import GoogleProvider from "@/components/GoogleProvider";
-import Footer from "@/components/Footer";
 import { ThemeProvider } from "@/components/ThemeContext";
 
 export const metadata = {
@@ -30,7 +29,6 @@ export default function RootLayout({ children }) {
           <GoogleProvider>
             <div className="flex flex-col min-h-screen">
               {children}
-              <Footer />
             </div>
           </GoogleProvider>
         </ThemeProvider>
