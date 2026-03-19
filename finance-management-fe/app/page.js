@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getTransactions, deleteTransaction, getActiveMonths } from '@/lib/api';
@@ -326,11 +327,22 @@ export default function DashboardPage() {
             {/* Header row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900 shrink-0">Transactions</h2>
-              <MonthPicker
-                value={month}
-                options={monthOptions}
-                onChange={handleMonthChange}
-              />
+              <div className="flex items-center gap-2">
+                <MonthPicker
+                  value={month}
+                  options={monthOptions}
+                  onChange={handleMonthChange}
+                />
+                <Link
+                  href="/add"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors shrink-0"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span className="hidden sm:inline">Add</span>
+                </Link>
+              </div>
             </div>
 
             {/* Active category filter badge */}

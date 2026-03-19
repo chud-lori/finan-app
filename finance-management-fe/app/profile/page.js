@@ -254,8 +254,8 @@ function ImportSuccessModal({ result, onClose }) {
 // ─── Reusable section card ────────────────────────────────────────────────────
 function Card({ title, subtitle, danger = false, children }) {
   return (
-    <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${danger ? 'border-red-200' : 'border-gray-200'}`}>
-      <div className={`px-4 py-3 border-b ${danger ? 'border-red-100' : 'border-gray-100'}`}>
+    <div className={`bg-white rounded-2xl border shadow-sm ${danger ? 'border-red-200' : 'border-gray-200'}`}>
+      <div className={`px-4 py-3 border-b rounded-t-2xl ${danger ? 'border-red-100' : 'border-gray-100'}`}>
         <h2 className={`text-xs font-semibold uppercase tracking-wide ${danger ? 'text-red-500' : 'text-gray-500'}`}>{title}</h2>
         {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
       </div>

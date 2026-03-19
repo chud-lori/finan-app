@@ -11,12 +11,14 @@ export default function MonthCalendarPicker({ value, onChange, placeholder = 'Se
   const currentYear  = now.getFullYear();
   const currentMonth = now.getMonth(); // 0-indexed
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]         = useState(false);
+  const [openUp, setOpenUp]     = useState(false);
   const [viewYear, setViewYear] = useState(() => {
     if (value) return parseInt(value.split('-')[0], 10);
     return currentYear;
   });
-  const ref = useRef(null);
+  const ref     = useRef(null);
+  const btnRef  = useRef(null);
 
   // Parse selected value
   const selYear  = value ? parseInt(value.split('-')[0], 10) : null;
@@ -31,6 +33,16 @@ export default function MonthCalendarPicker({ value, onChange, placeholder = 'Se
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
+
+  const handleOpen = () => {
+    if (!open && value) setViewYear(selYear);
+    if (!open && btnRef.current) {
+      // ~220px panel height — open upward if not enough space below
+      const rect = btnRef.current.getBoundingClientRect();
+      setOpenUp(rect.bottom + 240 > window.innerHeight);
+    }
+    setOpen(v => !v);
+  };
 
   const handleSelect = (monthIdx) => {
     const ym = `${viewYear}-${String(monthIdx + 1).padStart(2, '0')}`;
@@ -49,11 +61,9 @@ export default function MonthCalendarPicker({ value, onChange, placeholder = 'Se
     <div className="relative" ref={ref}>
       {/* Trigger button */}
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => {
-          if (!open && value) setViewYear(selYear);
-          setOpen(v => !v);
-        }}
+        onClick={handleOpen}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-teal-500 ${
           open
             ? 'border-teal-400 bg-teal-50 text-teal-700'
@@ -77,7 +87,9 @@ export default function MonthCalendarPicker({ value, onChange, placeholder = 'Se
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute z-50 mt-1.5 left-0 right-0 bg-white rounded-2xl border border-gray-200 shadow-lg p-3">
+        <div className={`absolute z-50 left-0 right-0 bg-white rounded-2xl border border-gray-200 shadow-lg p-3 ${
+          openUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+        }`}>
           {/* Year navigation */}
           <div className="flex items-center justify-between mb-3 px-1">
             <button

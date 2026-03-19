@@ -7,7 +7,6 @@ import { useTheme } from '@/components/ThemeContext';
 const NAV_LINKS = [
   { href: '/', label: 'Dashboard', icon: '📊' },
   { href: '/analytics', label: 'Analytics', icon: '📈' },
-  { href: '/add', label: 'Add', icon: '➕' },
   { href: '/range', label: 'Range', icon: '📅' },
   { href: '/recommendation', label: 'Budget', icon: '💡' },
   { href: '/insights', label: 'Insights', icon: '🔍' },
@@ -86,6 +85,15 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-2">
           <ThemeToggle />
           <Link
+            href="/add"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+            </svg>
+            Add
+          </Link>
+          <Link
             href="/profile"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               pathname === '/profile'
@@ -132,6 +140,16 @@ export default function Navbar() {
       {mobileOpen && (
         <div className="md:hidden border-t border-gray-100 bg-white px-4 pb-4">
           <nav className="flex flex-col gap-1 pt-2">
+            <Link
+              href="/add"
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors mb-1"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Transaction
+            </Link>
             {NAV_LINKS.map(({ href, label, icon }) => {
               const active = pathname === href;
               return (
