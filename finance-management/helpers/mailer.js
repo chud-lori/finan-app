@@ -3,11 +3,28 @@ const { USER_EMAIL, USER_PASS, SMTP_HOST, SMTP_PORT } = require('../config/keys'
 const logger = require('./logger');
 
 const transporter = nodemailer.createTransport({
-  host:   SMTP_HOST || 'smtp.gmail.com',
-  port:   Number(SMTP_PORT) || 587,
-  secure: false,
-  auth:   { user: USER_EMAIL, pass: USER_PASS },
+  host:       SMTP_HOST || 'smtp.gmail.com',
+  port:       Number(SMTP_PORT) || 587,
+  secure:     false,   // false = STARTTLS on port 587
+  requireTLS: true,    // force STARTTLS — Gmail rejects plain connections
+  auth:       { user: USER_EMAIL, pass: USER_PASS },
 });
+
+// Verify SMTP config on startup and log the result clearly.
+// This makes misconfigured credentials visible immediately in container logs.
+const verifyMailer = () => {
+  if (!USER_EMAIL || !USER_PASS) {
+    logger.warn('SMTP not configured — USER_EMAIL or USER_PASS is missing. Password reset emails will not be sent.');
+    return;
+  }
+  transporter.verify((err) => {
+    if (err) {
+      logger.error(`SMTP connection failed: ${err.message}`);
+    } else {
+      logger.info(`SMTP ready — sending from ${USER_EMAIL}`);
+    }
+  });
+};
 
 const sendPasswordResetEmail = async (to, resetUrl) => {
   const html = `
@@ -43,4 +60,4 @@ const sendPasswordResetEmail = async (to, resetUrl) => {
   }
 };
 
-module.exports = { sendPasswordResetEmail };
+module.exports = { sendPasswordResetEmail, verifyMailer };

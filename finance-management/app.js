@@ -9,6 +9,7 @@ const connectDB = require("./config/db");
 const logMiddleware = require('./middleware/log');
 const {PORT: port, HOST: host, FE_URL} = require("./config/keys");
 const logger = require("./helpers/logger");
+const { verifyMailer } = require('./helpers/mailer');
 // connect database (skip in test environment)
 if (process.env.NODE_ENV !== 'test') {
     connectDB();
@@ -78,6 +79,7 @@ app.listen(port, () => {
     logger.info(`App started on ${baseUrl}`);
     logger.info(`Swagger UI: ${baseUrl}/api-docs`);
     console.log(`Swagger UI: ${baseUrl}/api-docs`);
+    if (process.env.NODE_ENV !== 'test') verifyMailer();
 });
 
 module.exports = app; // for testing
