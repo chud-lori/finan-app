@@ -35,7 +35,7 @@ const addTransaction = async (req, res, next) => {
         // Income transactions use a fixed 'income' category — no DB lookup needed
         // Expense transactions must reference an existing category
         const nameLower = (transactionDTO.category || 'income').trim().toLowerCase();
-        if (transactionDTO.type === 'outcome') {
+        if (transactionDTO.type === 'expense') {
             const categoryExists = await Category.findOne({
                 name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') }
             });
@@ -85,7 +85,7 @@ const addTransaction = async (req, res, next) => {
 
         if (transactionDTO.type === 'income') {
             balance.amount += Number(transactionDTO.amount);
-        } else if (transactionDTO.type === 'outcome') {
+        } else if (transactionDTO.type === 'expense') {
             balance.amount -= Number(transactionDTO.amount);
         }
 
@@ -141,7 +141,7 @@ const getUserTransaction = async (req, res, next) => {
 
         } else {
             // Validate transaction type
-            if (!['income', 'outcome'].includes(req.params.type)) {
+            if (!['income', 'expense'].includes(req.params.type)) {
                 return res.status(404).json(BaseResponseDTO.error('Invalid transaction type'));
             }
 
@@ -200,15 +200,15 @@ const getByTimeRange = async (req, res, next) => {
             }
         }).exec();
 
-        // Calculate income and outcome totals
-        const outcomeTransactions = transactions.filter(t => t.type === 'outcome');
+        // Calculate income and expense totals
+        const expenseTransactions = transactions.filter(t => t.type === 'expense');
         const incomeTransactions = transactions.filter(t => t.type === 'income');
 
-        const outcome = outcomeTransactions.reduce((total, curVal) => total + curVal.amount, 0);
+        const expense = expenseTransactions.reduce((total, curVal) => total + curVal.amount, 0);
         const income = incomeTransactions.reduce((total, curVal) => total + curVal.amount, 0);
 
         // Return DTO response
-        const responseDTO = new TransactionSummaryResponseDTO(income, outcome, transactions);
+        const responseDTO = new TransactionSummaryResponseDTO(income, expense, transactions);
         res.status(200).json(BaseResponseDTO.success('Transaction summary by date range', responseDTO));
 
     } catch (error) {
@@ -236,7 +236,7 @@ const deleteTransaction = async (req, res, next) => {
         // Update balance based on transaction type
         if (deletedTransaction.type === 'income') {
             balance.amount -= Number(deletedTransaction.amount);
-        } else if (deletedTransaction.type === 'outcome') {
+        } else if (deletedTransaction.type === 'expense') {
             balance.amount += Number(deletedTransaction.amount);
         } else {
             return res.status(500).json(BaseResponseDTO.error('Unknown transaction type'));
@@ -256,12 +256,12 @@ const deleteTransaction = async (req, res, next) => {
 
 const getExpense = async (req, res, next) => {
     try {
-        const outcomes = await Transaction.find({
+        const expenses = await Transaction.find({
             user: req.user.id,
-            type: 'outcome'
+            type: 'expense'
         }).exec();
 
-        const sum = outcomes.reduce((total, curVal) => total + curVal.amount, 0);
+        const sum = expenses.reduce((total, curVal) => total + curVal.amount, 0);
         res.status(200).json(BaseResponseDTO.success('Total expense retrieved', { totalExpense: sum }));
     } catch (error) {
         logger.error(`Get expense error: ${error.message}`);
@@ -285,10 +285,10 @@ const getRecommendation = async (req, res, next) => {
         const daysElapsed = Math.max(now.date(), 1);
         const daysRemaining = daysInMonth - daysElapsed;
 
-        // Fetch all outcome transactions this month
+        // Fetch all expense transactions this month
         const transactions = await Transaction.find({
             user: req.user.id,
-            type: 'outcome',
+            type: 'expense',
             time: { $gte: startOfMonth, $lte: endOfMonth }
         }).exec();
 
@@ -465,8 +465,8 @@ const importCsv = async (req, res, next) => {
                     continue;
                 }
 
-                // Treat only 'income' as income; anything else (expense, outcome, debit, etc.) → outcome
-                const type = typeRaw === 'income' ? 'income' : 'outcome';
+                // Treat only 'income' as income; anything else (expense, debit, etc.) → expense
+                const type = typeRaw === 'income' ? 'income' : 'expense';
 
                 const categoryLower = categoryRaw.trim().toLowerCase();
                 const safeCategory = escapeRegex(categoryLower);
@@ -555,10 +555,10 @@ const getAnalytics = async (req, res) => {
             Transaction.find({ user: userId }).lean(),
         ]);
 
-        // Category breakdown scoped to the selected period (outcome only)
+        // Category breakdown scoped to the selected period (expense only)
         const buildCategories = (txns, scoped) => {
             const map = {};
-            txns.filter(t => t.type === 'outcome').forEach(t => {
+            txns.filter(t => t.type === 'expense').forEach(t => {
                 const cat = t.category;
                 const mk  = moment(t.time).tz('Asia/Jakarta').format('YYYY-MM');
                 if (!map[cat]) map[cat] = { category: cat, total: 0, months: new Set(), count: 0 };
@@ -580,11 +580,11 @@ const getAnalytics = async (req, res) => {
         // Monthly bars — only for yearly view
         let monthly = null;
         if (!month) {
-            monthly = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, income: 0, outcome: 0 }));
+            monthly = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, income: 0, expense: 0 }));
             periodTxns.forEach(t => {
                 const m = moment(t.time).tz('Asia/Jakarta').month(); // 0-indexed
                 if (t.type === 'income') monthly[m].income += t.amount;
-                else monthly[m].outcome += t.amount;
+                else monthly[m].expense += t.amount;
             });
         }
 
@@ -592,17 +592,17 @@ const getAnalytics = async (req, res) => {
         let monthStats = null;
         if (month) {
             const income  = periodTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-            const outcome = periodTxns.filter(t => t.type === 'outcome').reduce((s, t) => s + t.amount, 0);
-            monthStats = { income: Math.round(income), outcome: Math.round(outcome) };
+            const expense = periodTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+            monthStats = { income: Math.round(income), expense: Math.round(expense) };
         }
 
         // Yearly all-time summary (for Yearly tab header cards)
         const yearlyMap = {};
         allTxns.forEach(t => {
             const y = moment(t.time).tz('Asia/Jakarta').year();
-            if (!yearlyMap[y]) yearlyMap[y] = { year: y, income: 0, outcome: 0 };
+            if (!yearlyMap[y]) yearlyMap[y] = { year: y, income: 0, expense: 0 };
             if (t.type === 'income') yearlyMap[y].income += t.amount;
-            else yearlyMap[y].outcome += t.amount;
+            else yearlyMap[y].expense += t.amount;
         });
         const yearly = Object.values(yearlyMap).sort((a, b) => a.year - b.year);
 
@@ -611,7 +611,7 @@ const getAnalytics = async (req, res) => {
         res.status(200).json(BaseResponseDTO.success('Analytics retrieved', {
             year, month,
             monthly,    // array[12] when yearly view, null when monthly
-            monthStats, // { income, outcome } when monthly view, null when yearly
+            monthStats, // { income, expense } when monthly view, null when yearly
             yearly,
             categories,
             availableYears,
@@ -629,9 +629,9 @@ const getAnomalies = async (req, res) => {
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
 
         const [currentTxns, historicalTxns, priorCategories] = await Promise.all([
-            Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: startOfMonth } }).lean(),
-            Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: threeMonthsAgo, $lt: startOfMonth } }).lean(),
-            Transaction.distinct('category', { user: req.user.id, type: 'outcome', time: { $lt: startOfMonth } }),
+            Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: startOfMonth } }).lean(),
+            Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: threeMonthsAgo, $lt: startOfMonth } }).lean(),
+            Transaction.distinct('category', { user: req.user.id, type: 'expense', time: { $lt: startOfMonth } }),
         ]);
 
         const priorCategorySet = new Set(priorCategories.map(c => c.toLowerCase()));
@@ -698,11 +698,11 @@ const getExplainability = async (req, res) => {
         const prevStart = moment(periodStart).subtract(1, 'month').toDate();
 
         const [currentTxns, prevTxns] = await Promise.all([
-            Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: periodStart, $lte: periodEnd } }).lean(),
-            Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: prevStart, $lt: periodStart } }).lean(),
+            Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: periodStart, $lte: periodEnd } }).lean(),
+            Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: prevStart, $lt: periodStart } }).lean(),
         ]);
 
-        const totalOutcome = currentTxns.reduce((s, t) => s + t.amount, 0);
+        const totalExpense = currentTxns.reduce((s, t) => s + t.amount, 0);
 
         const catMap = {};
         currentTxns.forEach(t => {
@@ -722,7 +722,7 @@ const getExplainability = async (req, res) => {
             .slice(0, 5)
             .map(([cat, v]) => {
                 const prevTotal = prevCatMap[cat]?.total || 0;
-                const pct       = totalOutcome > 0 ? Math.round((v.total / totalOutcome) * 100) : 0;
+                const pct       = totalOutcome > 0 ? Math.round((v.total / totalExpense) * 100) : 0;
                 const delta     = prevTotal > 0 ? Math.round(((v.total - prevTotal) / prevTotal) * 100) : null;
                 return { category: cat, total: Math.round(v.total), count: v.count, pct, prevTotal: Math.round(prevTotal), delta };
             });
@@ -732,7 +732,7 @@ const getExplainability = async (req, res) => {
             ? `Your spending is mainly driven by: ${top3Names}`
             : 'No spending data for this period';
 
-        res.status(200).json(BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalOutcome), summary, topCategories }));
+        res.status(200).json(BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalExpense), summary, topCategories }));
     } catch (error) {
         logger.error(`Get explainability error: ${error.message}`);
         res.status(500).json(BaseResponseDTO.error('Failed to get explainability', error.message));
@@ -749,8 +749,8 @@ const getTimeToZero = async (req, res) => {
         const now = moment.tz('Asia/Jakarta');
         const thirtyDaysAgo = now.clone().subtract(30, 'days').toDate();
 
-        const recentOutcomes = await Transaction.find({ user: req.user.id, type: 'outcome', time: { $gte: thirtyDaysAgo } }).lean();
-        const totalSpent     = recentOutcomes.reduce((s, t) => s + t.amount, 0);
+        const recentExpenses = await Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: thirtyDaysAgo } }).lean();
+        const totalSpent     = recentExpenses.reduce((s, t) => s + t.amount, 0);
         const dailyBurnRate  = totalSpent / 30;
 
         let daysToZero = null, projectedZeroDate = null, status = 'no_spend';

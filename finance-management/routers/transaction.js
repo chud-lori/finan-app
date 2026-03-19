@@ -40,7 +40,7 @@ const upload = multer({
  *     tags:
  *       - Transaction
  *     summary: Get total expense summary
- *     description: Retrieves the total amount of all outcome transactions for the authenticated user
+ *     description: Retrieves the total amount of all expense transactions for the authenticated user
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -62,7 +62,7 @@ const upload = multer({
  *                   properties:
  *                     totalExpense:
  *                       type: number
- *                       description: Sum of all outcome transactions
+ *                       description: Sum of all expense transactions
  *                       example: 1500000
  *       500:
  *         description: Server error
@@ -84,7 +84,7 @@ router.get('/time-to-zero', authenticateJWT, getTimeToZero);
  *       Upload a CSV file to bulk-import transactions. Expected columns (case-insensitive):
  *       - **Title** or **Description** — transaction description
  *       - **Amount** — numeric or formatted like "Rp1,000,000"
- *       - **Type** — "income" or "outcome"
+ *       - **Type — "income" or "expense"
  *       - **Category** — must match an existing category name
  *       - **Timestamp**, **Date**, or **Time** — date/time in common formats (M/D/YYYY H:mm:ss, YYYY-MM-DD HH:mm:ss, ISO 8601, etc.)
  *       - **Timezone** (optional) — IANA timezone identifier, defaults to Asia/Jakarta
@@ -184,8 +184,8 @@ router.post('/import/csv', authenticateJWT, upload.single('file'), importCsv);
  *                 description: 3-letter ISO 4217 currency code
  *               type:
  *                 type: string
- *                 enum: [income, outcome]
- *                 example: "outcome"
+ *                 enum: [income, expense]
+ *                 example: "expense"
  *                 description: Type of transaction
  *               time:
  *                 type: string
@@ -356,8 +356,8 @@ router.get(`/category`, authenticateJWT, getCategory);
  *         required: false
  *         schema:
  *           type: string
- *           enum: [income, outcome]
- *         description: Optional transaction type filter ('income' or 'outcome'). If omitted, returns all types.
+ *           enum: [income, expense]
+ *         description: Optional transaction type filter ('income' or 'expense'). If omitted, returns all types.
  *       - in: query
  *         name: category
  *         required: false
@@ -407,7 +407,7 @@ router.get(`/category`, authenticateJWT, getCategory);
  *                             description: The 3-letter ISO 4217 currency code for the amount (e.g., IDR).
  *                           type:
  *                             type: string
- *                             enum: [income, outcome]
+ *                             enum: [income, expense]
  *                           time:
  *                             type: string
  *                             format: date-time
@@ -493,7 +493,7 @@ router.get('/date/:date', authenticateJWT, getByDate);
  *     tags:
  *       - Transaction
  *     summary: Get transactions by date range
- *     description: Retrieves transactions within a specific date range with income/outcome summary
+ *     description: Retrieves transactions within a specific date range with income/expense summary
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -536,7 +536,7 @@ router.get('/date/:date', authenticateJWT, getByDate);
  *                       example: 5000000
  *                     outcome:
  *                       type: number
- *                       description: Total outcome amount in the range
+ *                       description: Total expense amount in the range
  *                       example: 2500000
  *                     transactions:
  *                       type: array
@@ -664,7 +664,7 @@ router.delete('/:id', authenticateJWT, deleteTransaction);
  *                   properties:
  *                     outcome:
  *                       type: number
- *                       description: Total outcome amount in the last 7 days
+ *                       description: Total expense amount in the last 7 days
  *                       example: 2000000
  *                     threshold:
  *                       type: number
