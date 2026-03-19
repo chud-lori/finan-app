@@ -161,7 +161,7 @@ function LandingFooter() {
           © {new Date().getFullYear()} Finan App. Personal finance tracker.
         </p>
         <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span>Built with Next.js + Tailwind · Built by</span>
+          <span>Built with Hehe · Built by</span>
           <a href="https://profile.lori.my.id/" target="_blank" rel="noopener noreferrer"
             className="text-teal-400 font-semibold hover:text-teal-300 transition-colors">
             Lori
