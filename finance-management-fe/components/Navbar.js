@@ -136,9 +136,16 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile dropdown */}
+      {/* Backdrop */}
       {mobileOpen && (
-        <div className="md:hidden border-t border-gray-100 bg-white px-4 pb-4">
+        <div
+          className="md:hidden fixed inset-0 bg-black/20 z-20"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Mobile dropdown */}
+      <div className={`md:hidden border-t border-gray-100 bg-white px-4 pb-4 overflow-hidden transition-all duration-250 ease-in-out relative z-30 ${mobileOpen ? 'max-h-[480px] opacity-100' : 'max-h-0 opacity-0 border-t-0'}`}>
           <nav className="flex flex-col gap-1 pt-2">
             <Link
               href="/add"
@@ -187,7 +194,6 @@ export default function Navbar() {
             </button>
           </div>
         </div>
-      )}
     </header>
   );
 }

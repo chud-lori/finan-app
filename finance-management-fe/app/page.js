@@ -74,12 +74,6 @@ const FOOTER_LINKS = {
   ],
 };
 
-const ABOUT = [
-  'Finan App is a personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.',
-  'Track every transaction, understand your spending patterns, and plan your future with 10 built-in financial tools including FIRE calculator, debt payoff planner, and Indonesian PPh 21 tax estimator.',
-  'Designed and built by Lori as an open-source project. Free forever.',
-];
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function FeatureCard({ icon, title, desc, delay }) {
   return (
@@ -113,18 +107,6 @@ function ToolPill({ icon, name, desc, delay }) {
 function LandingFooter() {
   return (
     <footer className="bg-gray-950">
-      {/* About strip */}
-      <div className="border-b border-gray-800">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
-          <p className="text-xs font-semibold text-teal-500 uppercase tracking-widest mb-4">About</p>
-          <div className="max-w-3xl space-y-3">
-            {ABOUT.map((p, i) => (
-              <p key={i} className="text-sm text-gray-400 leading-relaxed">{p}</p>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Main link grid */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
@@ -137,8 +119,11 @@ function LandingFooter() {
               </div>
               <span className="text-white font-bold text-lg tracking-tight">Finan App</span>
             </div>
+            <p className="text-sm leading-relaxed text-gray-400 max-w-xs mb-3">
+              A personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.
+            </p>
             <p className="text-sm leading-relaxed text-gray-400 max-w-xs">
-              A clean, fast personal finance tracker with 10 built-in planning tools. Track every rupiah, understand your spending, and plan your future — for free.
+              10 built-in tools: FIRE calculator, debt payoff, PPh 21 tax estimator, and more. Free forever.
             </p>
             <div className="flex items-center gap-2 mt-5">
               <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
@@ -171,7 +156,7 @@ function LandingFooter() {
       </div>
 
       {/* Bottom bar */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <p className="text-xs text-gray-500">
           © {new Date().getFullYear()} Finan App. Personal finance tracker.
         </p>
@@ -361,6 +346,36 @@ export default function LandingPage() {
                     </div>
                     <h3 className="font-semibold text-gray-900 mb-2">{title}</h3>
                     <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Why Finan App ── */}
+        <section className="py-20 bg-white">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6">
+            <Reveal className="text-center mb-12">
+              <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Why choose us</p>
+              <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">Built for real people</h2>
+              <p className="text-gray-500 max-w-xl mx-auto">No bloat, no subscription, no data selling. Just a fast, honest finance tool.</p>
+            </Reveal>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              {[
+                { icon: '🔒', title: 'Private by design', desc: 'JWT auth with token versioning. No third-party analytics. Your data stays yours.' },
+                { icon: '⚡', title: 'Instant & free', desc: 'No credit card. No freemium limits. Every feature — including all 10 planning tools — is free.' },
+                { icon: '🇮🇩', title: 'Built for Indonesia', desc: 'IDR currency, Indonesian PPh 21 tax brackets, and rupiah-first formatting throughout.' },
+              ].map(({ icon, title, desc }, i) => (
+                <Reveal key={title} delay={`${i * 100}ms`}>
+                  <div className="flex gap-4 p-5 rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-md transition-all duration-200 h-full">
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-xl shrink-0">
+                      {icon}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-1">{title}</h3>
+                      <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
+                    </div>
                   </div>
                 </Reveal>
               ))}
