@@ -19,6 +19,14 @@ const handleResponse = async (res) => {
   }
   const data = await res.json();
   if (!res.ok) {
+    // Session invalidated (password change, logout-all, or tokenVersion mismatch)
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('username');
+        window.location.href = '/login';
+      }
+    }
     throw new Error(data.message || `Request failed: ${res.status}`);
   }
   return data;

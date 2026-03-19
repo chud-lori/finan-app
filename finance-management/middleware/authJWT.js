@@ -18,7 +18,9 @@ const authenticateJWT = async (req, res, next) => {
   if (decoded.tv !== undefined) {
     try {
       const user = await User.findById(decoded.id).select('tokenVersion').lean();
-      if (!user || user.tokenVersion !== decoded.tv) {
+      // Use ?? 0 so users created before tokenVersion was added (field = undefined) still pass
+      const dbVersion = user?.tokenVersion ?? 0;
+      if (!user || dbVersion !== decoded.tv) {
         return res.status(403).json({ message: 'Session expired. Please log in again.' });
       }
     } catch (e) {
