@@ -293,11 +293,13 @@ export default function ProfilePage() {
   const [prefsSaved,  setPrefsSaved]  = useState(false);
   const [prefsError,  setPrefsError]  = useState('');
 
-  const [exportPeriod,  setExportPeriod]  = useState('all');
-  const [exportMonth,   setExportMonth]   = useState('');
-  const [exportYear,    setExportYear]    = useState(String(new Date().getFullYear()));
-  const [exportLoading, setExportLoading] = useState(false);
-  const [exportError,   setExportError]   = useState('');
+  const [exportPeriod,     setExportPeriod]     = useState('all');
+  const [exportMonth,      setExportMonth]      = useState('');
+  const [exportYear,       setExportYear]       = useState(String(new Date().getFullYear()));
+  const [exportRangeStart, setExportRangeStart] = useState('');
+  const [exportRangeEnd,   setExportRangeEnd]   = useState('');
+  const [exportLoading,    setExportLoading]    = useState(false);
+  const [exportError,      setExportError]      = useState('');
 
   const [importFile,    setImportFile]    = useState(null);
   const [importDrag,    setImportDrag]    = useState(false);
@@ -305,6 +307,7 @@ export default function ProfilePage() {
   const [importResult,  setImportResult]  = useState(null);
   const [importError,   setImportError]   = useState('');
   const [showCsvGuide,  setShowCsvGuide]  = useState(false);
+  const [csvPreview,    setCsvPreview]    = useState(null); // { headers, rows }
   const importInputRef = useRef(null);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -350,14 +353,18 @@ export default function ProfilePage() {
       const params = { period: exportPeriod };
       if (exportPeriod === 'monthly' && exportMonth) params.month = exportMonth;
       if (exportPeriod === 'yearly')                  params.year  = exportYear;
+      if (exportPeriod === 'range') { params.start = exportRangeStart; params.end = exportRangeEnd; }
       const res = await exportTransactions(params);
       if (!res.ok) { setExportError(`Export failed (${res.status})`); return; }
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href = url;
+      const rangeFrom = exportRangeStart < exportRangeEnd ? exportRangeStart : exportRangeEnd;
+      const rangeTo   = exportRangeStart < exportRangeEnd ? exportRangeEnd   : exportRangeStart;
       a.download = exportPeriod === 'monthly' ? `transactions-${exportMonth}.csv`
                  : exportPeriod === 'yearly'  ? `transactions-${exportYear}.csv`
+                 : exportPeriod === 'range'   ? `transactions-${rangeFrom}-to-${rangeTo}.csv`
                  : 'transactions-all.csv';
       a.click();
       URL.revokeObjectURL(url);
@@ -368,15 +375,37 @@ export default function ProfilePage() {
     }
   };
 
+  // ── Parse CSV preview (client-side, first 3 data rows) ────────────────────
+  const parseCsvPreview = (text) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 4);
+    if (lines.length === 0) return null;
+    const parseRow = (line) => {
+      const cols = []; let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        if (line[i] === '"') { inQ = !inQ; }
+        else if (line[i] === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+        else { cur += line[i]; }
+      }
+      cols.push(cur.trim());
+      return cols;
+    };
+    const [headerLine, ...dataLines] = lines;
+    return { headers: parseRow(headerLine), rows: dataLines.map(parseRow) };
+  };
+
   // ── Import CSV ────────────────────────────────────────────────────────────
   const handleImportFile = (f) => {
     if (!f) return;
     if (!f.name.endsWith('.csv') && f.type !== 'text/csv') { setImportError('Only CSV files are allowed'); return; }
-    setImportFile(f); setImportResult(null); setImportError('');
+    setImportFile(f); setImportResult(null); setImportError(''); setCsvPreview(null);
+    const reader = new FileReader();
+    reader.onload = (e) => setCsvPreview(parseCsvPreview(e.target.result));
+    reader.readAsText(f);
   };
 
   const clearImportFile = () => {
     setImportFile(null);
+    setCsvPreview(null);
     if (importInputRef.current) importInputRef.current.value = '';
   };
 
@@ -449,7 +478,8 @@ export default function ProfilePage() {
   const initial  = (user.username || user.name || 'U')[0].toUpperCase();
   const exportDisabled = exportLoading
     || (exportPeriod === 'monthly' && !exportMonth)
-    || (exportPeriod === 'yearly'  && !exportYear);
+    || (exportPeriod === 'yearly'  && !exportYear)
+    || (exportPeriod === 'range'   && (!exportRangeStart || !exportRangeEnd));
 
   return (
     <AuthGuard>
@@ -474,7 +504,7 @@ export default function ProfilePage() {
               {initial}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-lg font-bold text-gray-900 truncate">{user.name || user.username || 'My Profile'}</p>
+              <p className="text-lg font-bold text-gray-900 truncate">{toTitleCase(user.name || user.username || 'My Profile')}</p>
               {user.email && <p className="text-xs text-gray-500 truncate">{user.email}</p>}
               {identity.spendingStyle && (
                 <span className={`inline-block mt-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${styleColor(identity.spendingStyle)}`}>
@@ -687,9 +717,10 @@ export default function ProfilePage() {
                 <div className="space-y-3">
                   <Toggle
                     options={[
-                      { val: 'all',     label: 'All time' },
-                      { val: 'yearly',  label: 'Yearly' },
-                      { val: 'monthly', label: 'Monthly' },
+                      { val: 'all',     label: 'All' },
+                      { val: 'yearly',  label: 'Year' },
+                      { val: 'monthly', label: 'Month' },
+                      { val: 'range',   label: 'Range' },
                     ]}
                     value={exportPeriod}
                     onChange={setExportPeriod}
@@ -705,6 +736,26 @@ export default function ProfilePage() {
                       onChange={setExportMonth}
                       placeholder="Pick a month…"
                     />
+                  )}
+                  {exportPeriod === 'range' && (
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+                        <MonthCalendarPicker
+                          value={exportRangeStart}
+                          onChange={setExportRangeStart}
+                          placeholder="Start month…"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+                        <MonthCalendarPicker
+                          value={exportRangeEnd}
+                          onChange={setExportRangeEnd}
+                          placeholder="End month…"
+                        />
+                      </div>
+                    </div>
                   )}
                   {exportError && <p className="text-xs text-red-600">{exportError}</p>}
                   <button onClick={handleExport} disabled={exportDisabled}
@@ -776,6 +827,40 @@ export default function ProfilePage() {
                       )}
                     </div>
                     {importError && <p className="mt-2 text-xs text-red-600">{importError}</p>}
+
+                    {/* CSV preview */}
+                    {csvPreview && !importError && (
+                      <div className="mt-3 rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                          <p className="text-xs font-semibold text-gray-600">Preview — first {csvPreview.rows.length} row{csvPreview.rows.length !== 1 ? 's' : ''}</p>
+                          <button type="button" onClick={clearImportFile}
+                            className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                            Clear
+                          </button>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-gray-50 border-b border-gray-100">
+                                {csvPreview.headers.map((h, i) => (
+                                  <th key={i} className="px-3 py-1.5 text-left font-semibold text-gray-500 whitespace-nowrap">{h || `Col ${i + 1}`}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {csvPreview.rows.map((row, ri) => (
+                                <tr key={ri} className="hover:bg-gray-50">
+                                  {csvPreview.headers.map((_, ci) => (
+                                    <td key={ci} className="px-3 py-1.5 text-gray-700 max-w-[120px] truncate">{row[ci] ?? ''}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
                     <button type="submit" disabled={!importFile || importLoading}
                       className="mt-3 w-full py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">
                       Import

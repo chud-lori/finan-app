@@ -149,7 +149,7 @@ const updatePreferences = async (req, res) => {
 const exportTransactions = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { period, year, month, tz: tzParam } = req.query;
+        const { period, year, month, start, end, tz: tzParam } = req.query;
         const userTz = (tzParam && moment.tz.zone(tzParam)) ? tzParam : 'UTC';
 
         let filter = { user: userId };
@@ -163,6 +163,13 @@ const exportTransactions = async (req, res) => {
             filter.time = {
                 $gte: moment.tz(`${year}-01-01`, 'YYYY-MM-DD', userTz).startOf('year').toDate(),
                 $lte: moment.tz(`${year}-12-31`, 'YYYY-MM-DD', userTz).endOf('year').toDate(),
+            };
+        } else if (period === 'range' && start && end && /^\d{4}-\d{2}$/.test(start) && /^\d{4}-\d{2}$/.test(end)) {
+            const from = start < end ? start : end;
+            const to   = start < end ? end   : start;
+            filter.time = {
+                $gte: moment.tz(from, 'YYYY-MM', userTz).startOf('month').toDate(),
+                $lte: moment.tz(to,   'YYYY-MM', userTz).endOf('month').toDate(),
             };
         }
         // period === 'all' → no time filter
@@ -178,8 +185,11 @@ const exportTransactions = async (req, res) => {
         });
 
         const csv = [header.join(','), ...rows].join('\n');
+        const rangeFrom = start < end ? start : end;
+        const rangeTo   = start < end ? end   : start;
         const filename = period === 'monthly' ? `transactions-${month}.csv`
-            : period === 'yearly' ? `transactions-${year}.csv`
+            : period === 'yearly'  ? `transactions-${year}.csv`
+            : period === 'range'   ? `transactions-${rangeFrom}-to-${rangeTo}.csv`
             : 'transactions-all.csv';
 
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
