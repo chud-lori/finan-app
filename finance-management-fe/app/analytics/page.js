@@ -163,21 +163,21 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                   <th className="py-2 text-right font-medium">
                     <span className="inline-flex items-center gap-1 justify-end">
                       Avg / Mo.
-                      <Tooltip text="Average monthly spend in this category, counted only across months where you had activity." position="top" />
+                      <Tooltip text="Average monthly spend in this category, counted only across months where you had activity." position="top" align="right" />
                     </span>
                   </th>
                 )}
                 {showAvg  && <th className="py-2 text-right font-medium hidden sm:table-cell">
                   <span className="inline-flex items-center gap-1 justify-end">
                     Months
-                    <Tooltip text="Number of months in this year where you had at least one transaction in this category." position="top" />
+                    <Tooltip text="Number of months in this year where you had at least one transaction in this category." position="top" align="right" />
                   </span>
                 </th>}
                 {!showAvg && (
                   <th className="py-2 text-right font-medium">
                     <span className="inline-flex items-center gap-1 justify-end">
                       Txns
-                      <Tooltip text="Number of individual transactions in this category during the selected period." position="top" />
+                      <Tooltip text="Number of individual transactions in this category during the selected period." position="top" align="right" />
                     </span>
                   </th>
                 )}
@@ -185,14 +185,14 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                   <th className="py-2 text-right font-medium">
                     <span className="inline-flex items-center gap-1 justify-end">
                       vs {compLabel}
-                      <Tooltip text={compareMode === 'last_month' ? 'Change vs the previous month. Red = spending more, green = spending less.' : 'Change vs your average monthly spend this year.'} position="top" />
+                      <Tooltip text={compareMode === 'last_month' ? 'Change vs the previous month. Red = spending more, green = spending less.' : 'Change vs your average monthly spend this year.'} position="top" align="right" />
                     </span>
                   </th>
                 )}
                 <th className="py-2 text-right font-medium">
                   <span className="inline-flex items-center gap-1 justify-end">
                     Share
-                    <Tooltip text="What percentage of your total spending this category represents." position="top" />
+                    <Tooltip text="What percentage of your total spending this category represents." position="top" align="right" />
                   </span>
                 </th>
               </tr>

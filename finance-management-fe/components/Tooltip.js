@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 // Renders a small ⓘ icon that shows a tooltip on hover (desktop) or tap (mobile).
 // Usage: <Tooltip text="Explanation here" />
 // Or wrap custom trigger: <Tooltip text="..." trigger={<span>?</span>} />
-export default function Tooltip({ text, trigger, position = 'top' }) {
+// position: 'top' | 'bottom'
+// align:    'center' | 'left' | 'right'
+export default function Tooltip({ text, trigger, position = 'top', align = 'center' }) {
   const [show, setShow] = useState(false);
   const ref = useRef(null);
 
@@ -18,13 +20,23 @@ export default function Tooltip({ text, trigger, position = 'top' }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [show]);
 
-  const isTop    = position !== 'bottom';
-  const bubbleCls = isTop
-    ? 'bottom-full left-1/2 -translate-x-1/2 mb-2'
-    : 'top-full left-1/2 -translate-x-1/2 mt-2';
-  const arrowCls  = isTop
-    ? 'absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900'
-    : 'absolute bottom-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-b-gray-900';
+  const isTop = position !== 'bottom';
+  const gap   = isTop ? 'mb-2' : 'mt-2';
+  const side  = isTop ? 'bottom-full' : 'top-full';
+
+  const bubbleCls =
+    align === 'right'  ? `${side} right-0 ${gap}` :
+    align === 'left'   ? `${side} left-0 ${gap}` :
+                         `${side} left-1/2 -translate-x-1/2 ${gap}`;
+
+  const arrowAlign =
+    align === 'right'  ? 'right-2' :
+    align === 'left'   ? 'left-2' :
+                         'left-1/2 -translate-x-1/2';
+
+  const arrowCls = isTop
+    ? `absolute top-full ${arrowAlign} border-[5px] border-transparent border-t-gray-900`
+    : `absolute bottom-full ${arrowAlign} border-[5px] border-transparent border-b-gray-900`;
 
   return (
     <span ref={ref} className="relative inline-flex items-center">
