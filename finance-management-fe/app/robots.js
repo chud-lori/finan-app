@@ -3,7 +3,7 @@ export default function robots() {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/dashboard', '/add', '/analytics', '/insights', '/reports', '/range', '/import', '/profile', '/settings', '/recommendation', '/auth'],
+      disallow: ['/dashboard', '/add', '/analytics', '/insights', '/reports', '/range', '/import', '/profile', '/settings', '/recommendation', '/auth', '/verify-email'],
     },
     sitemap: 'https://finance.lori.my.id/sitemap.xml',
   };

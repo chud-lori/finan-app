@@ -22,13 +22,16 @@ const handleResponse = async (res) => {
   const data = await res.json();
   if (!res.ok) {
     // Session invalidated (password change, logout-all, or tokenVersion mismatch)
-    if (res.status === 401 || res.status === 403) {
+    // EMAIL_NOT_VERIFIED is a 403 that should NOT trigger auto-redirect/clear
+    if ((res.status === 401 || res.status === 403) && data.code !== 'EMAIL_NOT_VERIFIED') {
       if (typeof window !== 'undefined') {
         try { localStorage.removeItem('token'); localStorage.removeItem('username'); } catch {}
         window.location.href = '/login';
       }
     }
-    throw new Error(data.message || `Request failed: ${res.status}`);
+    const err = new Error(data.message || `Request failed: ${res.status}`);
+    err.code = data.code;
+    throw err;
   }
   return data;
 };
@@ -45,6 +48,16 @@ export const register = (body) =>
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  }).then(handleResponse);
+
+export const verifyEmail = (token) =>
+  fetch(`${BASE_URL}/api/auth/verify-email/${encodeURIComponent(token)}`).then(handleResponse);
+
+export const resendVerification = (email) =>
+  fetch(`${BASE_URL}/api/auth/resend-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
   }).then(handleResponse);
 
 export const login = (identifier, password) =>

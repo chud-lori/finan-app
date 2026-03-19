@@ -3,11 +3,12 @@ const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/user.model');
 const Balance = require('../models/balance.model');
 const PasswordReset = require('../models/passwordReset.model');
+const EmailVerification = require('../models/emailVerification.model');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const {USER_EMAIL:email, SECRET_TOKEN, FE_URL, GOOGLE_CLIENT_ID} = require('../config/keys');
 const logger = require("../helpers/logger");
-const { sendPasswordResetEmail } = require('../helpers/mailer');
+const { sendPasswordResetEmail, sendVerificationEmail } = require('../helpers/mailer');
 const {
     RegisterRequestDTO,
     LoginRequestDTO,
@@ -45,7 +46,8 @@ const registerUser = async (req, res, next) => {
       name: registerDTO.name,
       username: registerDTO.username,
       email: registerDTO.email,
-      password: registerDTO.password
+      password: registerDTO.password,
+      emailVerified: false,
     });
 
     // Hash password and save user
@@ -63,9 +65,23 @@ const registerUser = async (req, res, next) => {
 
     const savedBalance = await newBalance.save();
 
+    // Send verification email (non-blocking — don't fail registration if email fails)
+    try {
+      const verifyToken = crypto.randomBytes(32).toString('hex');
+      await EmailVerification.create({
+        user:      savedUser._id,
+        token:     verifyToken,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      });
+      const verifyUrl = `${FE_URL}/verify-email/${verifyToken}`;
+      await sendVerificationEmail(savedUser.email, verifyUrl);
+    } catch (mailErr) {
+      logger.error(`Failed to send verification email on register: ${mailErr.message}`);
+    }
+
     // Return DTO response
     const responseDTO = new RegisterResponseDTO(savedUser, savedBalance);
-    res.status(201).json(BaseResponseDTO.success('User created successfully', responseDTO));
+    res.status(201).json(BaseResponseDTO.success('User created successfully. Please check your email to verify your account.', responseDTO));
 
   } catch (error) {
     logger.error('Register user error:', error);
@@ -97,6 +113,11 @@ const loginUser = async (req, res, next) => {
     // Block OAuth-only accounts from password login
     if (!user.password) {
       return res.status(400).json(BaseResponseDTO.error("This account was created with Google. Please sign in with Google."));
+    }
+
+    // Block unverified email accounts
+    if (user.emailVerified === false) {
+      return res.status(403).json({ ...BaseResponseDTO.error('Please verify your email before signing in.'), code: 'EMAIL_NOT_VERIFIED' });
     }
 
     // Check password
@@ -338,4 +359,55 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices, forgotPassword, resetPassword };
+const verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!token) return res.status(400).json(BaseResponseDTO.error('Verification token is required'));
+
+    const record = await EmailVerification.findOne({ token, expiresAt: { $gt: new Date() } });
+    if (!record) {
+      return res.status(400).json(BaseResponseDTO.error('Invalid or expired verification link. Please request a new one.'));
+    }
+
+    await User.findByIdAndUpdate(record.user, { emailVerified: true });
+    await EmailVerification.deleteOne({ _id: record._id });
+
+    logger.info(`Email verified for user ${record.user}`);
+    res.status(200).json(BaseResponseDTO.success('Email verified successfully. You can now sign in.'));
+  } catch (err) {
+    logger.error(`Verify email error: ${err.message}`);
+    res.status(500).json(BaseResponseDTO.error('Failed to verify email'));
+  }
+};
+
+const resendVerification = async (req, res) => {
+  // Always return 200 to prevent user enumeration
+  const OK = () => res.status(200).json(BaseResponseDTO.success('If that account exists and is unverified, a new verification email has been sent'));
+  try {
+    const rawEmail = (req.body.email || '').trim().toLowerCase();
+    if (!rawEmail) return res.status(400).json(BaseResponseDTO.error('Email is required'));
+
+    const user = await User.findOne({ email: rawEmail });
+    if (!user || user.emailVerified !== false) return OK();
+
+    // Delete any existing token for this user and create a new one
+    await EmailVerification.deleteMany({ user: user._id });
+
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    await EmailVerification.create({
+      user:      user._id,
+      token:     verifyToken,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const verifyUrl = `${FE_URL}/verify-email/${verifyToken}`;
+    await sendVerificationEmail(user.email, verifyUrl);
+
+    return OK();
+  } catch (err) {
+    logger.error(`Resend verification error: ${err.message}`);
+    return OK();
+  }
+};
+
+module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices, forgotPassword, resetPassword, verifyEmail, resendVerification };

@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { loginValidatorRules, registerValidatorRules, validate } = require('../helpers/validator');
-const { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices, forgotPassword, resetPassword } = require('../controllers/auth');
+const { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices, forgotPassword, resetPassword, verifyEmail, resendVerification } = require('../controllers/auth');
 const authenticateJWT = require('../middleware/authJWT');
 const limiter = require('../middleware/rateLimit');
 
@@ -218,5 +218,7 @@ router.patch('/password', authenticateJWT, limiter.byUser(5), changePassword);
 router.post('/logout-all', authenticateJWT, limiter.byUser(5), logoutAllDevices);
 router.post('/forgot-password', limiter.byIp(5), forgotPassword);
 router.post('/reset-password', limiter.byIp(10), resetPassword);
+router.get('/verify-email/:token', limiter.byIp(20), verifyEmail);
+router.post('/resend-verification', limiter.byIp(5), resendVerification);
 
 module.exports = router;

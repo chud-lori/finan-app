@@ -32,6 +32,7 @@ const UserSchema = new Schema({
     lastActivityAt: { type: Date },
     lastActivityType: { type: String },
     tokenVersion: { type: Number, default: 0 },
+    emailVerified: { type: Boolean, default: true }, // true = backward compat; new password accounts set false explicitly
 }, {
     timestamps: { 
         currentTime: () => {

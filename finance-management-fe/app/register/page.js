@@ -36,6 +36,7 @@ export default function RegisterPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   useEffect(() => {
     if (localStorage.getItem('token')) router.replace('/dashboard');
@@ -51,7 +52,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register({ name: form.name, username: form.username, email: form.email, password: form.password });
-      router.push('/login');
+      setRegistered(true);
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -80,8 +81,28 @@ export default function RegisterPage() {
             <p className="text-gray-500 text-sm mt-1">Start tracking your finances</p>
           </div>
 
+          {/* Success: check inbox */}
+          {registered && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
+              <div className="w-16 h-16 rounded-full bg-teal-50 flex items-center justify-center mx-auto mb-4 text-3xl">
+                📬
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 mb-2">Check your inbox</h2>
+              <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+                We sent a verification link to <strong>{form.email}</strong>.
+                Click it to activate your account — the link expires in 24 hours.
+              </p>
+              <Link
+                href="/login"
+                className="text-sm text-teal-600 font-medium hover:underline"
+              >
+                Back to sign in
+              </Link>
+            </div>
+          )}
+
           {/* Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+          {!registered && <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             {error && (
               <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                 {error}
@@ -194,14 +215,14 @@ export default function RegisterPage() {
                 ) : 'Create account'}
               </button>
             </form>
-          </div>
+          </div>}
 
-          <p className="text-center text-sm text-gray-500 mt-6">
+          {!registered && <p className="text-center text-sm text-gray-500 mt-6">
             Already have an account?{' '}
             <Link href="/login" className="text-teal-600 font-medium hover:underline">
               Sign in
             </Link>
-          </p>
+          </p>}
         </div>
       </div>
     </div>

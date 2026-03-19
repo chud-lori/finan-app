@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { GoogleLogin } from '@react-oauth/google';
-import { login, verifyGoogleToken } from '@/lib/api';
+import { login, verifyGoogleToken, resendVerification } from '@/lib/api';
 import { useTheme } from '@/components/ThemeContext';
 
 function ThemeToggle() {
@@ -37,6 +37,8 @@ function LoginForm() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [resendStatus, setResendStatus] = useState(''); // '' | 'sending' | 'sent'
   const googleBtnRef = useRef(null);
   const [googleBtnWidth, setGoogleBtnWidth] = useState(300);
 
@@ -65,8 +67,21 @@ function LoginForm() {
       router.replace('/dashboard');
     } catch (err) {
       setError(err.message || 'Login failed');
+      if (err.code === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(form.identifier.includes('@') ? form.identifier : '');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResendStatus('sending');
+    try {
+      await resendVerification(unverifiedEmail || form.identifier);
+      setResendStatus('sent');
+    } catch {
+      setResendStatus('sent'); // always show "sent" to avoid enumeration
     }
   };
 
@@ -109,6 +124,22 @@ function LoginForm() {
             {error && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                 {error}
+                {error.includes('verify your email') && (
+                  <div className="mt-2 pt-2 border-t border-red-200">
+                    {resendStatus === 'sent' ? (
+                      <span className="text-xs text-red-600">Verification email sent — check your inbox.</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleResend}
+                        disabled={resendStatus === 'sending'}
+                        className="text-xs font-medium text-red-700 underline hover:no-underline disabled:opacity-60"
+                      >
+                        {resendStatus === 'sending' ? 'Sending…' : 'Resend verification email'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

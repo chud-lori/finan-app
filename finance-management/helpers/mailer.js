@@ -60,4 +60,38 @@ const sendPasswordResetEmail = async (to, resetUrl) => {
   }
 };
 
-module.exports = { sendPasswordResetEmail, verifyMailer };
+const sendVerificationEmail = async (to, verifyUrl) => {
+  const html = `
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px 24px;background:#f9fafb;border-radius:12px">
+      <h2 style="margin:0 0 8px;color:#0f172a;font-size:20px">Verify your email</h2>
+      <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 24px">
+        Thanks for signing up for Finan App! Click the button below to confirm your email address.
+        The link expires in <strong>24 hours</strong>.
+      </p>
+      <a href="${verifyUrl}"
+         style="display:inline-block;background:#0d9488;color:#fff;font-weight:600;font-size:14px;
+                text-decoration:none;padding:12px 28px;border-radius:8px">
+        Verify email
+      </a>
+      <p style="color:#94a3b8;font-size:12px;margin:24px 0 0;line-height:1.5">
+        If you didn't create an account, you can safely ignore this email.
+        <br>This link will expire in 24 hours.
+      </p>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from:    `"Finan App" <${USER_EMAIL}>`,
+      to,
+      subject: 'Verify your Finan App email',
+      html,
+    });
+    logger.info(`Verification email sent to ${to}`);
+  } catch (err) {
+    logger.error(`Failed to send verification email to ${to}: ${err.message}`);
+    throw err;
+  }
+};
+
+module.exports = { sendPasswordResetEmail, sendVerificationEmail, verifyMailer };
