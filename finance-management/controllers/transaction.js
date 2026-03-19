@@ -32,19 +32,17 @@ const addTransaction = async (req, res, next) => {
             return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
         }
 
-        // Income transactions use a fixed 'income' category — no DB lookup needed
-        // Expense transactions must reference an existing category
-        const nameLower = (transactionDTO.category || 'income').trim().toLowerCase();
-        let resolvedCategory = nameLower;
-        if (transactionDTO.type === 'expense') {
-            const categoryExists = await Category.findOne({
-                name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') }
-            });
-            if (!categoryExists) {
-                return res.status(400).json(BaseResponseDTO.error('Invalid category'));
-            }
-            resolvedCategory = categoryExists.name;
+        // Find or create the category for both income and expense
+        const nameLower = (transactionDTO.category || '').trim().toLowerCase();
+        if (!nameLower) {
+            return res.status(400).json(BaseResponseDTO.error('Category is required'));
         }
+        const category = await Category.findOneAndUpdate(
+            { name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') } },
+            { $setOnInsert: { name: nameLower } },
+            { upsert: true, new: true }
+        );
+        const resolvedCategory = category.name;
 
         // Validate currency
         const processedCurrency = transactionDTO.currency.toLowerCase();

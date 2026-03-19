@@ -294,11 +294,11 @@ describe('End-to-End Integration Tests', () => {
 
             authToken = loginRes.body.data.token;
 
-            // Try to create transaction with invalid category
+            // Try to create transaction with missing category
             const invalidTransaction = {
                 description: 'Invalid transaction',
                 amount: 100000,
-                category: 'Non-existent Category',
+                category: '',
                 type: 'expense',
                 time: '1/15/2025 10:00:00',
                 transaction_timezone: 'Asia/Jakarta',
@@ -310,8 +310,7 @@ describe('End-to-End Integration Tests', () => {
                 .set('Authorization', `Bearer ${authToken}`)
                 .send(invalidTransaction);
 
-            expect(res).to.have.status(400);
-            expect(res.body.message).to.include('Invalid category');
+            expect(res).to.have.status(422);
 
             // Try to delete non-existent transaction
             const deleteRes = await chai.request(server)

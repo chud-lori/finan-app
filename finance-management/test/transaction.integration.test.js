@@ -98,17 +98,16 @@ describe('Transaction Integration Tests', () => {
             expect(res.body.data.balance.amount).to.equal(initialAmount + incomeTransaction.amount);
         });
 
-        it('should return 400 for invalid category', async () => {
-            const invalidTransaction = { ...testTransaction, category: 'Invalid Category' };
+        it('should auto-create a new category if it does not exist', async () => {
+            const newCategoryTransaction = { ...testTransaction, category: 'Brand New Category' };
 
             const res = await chai.request(server)
                 .post('/api/transaction')
                 .set('Authorization', `Bearer ${authToken}`)
-                .send(invalidTransaction);
+                .send(newCategoryTransaction);
 
-            expect(res).to.have.status(400);
-            expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Invalid category');
+            expect(res).to.have.status(201);
+            expect(res.body.data.transaction).to.have.property('category', 'brand new category');
         });
 
         it('should return 400 for validation errors', async () => {

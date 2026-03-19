@@ -23,7 +23,7 @@ class AddTransactionRequestDTO extends BaseRequestDTO {
         if (!this.amount || typeof this.amount !== 'number' || this.amount <= 0) {
             errors.push('Amount is required and must be a positive number');
         }
-        if (this.type !== 'income' && (!this.category || typeof this.category !== 'string')) {
+        if (!this.category || typeof this.category !== 'string') {
             errors.push('Category is required and must be a string');
         }
         if (!this.type || !['income', 'expense'].includes(this.type)) {
