@@ -56,7 +56,9 @@ function CategoryCombobox({ value, onChange, categories }) {
       <button
         type="button"
         onClick={() => open ? setOpen(false) : openDropdown()}
-        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white text-sm hover:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm hover:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition ${
+          value ? 'border-teal-400 bg-teal-50' : 'border-gray-300 bg-white'
+        }`}
       >
         <span className={value ? 'text-gray-900 font-medium capitalize' : 'text-gray-400'}>
           {value ? toTitleCase(value) : 'Select or create a category…'}
@@ -265,14 +267,16 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // Load all categories once on mount
   useEffect(() => {
-    if (!form.type) return;
-    // Reset when type changes
-    setCategories([]);
-    setSuggestions([]);
     getCategories()
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
+  }, []);
+
+  // Refresh suggestions when type changes
+  useEffect(() => {
+    if (!form.type) return;
     getCategorySuggestions(form.type)
       .then(res => setSuggestions(res.data?.suggestions || []))
       .catch(() => {});
@@ -385,36 +389,34 @@ export default function AddPage() {
                     />
                   </Field>
 
-                  {form.type && (
-                    <Field label="Category">
-                      <CategoryCombobox
-                        value={form.category}
-                        onChange={(val) => setForm(f => ({ ...f, category: val }))}
-                        categories={[...new Set([...categories, ...suggestions])]}
-                      />
-                      {suggestions.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-xs text-gray-400 mb-1.5">✨ Suggested</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {suggestions.map(s => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => setForm(f => ({ ...f, category: s }))}
-                                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                                  form.category === s
-                                    ? 'bg-teal-600 text-white border-teal-600'
-                                    : 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
-                                }`}
-                              >
-                                {toTitleCase(s)}
-                              </button>
-                            ))}
-                          </div>
+                  <Field label="Category">
+                    <CategoryCombobox
+                      value={form.category}
+                      onChange={(val) => setForm(f => ({ ...f, category: val }))}
+                      categories={[...new Set([form.category, ...categories, ...suggestions].filter(Boolean))]}
+                    />
+                    {suggestions.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-400 mb-1.5">✨ Suggested</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {suggestions.map(s => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, category: s }))}
+                              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                form.category === s
+                                  ? 'bg-teal-600 text-white border-teal-600'
+                                  : 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                              }`}
+                            >
+                              {toTitleCase(s)}
+                            </button>
+                          ))}
                         </div>
-                      )}
-                    </Field>
-                  )}
+                      </div>
+                    )}
+                  </Field>
 
                   <Field label="Date & Time">
                     <DateTimePicker
