@@ -191,8 +191,8 @@ function ExplainCard({ data }) {
       <div className="space-y-4">
         {data.topCategories.map((c, i) => (
           <div key={c.category}>
-            <div className="flex items-start justify-between mb-1.5 gap-2">
-              <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+            <div className="flex items-start justify-between mb-1.5 gap-3">
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
                 <span className="text-xs font-bold text-gray-300 flex-shrink-0">#{i + 1}</span>
                 <span className="text-sm font-semibold text-gray-800 truncate">{cap(c.category)}</span>
                 {c.count > 0 && (
@@ -203,13 +203,13 @@ function ExplainCard({ data }) {
                     c.delta > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
                   }`}>
                     {c.delta > 0 ? '+' : ''}{c.delta}%
-                    <Tooltip text={`Change vs last month. ${c.delta > 0 ? 'You spent more' : 'You spent less'} on ${cap(c.category)} compared to the previous month.`} align="left" />
+                    <Tooltip text={`Change vs last month. ${c.delta > 0 ? 'You spent more' : 'You spent less'} on ${cap(c.category)} compared to the previous month.`} align="left" fixed />
                   </span>
                 )}
               </div>
-              <div className="text-right flex-shrink-0 tabular-nums">
-                <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{formatIDR(c.total)}</span>
-                <span className="text-xs text-gray-400 ml-1">({c.pct}%)</span>
+              <div className="text-right flex-shrink-0 tabular-nums leading-tight">
+                <p className="text-sm font-bold text-gray-900 whitespace-nowrap">{formatIDR(c.total)}</p>
+                <p className="text-xs text-gray-400">({c.pct}%)</p>
               </div>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
