@@ -10,6 +10,7 @@ const Transaction = require('../models/transaction.model');
 const Category = require('../models/category.model');
 const logger = require("../helpers/logger");
 const cache = require('../helpers/cache');
+const { refreshSnapshot } = require('../helpers/snapshot');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -106,6 +107,8 @@ const addTransaction = async (req, res, next) => {
         const savedTransaction = await newTransaction.save();
 
         cache.invalidateUser(user.id);
+        const txYearMonth = moment(transactionTime).tz(transactionDTO.transaction_timezone).format('YYYY-MM');
+        refreshSnapshot(user.id, txYearMonth, transactionDTO.transaction_timezone); // fire-and-forget
         logger.info(`Add transaction response: ${user.id} success`);
 
         // Return DTO response
@@ -276,6 +279,9 @@ const deleteTransaction = async (req, res, next) => {
 
         await balance.save();
         cache.invalidateUser(req.user.id);
+        const delTxTz = deletedTransaction.transaction_timezone || 'UTC';
+        const delYearMonth = moment(deletedTransaction.time).tz(delTxTz).format('YYYY-MM');
+        refreshSnapshot(req.user.id, delYearMonth, delTxTz); // fire-and-forget
 
         // Return DTO response
         const responseDTO = new DeleteTransactionResponseDTO(deletedTransaction);
@@ -530,6 +536,8 @@ const importCsv = async (req, res, next) => {
         // Fallback timezone: user's current browser timezone (sent with the request),
         // then UTC. Used when a CSV row has no Timezone column.
         const fallbackTz = validTz(req.body.userTimezone);
+        // Track which yearMonths were affected so we can refresh their snapshots
+        const affectedMonths = new Map(); // 'YYYY-MM' -> tz used for that month
 
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
@@ -613,6 +621,8 @@ const importCsv = async (req, res, next) => {
 
                 await newTransaction.save();
                 results.success++;
+                const ym = moment(transactionTime).tz(timezone).format('YYYY-MM');
+                if (!affectedMonths.has(ym)) affectedMonths.set(ym, timezone);
             } catch (rowErr) {
                 results.failed++;
                 results.errors.push(`Row ${rowNum}: ${rowErr.message}`);
@@ -620,7 +630,13 @@ const importCsv = async (req, res, next) => {
         }
 
         await balance.save();
-        if (results.success > 0) cache.invalidateUser(user.id);
+        if (results.success > 0) {
+            cache.invalidateUser(user.id);
+            // Refresh snapshots for every affected month (fire-and-forget)
+            for (const [ym, tz] of affectedMonths) {
+                refreshSnapshot(user.id, ym, tz);
+            }
+        }
 
         logger.info(`Import CSV: user ${user.id} — ${results.success} imported, ${results.failed} failed`);
         res.status(200).json(BaseResponseDTO.success('CSV import completed', results));

@@ -359,29 +359,6 @@ export default function AddPage() {
                     <input type="hidden" name="type" value={form.type} required />
                   </Field>
 
-                  {/* Suggestions — shown immediately after type selection */}
-                  {form.type && suggestions.length > 0 && (
-                    <div>
-                      <p className="text-xs text-gray-400 mb-1.5">✨ Suggested</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {suggestions.map(s => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => setForm(f => ({ ...f, category: s }))}
-                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                              form.category === s
-                                ? 'bg-teal-600 text-white border-teal-600'
-                                : 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
-                            }`}
-                          >
-                            {toTitleCase(s)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Amount — large, prominent */}
                   <Field label="Amount (IDR)">
                     <div className="relative">
@@ -415,6 +392,27 @@ export default function AddPage() {
                         onChange={(val) => setForm(f => ({ ...f, category: val }))}
                         categories={[...new Set([...categories, ...suggestions])]}
                       />
+                      {suggestions.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-400 mb-1.5">✨ Suggested</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {suggestions.map(s => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setForm(f => ({ ...f, category: s }))}
+                                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                  form.category === s
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                                }`}
+                              >
+                                {toTitleCase(s)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </Field>
                   )}
 

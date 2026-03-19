@@ -141,3 +141,19 @@ export const importCsv = (file) => {
     body: form,
   }).then(handleResponse);
 };
+
+export const getProfile = () =>
+  fetch(`${BASE_URL}/api/profile`, { headers: authHeaders() }).then(handleResponse);
+
+export const updatePreferences = (body) =>
+  fetch(`${BASE_URL}/api/profile/preferences`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  }).then(handleResponse);
+
+// Returns a raw Response (CSV blob) — do not call .then(handleResponse)
+export const exportTransactions = (params = {}) => {
+  const qs = new URLSearchParams({ tz: browserTz(), ...params });
+  return fetch(`${BASE_URL}/api/profile/export?${qs}`, { headers: authHeaders() });
+};

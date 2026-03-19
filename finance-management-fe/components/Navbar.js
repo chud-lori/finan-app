@@ -11,7 +11,6 @@ const NAV_LINKS = [
   { href: '/range', label: 'Range', icon: '📅' },
   { href: '/recommendation', label: 'Budget', icon: '💡' },
   { href: '/insights', label: 'Insights', icon: '🔍' },
-  { href: '/import', label: 'Import CSV', icon: '📤' },
 ];
 
 function ThemeToggle({ className = '' }) {
@@ -87,9 +86,9 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-2">
           <ThemeToggle />
           <Link
-            href="/settings"
+            href="/profile"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              pathname === '/settings'
+              pathname === '/profile'
                 ? 'bg-teal-50 text-teal-700'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
@@ -150,10 +149,10 @@ export default function Navbar() {
               );
             })}
             <Link
-              href="/settings"
+              href="/profile"
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname === '/settings' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-100'
+                pathname === '/profile' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
