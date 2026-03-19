@@ -8,7 +8,7 @@ function PageSkeleton() {
     <div className="min-h-screen bg-gray-50 animate-pulse">
       {/* Navbar skeleton */}
       <div className="bg-white border-b border-gray-200 h-14 flex items-center px-6 gap-6">
-        <SkeletonLine className="h-5 w-24 !bg-indigo-100" />
+        <SkeletonLine className="h-5 w-24 !bg-teal-100" />
         <div className="hidden md:flex gap-3 flex-1">
           {[80, 72, 48, 64, 60, 64].map((w, i) => (
             <SkeletonLine key={i} className={`h-3.5 w-${w}`} style={{ width: w }} />

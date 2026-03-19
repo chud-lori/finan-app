@@ -56,7 +56,7 @@ function CategoryCombobox({ value, onChange, categories }) {
       <button
         type="button"
         onClick={() => open ? setOpen(false) : openDropdown()}
-        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white text-sm hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white text-sm hover:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
       >
         <span className={value ? 'text-gray-900 font-medium capitalize' : 'text-gray-400'}>
           {value ? toTitleCase(value) : 'Select or create a category…'}
@@ -92,7 +92,7 @@ function CategoryCombobox({ value, onChange, categories }) {
               value={query}
               autoComplete="off"
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
             />
           </div>
 
@@ -103,13 +103,13 @@ function CategoryCombobox({ value, onChange, categories }) {
                 onClick={() => select(c)}
                 className={`px-3.5 py-2 text-sm cursor-pointer transition-colors flex items-center justify-between ${
                   value === c.toLowerCase()
-                    ? 'bg-indigo-50 text-indigo-700 font-medium'
+                    ? 'bg-teal-50 text-teal-700 font-medium'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
                 <span className="capitalize">{toTitleCase(c)}</span>
                 {value === c.toLowerCase() && (
-                  <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
@@ -125,9 +125,9 @@ function CategoryCombobox({ value, onChange, categories }) {
             {showCreate && (
               <li
                 onClick={() => select(trimmed)}
-                className="px-3.5 py-2.5 text-sm cursor-pointer text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100"
+                className="px-3.5 py-2.5 text-sm cursor-pointer text-teal-600 hover:bg-teal-50 flex items-center gap-2 border-t border-gray-100"
               >
-                <span className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 font-bold text-xs shrink-0">+</span>
+                <span className="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center text-teal-500 font-bold text-xs shrink-0">+</span>
                 Create &ldquo;{toTitleCase(trimmed)}&rdquo;
               </li>
             )}
@@ -371,8 +371,8 @@ export default function AddPage() {
                             onClick={() => setForm(f => ({ ...f, category: s }))}
                             className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                               form.category === s
-                                ? 'bg-indigo-600 text-white border-indigo-600'
-                                : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                ? 'bg-teal-600 text-white border-teal-600'
+                                : 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
                             }`}
                           >
                             {toTitleCase(s)}
@@ -392,7 +392,7 @@ export default function AddPage() {
                         value={form.amount}
                         onChange={(e) => setForm({ ...form, amount: formatAmountDisplay(e.target.value) })}
                         placeholder="0"
-                        className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-300 text-2xl font-bold text-gray-900 placeholder:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-white"
+                        className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-300 text-2xl font-bold text-gray-900 placeholder:text-gray-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white"
                       />
                     </div>
                   </Field>
@@ -430,7 +430,7 @@ export default function AddPage() {
                   <button
                     type="submit"
                     disabled={loading || success || !form.type || !form.category.trim()}
-                    className="w-full py-3.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-indigo-200"
+                    className="w-full py-3.5 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-teal-200"
                   >
                     {loading ? (
                       <>
@@ -462,7 +462,7 @@ export default function AddPage() {
   );
 }
 
-const inputCls = 'w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-white';
+const inputCls = 'w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white';
 
 function Field({ label, children }) {
   return (

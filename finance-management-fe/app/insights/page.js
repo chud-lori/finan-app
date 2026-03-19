@@ -88,7 +88,7 @@ function ExplainCard({ data }) {
               </div>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-1.5">
-              <div className="h-1.5 rounded-full bg-indigo-400" style={{ width: `${c.pct}%` }} />
+              <div className="h-1.5 rounded-full bg-teal-400" style={{ width: `${c.pct}%` }} />
             </div>
           </div>
         ))}
@@ -106,7 +106,7 @@ function ExplainCard({ data }) {
 function AnomalyBadge({ flag }) {
   if (flag.type === 'first_time') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">
         New category
       </span>
     );

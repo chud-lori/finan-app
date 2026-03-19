@@ -114,7 +114,7 @@ export default function SettingsPage() {
         <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-4">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Profile</h2>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-lg">
+            <div className="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 font-bold text-lg">
               {username ? username[0].toUpperCase() : 'U'}
             </div>
             <div>
@@ -149,8 +149,8 @@ export default function SettingsPage() {
             </div>
             <button
               onClick={toggleTheme}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                dark ? 'bg-indigo-600' : 'bg-gray-200'
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                dark ? 'bg-teal-600' : 'bg-gray-200'
               }`}
               aria-checked={dark}
               role="switch"

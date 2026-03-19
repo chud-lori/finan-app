@@ -57,7 +57,7 @@ function UploadProgress({ filename }) {
               style={{ transition: 'stroke-dashoffset 0.3s ease' }}
             />
           </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-indigo-600">
+          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-teal-600">
             {progress}%
           </span>
         </div>
@@ -74,8 +74,8 @@ function UploadProgress({ filename }) {
             <div
               key={s}
               className={`h-1.5 rounded-full transition-all duration-500 ${
-                i < step ? 'bg-indigo-600 w-6' :
-                i === step ? 'bg-indigo-400 w-4 animate-pulse' :
+                i < step ? 'bg-teal-600 w-6' :
+                i === step ? 'bg-teal-400 w-4 animate-pulse' :
                 'bg-gray-200 w-3'
               }`}
             />
@@ -89,8 +89,8 @@ function UploadProgress({ filename }) {
               {i < step ? (
                 <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold flex-shrink-0">✓</span>
               ) : i === step ? (
-                <span className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                <span className="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-teal-500 animate-ping" />
                 </span>
               ) : (
                 <span className="w-5 h-5 rounded-full bg-gray-100 flex-shrink-0" />
@@ -159,7 +159,7 @@ function SuccessModal({ result, onClose }) {
         <div className="px-6 pb-5 flex gap-3">
           <button
             onClick={() => router.push('/')}
-            className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
+            className="flex-1 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors"
           >
             Go to dashboard
           </button>
@@ -282,10 +282,10 @@ export default function ImportPage() {
                   onDrop={handleDrop}
                   className={`relative flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl py-12 px-6 cursor-pointer transition-all ${
                     dragOver
-                      ? 'border-indigo-400 bg-indigo-50'
+                      ? 'border-teal-400 bg-teal-50'
                       : file
                       ? 'border-emerald-400 bg-emerald-50'
-                      : 'border-gray-300 hover:border-indigo-300 hover:bg-gray-50'
+                      : 'border-gray-300 hover:border-teal-300 hover:bg-gray-50'
                   }`}
                 >
                   <input
@@ -304,7 +304,7 @@ export default function ImportPage() {
                   ) : (
                     <>
                       <p className="font-medium text-gray-700 text-sm">
-                        Drop your CSV here, or <span className="text-indigo-600 underline">browse</span>
+                        Drop your CSV here, or <span className="text-teal-600 underline">browse</span>
                       </p>
                       <p className="text-xs text-gray-400">Only .csv files, max 5 MB</p>
                     </>
@@ -318,7 +318,7 @@ export default function ImportPage() {
                 <button
                   type="submit"
                   disabled={!file || loading}
-                  className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Import
                 </button>

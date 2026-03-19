@@ -5,10 +5,10 @@ import AuthGuard from '@/components/AuthGuard';
 import { getRecommendation } from '@/lib/api';
 import { formatIDR } from '@/lib/format';
 
-function ProgressBar({ value, max, color = 'indigo' }) {
+function ProgressBar({ value, max, color = 'teal' }) {
   const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0;
   const colors = {
-    indigo:  'bg-indigo-500',
+    teal:  'bg-teal-500',
     emerald: 'bg-emerald-500',
     rose:    'bg-rose-500',
     amber:   'bg-amber-400',
@@ -16,7 +16,7 @@ function ProgressBar({ value, max, color = 'indigo' }) {
   return (
     <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
       <div
-        className={`h-2 rounded-full transition-all ${colors[color] ?? colors.indigo}`}
+        className={`h-2 rounded-full transition-all ${colors[color] ?? colors.teal}`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -99,7 +99,7 @@ export default function RecommendationPage() {
                       value={monthly}
                       onChange={(e) => setMonthly(fmtInput(e.target.value))}
                       placeholder="10,000,000"
-                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                     />
                   </div>
                 </div>
@@ -114,7 +114,7 @@ export default function RecommendationPage() {
                       value={spend}
                       onChange={(e) => setSpend(fmtInput(e.target.value))}
                       placeholder="500,000"
-                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                     />
                   </div>
                 </div>
@@ -122,7 +122,7 @@ export default function RecommendationPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
                 >
                   {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
                   Analyse
@@ -158,7 +158,7 @@ export default function RecommendationPage() {
                     <ProgressBar
                       value={result.actualSpend}
                       max={budget}
-                      color={result.actualSpend / budget > 0.8 ? 'rose' : result.actualSpend / budget > 0.6 ? 'amber' : 'indigo'}
+                      color={result.actualSpend / budget > 0.8 ? 'rose' : result.actualSpend / budget > 0.6 ? 'amber' : 'teal'}
                     />
                   </div>
 

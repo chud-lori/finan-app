@@ -66,7 +66,7 @@ function SoWhatInsight({ categories, onCategoryClick }) {
             Cut{' '}
             <button
               onClick={() => onCategoryClick?.(topProblem.category)}
-              className="font-semibold capitalize underline decoration-dotted hover:text-indigo-700 transition-colors"
+              className="font-semibold capitalize underline decoration-dotted hover:text-teal-700 transition-colors"
             >{topProblem.category}</button>{' '}by 20%
             {' → '}
             save <span className="font-semibold text-emerald-700">{formatIDR(savingIfReduce20)}</span>/month
@@ -176,7 +176,7 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                         <button
                           onClick={() => onCategoryClick?.(c.category)}
-                          className="font-medium text-gray-700 capitalize hover:text-indigo-600 hover:underline decoration-dotted transition-colors text-left"
+                          className="font-medium text-gray-700 capitalize hover:text-teal-600 hover:underline decoration-dotted transition-colors text-left"
                           title="View transactions in this category"
                         >
                           {c.category}
@@ -308,7 +308,7 @@ export default function AnalyticsPage() {
                   key={t}
                   onClick={() => setTab(t)}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    tab === t ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                    tab === t ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
                   {t}
@@ -342,8 +342,8 @@ export default function AnalyticsPage() {
                     onClick={() => setMonth(o.value)}
                     className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
                       month === o.value
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-700'
+                        ? 'bg-teal-600 text-white shadow-sm'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:border-teal-300 hover:text-teal-700'
                     }`}
                   >
                     {o.label}
@@ -400,7 +400,7 @@ export default function AnalyticsPage() {
                     <SummaryCard
                       label="Savings rate"
                       value={ms?.income ? `${savingsRate}%` : '—'}
-                      color={savingsRate >= 0 ? 'indigo' : 'rose'}
+                      color={savingsRate >= 0 ? 'teal' : 'rose'}
                     />
                   </div>
 
@@ -423,8 +423,8 @@ export default function AnalyticsPage() {
                           onClick={() => setCompareMode(opt.value)}
                           className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
                             compareMode === opt.value
-                              ? 'bg-indigo-600 text-white border-indigo-600'
-                              : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-700'
+                              ? 'bg-teal-600 text-white border-teal-600'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-teal-300 hover:text-teal-700'
                           }`}
                         >
                           {opt.label}
@@ -470,7 +470,7 @@ export default function AnalyticsPage() {
                     <SummaryCard
                       label="Avg monthly expense"
                       value={formatIDR(Math.round(yearTotals.expense / 12))}
-                      color="indigo"
+                      color="teal"
                     />
                   </div>
 
@@ -493,7 +493,7 @@ export default function AnalyticsPage() {
                             <th className="py-2 text-left font-medium">Month</th>
                             <th className="py-2 text-right font-medium text-emerald-600">Income</th>
                             <th className="py-2 text-right font-medium text-rose-500">Expense</th>
-                            <th className="py-2 text-right font-medium text-indigo-600">Net</th>
+                            <th className="py-2 text-right font-medium text-teal-600">Net</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
@@ -505,7 +505,7 @@ export default function AnalyticsPage() {
                                 <td className="py-2 font-medium text-gray-700">{m.name}</td>
                                 <td className="py-2 text-right text-emerald-700">{m.Income  ? formatIDR(m.Income)  : '—'}</td>
                                 <td className="py-2 text-right text-rose-600">{m.Expense ? formatIDR(m.Expense) : '—'}</td>
-                                <td className={`py-2 text-right font-semibold ${!hasData ? 'text-gray-300' : net >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
+                                <td className={`py-2 text-right font-semibold ${!hasData ? 'text-gray-300' : net >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
                                   {hasData ? formatIDR(net) : '—'}
                                 </td>
                               </tr>
@@ -545,7 +545,7 @@ function ChartCard({ title, children }) {
 }
 
 function SummaryCard({ label, value, color }) {
-  const cls = { emerald: 'text-emerald-700', rose: 'text-rose-600', indigo: 'text-indigo-700' }[color] ?? 'text-gray-800';
+  const cls = { emerald: 'text-emerald-700', rose: 'text-rose-600', teal: 'text-teal-700' }[color] ?? 'text-gray-800';
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
       <p className="text-xs text-gray-500 mb-1">{label}</p>

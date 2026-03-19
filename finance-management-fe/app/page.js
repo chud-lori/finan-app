@@ -28,7 +28,7 @@ function SortButton({ field, label, current, order, onClick }) {
       onClick={() => onClick(field)}
       className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
         active
-          ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+          ? 'bg-teal-50 border-teal-200 text-teal-700'
           : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700'
       }`}
     >
@@ -78,7 +78,7 @@ function Pagination({ page, totalPages, total, limit, onPage }) {
               onClick={() => onPage(p)}
               className={`w-8 h-8 rounded-lg border text-xs font-medium transition-colors ${
                 p === page
-                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                  ? 'bg-teal-600 border-teal-600 text-white'
                   : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
@@ -191,7 +191,7 @@ export default function DashboardPage() {
           {/* Stats */}
           {loading && !data.transactions.length ? <SkeletonStatCards /> : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <StatCard label="Balance"            value={formatIDR(data.balance?.amount ?? 0)} color="indigo"  icon="💰" />
+              <StatCard label="Balance"            value={formatIDR(data.balance?.amount ?? 0)} color="teal"  icon="💰" />
               <StatCard label="Income this month"  value={formatIDR(income)}                    color="emerald" icon="📈" />
               <StatCard label="Expense this month" value={formatIDR(expense)}                   color="rose"    icon="📉" />
             </div>
@@ -206,7 +206,7 @@ export default function DashboardPage() {
               <select
                 value={month}
                 onChange={(e) => handleMonthChange(e.target.value)}
-                className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
               >
                 {monthOptions.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -216,13 +216,13 @@ export default function DashboardPage() {
 
             {/* Active category filter badge */}
             {categoryFilter && (
-              <div className="flex items-center gap-2 px-5 py-2 border-b border-gray-100 bg-indigo-50/60">
-                <span className="text-xs text-indigo-600 font-medium">Filtered by category:</span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+              <div className="flex items-center gap-2 px-5 py-2 border-b border-gray-100 bg-teal-50/60">
+                <span className="text-xs text-teal-600 font-medium">Filtered by category:</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">
                   {toTitleCase(categoryFilter)}
                   <button
                     onClick={() => { setCategoryFilter(''); setPage(1); }}
-                    className="ml-0.5 text-indigo-400 hover:text-indigo-600"
+                    className="ml-0.5 text-teal-400 hover:text-teal-600"
                     title="Clear filter"
                   >✕</button>
                 </span>
@@ -239,7 +239,7 @@ export default function DashboardPage() {
                   value={search}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Search description…"
-                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                 />
                 {search && (
                   <button
@@ -293,9 +293,9 @@ export default function DashboardPage() {
                         <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
                           <button
                             onClick={() => { setCategoryFilter(t.category); setPage(1); }}
-                            className={`px-2 py-0.5 rounded-md text-xs transition-colors hover:bg-indigo-100 hover:text-indigo-700 ${
+                            className={`px-2 py-0.5 rounded-md text-xs transition-colors hover:bg-teal-100 hover:text-teal-700 ${
                               categoryFilter === t.category
-                                ? 'bg-indigo-100 text-indigo-700 font-medium'
+                                ? 'bg-teal-100 text-teal-700 font-medium'
                                 : 'bg-gray-100 text-gray-600'
                             }`}
                             title="Filter by this category"

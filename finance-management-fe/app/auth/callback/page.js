@@ -33,8 +33,8 @@ function CallbackHandler() {
   }, [params, router]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 gap-4">
-      <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-teal-50 via-white to-teal-50 gap-4">
+      <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
       <p className="text-sm text-gray-500">{status}</p>
     </div>
   );

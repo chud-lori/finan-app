@@ -60,7 +60,7 @@ export default function RegisterPage() {
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   return (
-    <div className={`min-h-screen flex flex-col px-4 ${dark ? 'bg-gray-900' : 'bg-gradient-to-br from-indigo-50 via-white to-purple-50'}`}>
+    <div className={`min-h-screen flex flex-col px-4 ${dark ? 'bg-gray-900' : 'bg-gradient-to-br from-teal-50 via-white to-teal-50'}`}>
       {/* Top bar with theme toggle */}
       <div className="flex justify-end pt-4 pr-2">
         <ThemeToggle />
@@ -71,7 +71,7 @@ export default function RegisterPage() {
         <div className="w-full max-w-sm">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600 text-white text-2xl font-bold mb-4 shadow-lg">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-600 text-white text-2xl font-bold mb-4 shadow-lg">
               FA
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Create account</h1>
@@ -94,7 +94,7 @@ export default function RegisterPage() {
                   required
                   value={form.name}
                   onChange={set('name')}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
                   placeholder="Jajang Aja"
                   autoFocus
                 />
@@ -107,7 +107,7 @@ export default function RegisterPage() {
                   required
                   value={form.username}
                   onChange={set('username')}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
                   placeholder="jajang_aja"
                 />
               </div>
@@ -119,7 +119,7 @@ export default function RegisterPage() {
                   required
                   value={form.email}
                   onChange={set('email')}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
                   placeholder="jajang@example.com"
                 />
               </div>
@@ -132,7 +132,7 @@ export default function RegisterPage() {
                   minLength={8}
                   value={form.password}
                   onChange={set('password')}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
                   placeholder="min. 8 characters"
                 />
               </div>
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                   required
                   value={form.confirm}
                   onChange={set('confirm')}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
                   placeholder="••••••••"
                 />
               </div>
@@ -152,7 +152,7 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+                className="w-full py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
               >
                 {loading ? (
                   <>
@@ -166,7 +166,7 @@ export default function RegisterPage() {
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Already have an account?{' '}
-            <Link href="/login" className="text-indigo-600 font-medium hover:underline">
+            <Link href="/login" className="text-teal-600 font-medium hover:underline">
               Sign in
             </Link>
           </p>

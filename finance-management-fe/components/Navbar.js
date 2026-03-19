@@ -58,7 +58,7 @@ export default function Navbar() {
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
         {/* Brand */}
-        <Link href="/" className="font-bold text-xl text-indigo-600 tracking-tight">
+        <Link href="/" className="font-bold text-xl text-teal-600 tracking-tight">
           Finan App
         </Link>
 
@@ -72,7 +72,7 @@ export default function Navbar() {
                 href={href}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   active
-                    ? 'bg-indigo-50 text-indigo-700'
+                    ? 'bg-teal-50 text-teal-700'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
               >
@@ -90,7 +90,7 @@ export default function Navbar() {
             href="/settings"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               pathname === '/settings'
-                ? 'bg-indigo-50 text-indigo-700'
+                ? 'bg-teal-50 text-teal-700'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
@@ -141,7 +141,7 @@ export default function Navbar() {
                   href={href}
                   onClick={() => setMobileOpen(false)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    active ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
+                    active ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
                   <span>{icon}</span>
@@ -153,7 +153,7 @@ export default function Navbar() {
               href="/settings"
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname === '/settings' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
+                pathname === '/settings' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
