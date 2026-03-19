@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
@@ -14,6 +14,97 @@ const CSV_COLUMNS = [
   { col: 'Timezone', required: false, note: 'IANA timezone, defaults to Asia/Jakarta' },
 ];
 
+// ─── Upload progress overlay ────────────────────────────────────────────────
+const STEPS = ['Reading file', 'Uploading', 'Processing rows', 'Saving to database'];
+
+function UploadProgress({ filename }) {
+  const [step, setStep] = useState(0);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    // Animate through steps with realistic pacing
+    const timings = [400, 900, 1800, 2600]; // ms to reach each step
+    const timers = timings.map((t, i) =>
+      setTimeout(() => setStep(i), t)
+    );
+
+    // Smooth progress bar — advances to ~90% then waits for real completion
+    let p = 0;
+    const tick = setInterval(() => {
+      p += Math.random() * 4 + 1;
+      if (p >= 90) { p = 90; clearInterval(tick); }
+      setProgress(Math.round(p));
+    }, 120);
+
+    return () => { timers.forEach(clearTimeout); clearInterval(tick); };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center gap-6">
+        {/* Animated icon */}
+        <div className="relative w-16 h-16">
+          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="28" fill="none" stroke="#e5e7eb" strokeWidth="4" />
+            <circle
+              cx="32" cy="32" r="28"
+              fill="none"
+              stroke="#6366f1"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 28}`}
+              strokeDashoffset={`${2 * Math.PI * 28 * (1 - progress / 100)}`}
+              style={{ transition: 'stroke-dashoffset 0.3s ease' }}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-indigo-600">
+            {progress}%
+          </span>
+        </div>
+
+        {/* Step label */}
+        <div className="text-center">
+          <p className="text-base font-semibold text-gray-900">{STEPS[step]}</p>
+          <p className="text-xs text-gray-400 mt-1 truncate max-w-xs">{filename}</p>
+        </div>
+
+        {/* Step dots */}
+        <div className="flex gap-2">
+          {STEPS.map((s, i) => (
+            <div
+              key={s}
+              className={`h-1.5 rounded-full transition-all duration-500 ${
+                i < step ? 'bg-indigo-600 w-6' :
+                i === step ? 'bg-indigo-400 w-4 animate-pulse' :
+                'bg-gray-200 w-3'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* Step list */}
+        <ul className="w-full space-y-2">
+          {STEPS.map((s, i) => (
+            <li key={s} className="flex items-center gap-3 text-sm">
+              {i < step ? (
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold flex-shrink-0">✓</span>
+              ) : i === step ? (
+                <span className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                </span>
+              ) : (
+                <span className="w-5 h-5 rounded-full bg-gray-100 flex-shrink-0" />
+              )}
+              <span className={i <= step ? 'text-gray-800 font-medium' : 'text-gray-400'}>{s}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ─── Success modal ───────────────────────────────────────────────────────────
 function SuccessModal({ result, onClose }) {
   const router = useRouter();
   const allOk = result.failed === 0;
@@ -121,8 +212,8 @@ export default function ImportPage() {
     setError('');
     try {
       const res = await importCsv(file);
-      clearFile();           // remove the file immediately on success
-      setResult(res.data);   // open modal
+      clearFile();
+      setResult(res.data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -139,6 +230,7 @@ export default function ImportPage() {
       <div className="min-h-screen bg-gray-50">
         <Navbar />
 
+        {loading && <UploadProgress filename={file?.name ?? 'file.csv'} />}
         {result && <SuccessModal result={result} onClose={handleModalClose} />}
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
@@ -226,14 +318,9 @@ export default function ImportPage() {
                 <button
                   type="submit"
                   disabled={!file || loading}
-                  className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Importing…
-                    </>
-                  ) : 'Import'}
+                  Import
                 </button>
               </form>
             </div>
