@@ -8,7 +8,7 @@ import { importCsv } from '@/lib/api';
 const CSV_COLUMNS = [
   { col: 'Title / Description', required: true, note: 'Transaction description' },
   { col: 'Amount', required: true, note: 'Number or "Rp1,000,000" format' },
-  { col: 'Type', required: true, note: '"income" or "outcome"' },
+  { col: 'Type', required: true, note: '"income" or "expense"' },
   { col: 'Category', required: true, note: 'Auto-created if not found' },
   { col: 'Timestamp / Date / Time', required: true, note: 'M/D/YYYY H:mm:ss, YYYY-MM-DD HH:mm:ss, or ISO 8601' },
   { col: 'Timezone', required: false, note: 'IANA timezone, defaults to Asia/Jakarta' },

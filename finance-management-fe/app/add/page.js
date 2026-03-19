@@ -109,7 +109,7 @@ export default function AddPage() {
 
   // Fetch expense categories only (income has no category picker)
   useEffect(() => {
-    if (form.type !== 'outcome') return;
+    if (form.type !== 'expense') return;
     getCategories('expense')
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
@@ -198,7 +198,7 @@ export default function AddPage() {
                 {/* Type toggle */}
                 <Field label="Type">
                   <div className="flex gap-2">
-                    {['income', 'outcome'].map((t) => (
+                    {['income', 'expense'].map((t) => (
                       <button
                         type="button"
                         key={t}
@@ -219,7 +219,7 @@ export default function AddPage() {
                 </Field>
 
                 {/* Category combobox — expense only */}
-                {form.type === 'outcome' && (
+                {form.type === 'expense' && (
                   <Field label="Category">
                     <CategoryCombobox
                       value={form.category}
@@ -243,7 +243,7 @@ export default function AddPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || success || !form.type || (form.type === 'outcome' && !form.category.trim())}
+                  disabled={loading || success || !form.type || (form.type === 'expense' && !form.category.trim())}
                   className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (

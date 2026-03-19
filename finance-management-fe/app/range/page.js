@@ -52,7 +52,7 @@ export default function RangePage() {
         ...r,
         transactions: r.transactions.filter(t => (t.id || t._id) !== id),
         income: r.income - (r.transactions.find(t => (t.id || t._id) === id && t.type === 'income')?.amount || 0),
-        outcome: r.outcome - (r.transactions.find(t => (t.id || t._id) === id && t.type === 'outcome')?.amount || 0),
+        expense: r.expense - (r.transactions.find(t => (t.id || t._id) === id && t.type === 'expense')?.amount || 0),
       }));
     } catch (err) {
       alert(err.message);
@@ -116,7 +116,7 @@ export default function RangePage() {
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                   <p className="text-sm text-gray-500 mb-1">Total Expense</p>
-                  <p className="text-xl font-bold text-rose-600">{formatIDR(result.outcome)}</p>
+                  <p className="text-xl font-bold text-rose-600">{formatIDR(result.expense)}</p>
                 </div>
               </div>
 

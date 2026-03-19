@@ -64,7 +64,7 @@ export default function DashboardPage() {
 
   const txns = data.transactions || [];
   const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const outcome = txns.filter(t => t.type === 'outcome').reduce((s, t) => s + t.amount, 0);
+  const expense = txns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
   return (
     <AuthGuard>
@@ -77,7 +77,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               <StatCard label="Balance"            value={formatIDR(data.balance?.amount ?? 0)} color="indigo"  icon="💰" />
               <StatCard label="Income this month"  value={formatIDR(income)}                    color="emerald" icon="📈" />
-              <StatCard label="Expense this month" value={formatIDR(outcome)}                   color="rose"    icon="📉" />
+              <StatCard label="Expense this month" value={formatIDR(expense)}                   color="rose"    icon="📉" />
             </div>
           )}
 

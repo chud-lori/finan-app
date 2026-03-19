@@ -135,14 +135,14 @@ export default function AnalyticsPage() {
   const monthlyBars = data?.monthly?.map(m => ({
     name:    MONTH_LABELS[m.month - 1],
     Income:  m.income,
-    Expense: m.outcome,
+    Expense: m.expense,
   })) ?? [];
 
   const ms          = data?.monthStats;
-  const savingsRate = ms && ms.income > 0 ? Math.round(((ms.income - ms.outcome) / ms.income) * 100) : 0;
+  const savingsRate = ms && ms.income > 0 ? Math.round(((ms.income - ms.expense) / ms.income) * 100) : 0;
   const yearTotals  = {
     income:  data?.monthly?.reduce((s, m) => s + m.income,  0) ?? 0,
-    expense: data?.monthly?.reduce((s, m) => s + m.outcome, 0) ?? 0,
+    expense: data?.monthly?.reduce((s, m) => s + m.expense, 0) ?? 0,
   };
 
   const availableYears = data?.availableYears?.length ? data.availableYears : [year];
@@ -253,11 +253,11 @@ export default function AnalyticsPage() {
                 <div className="space-y-5">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <SummaryCard label="Income"       value={formatIDR(ms?.income  ?? 0)} color="emerald" />
-                    <SummaryCard label="Expense"      value={formatIDR(ms?.outcome ?? 0)} color="rose" />
+                    <SummaryCard label="Expense"      value={formatIDR(ms?.expense ?? 0)} color="rose" />
                     <SummaryCard
                       label="Net"
-                      value={formatIDR((ms?.income ?? 0) - (ms?.outcome ?? 0))}
-                      color={(ms?.income ?? 0) >= (ms?.outcome ?? 0) ? 'emerald' : 'rose'}
+                      value={formatIDR((ms?.income ?? 0) - (ms?.expense ?? 0))}
+                      color={(ms?.income ?? 0) >= (ms?.expense ?? 0) ? 'emerald' : 'rose'}
                     />
                     <SummaryCard
                       label="Savings rate"
