@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
@@ -7,76 +7,72 @@ import DateTimePicker from '@/components/DateTimePicker';
 import { addTransaction, getCategories } from '@/lib/api';
 import { toTitleCase } from '@/lib/format';
 
-// ─── Category combobox ───────────────────────────────────────────────────────
+// ─── Category picker ─────────────────────────────────────────────────────────
 function CategoryCombobox({ value, onChange, categories, disabled }) {
-  const [query, setQuery]   = useState('');
-  const [open, setOpen]     = useState(false);
-  const containerRef        = useRef(null);
+  const [query, setQuery] = useState('');
 
   // Sync display when value is reset externally (type switch)
   useEffect(() => {
     if (!value) setQuery('');
   }, [value]);
 
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const filtered = categories.filter(c =>
-    c.toLowerCase().includes(query.toLowerCase())
-  );
-  const trimmed     = query.trim().toLowerCase();
-  const exactMatch  = categories.some(c => c.toLowerCase() === trimmed);
-  const showCreate  = trimmed && !exactMatch;
+  const filtered   = categories.filter(c => c.toLowerCase().includes(query.toLowerCase()));
+  const trimmed    = query.trim().toLowerCase();
+  const exactMatch = categories.some(c => c.toLowerCase() === trimmed);
+  const showCreate = trimmed && !exactMatch;
 
   const select = (cat) => {
-    onChange(cat.toLowerCase());        // store lowercase
-    setQuery(toTitleCase(cat));         // display title case
-    setOpen(false);
+    onChange(cat.toLowerCase());
+    setQuery('');
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div>
+      {/* Search filter */}
       <input
         type="text"
-        required
         disabled={disabled}
-        placeholder={disabled ? 'Select a type first' : 'Search or create category…'}
+        placeholder={disabled ? 'Select a type first' : 'Filter categories…'}
         value={query}
         autoComplete="off"
-        onChange={(e) => {
-          setQuery(e.target.value);
-          onChange(e.target.value.trim().toLowerCase());
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        className={`${inputCls} disabled:opacity-50 disabled:cursor-not-allowed`}
+        onChange={(e) => setQuery(e.target.value)}
+        className={`${inputCls} disabled:opacity-50 disabled:cursor-not-allowed mb-2`}
       />
 
-      {open && !disabled && (filtered.length > 0 || showCreate) && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-          <ul className="max-h-52 overflow-y-auto py-1">
+      {/* Always-visible list */}
+      {!disabled && (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          {/* Selected badge */}
+          {value && (
+            <div className="px-3.5 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
+              <span className="text-xs text-indigo-500 font-medium">Selected</span>
+              <span className="text-sm font-semibold text-indigo-700">{toTitleCase(value)}</span>
+            </div>
+          )}
+
+          <ul className="max-h-44 overflow-y-auto py-1">
             {filtered.map(c => (
               <li
                 key={c}
-                onMouseDown={(e) => { e.preventDefault(); select(c); }}
-                className={`px-3.5 py-2 text-sm cursor-pointer transition-colors ${
+                onClick={() => select(c)}
+                className={`px-3.5 py-2 text-sm cursor-pointer transition-colors flex items-center justify-between ${
                   value === c.toLowerCase()
                     ? 'bg-indigo-50 text-indigo-700 font-medium'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
                 {toTitleCase(c)}
+                {value === c.toLowerCase() && <span className="text-indigo-400 text-xs">✓</span>}
               </li>
             ))}
+
+            {filtered.length === 0 && !showCreate && (
+              <li className="px-3.5 py-3 text-sm text-gray-400 text-center">No categories yet</li>
+            )}
+
             {showCreate && (
               <li
-                onMouseDown={(e) => { e.preventDefault(); select(trimmed); }}
+                onClick={() => select(trimmed)}
                 className="px-3.5 py-2 text-sm cursor-pointer text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100"
               >
                 <span className="text-indigo-400 font-bold">+</span>
