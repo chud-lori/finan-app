@@ -35,16 +35,21 @@ body {
 .dark .text-gray-800  { color: #e2e8f0; }
 .dark .text-gray-700  { color: #cbd5e1; }
 .dark .text-gray-600  { color: #94a3b8; }
-.dark .text-gray-500  { color: #64748b; }
-.dark .text-gray-400  { color: #94a3b8; }
+.dark .text-gray-500  { color: #94a3b8; }   /* lifted — was #64748b (too dark on slate bg) */
+.dark .text-gray-400  { color: #64748b; }   /* muted/hint text */
 
 /* Borders */
 .dark .border-gray-100  { border-color: #334155; }
 .dark .border-gray-200  { border-color: #334155; }
 .dark .border-gray-300  { border-color: #475569; }
-.dark .divide-gray-50  > * + *  { border-color: #1e293b; }
-.dark .divide-gray-100 > * + *  { border-color: #334155; }
-.dark .divide-gray-200 > * + *  { border-color: #334155; }
+
+/* Divide — cover both Tailwind v3 (> * + *) and v4 (:not([hidden]) ~ :not([hidden])) selectors */
+.dark .divide-gray-50  > * + *,
+.dark .divide-gray-50  > :not([hidden]) ~ :not([hidden])  { border-color: #1e293b !important; }
+.dark .divide-gray-100 > * + *,
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden])  { border-color: #334155 !important; }
+.dark .divide-gray-200 > * + *,
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden])  { border-color: #334155 !important; }
 
 /* Teal */
 .dark .bg-teal-50                 { background-color: rgba(13, 148, 136, 0.15); }
