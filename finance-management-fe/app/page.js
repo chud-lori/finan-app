@@ -169,8 +169,8 @@ export default function DashboardPage() {
   };
 
   const txns    = data.transactions || [];
-  const income  = txns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const expense = txns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const income  = data.monthlyIncome  ?? 0;
+  const expense = data.monthlyExpense ?? 0;
 
   return (
     <AuthGuard>

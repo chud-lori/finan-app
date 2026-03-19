@@ -140,7 +140,11 @@ const getUserTransaction = async (req, res, next) => {
             filter.type = req.params.type;
         }
 
-        const [total, transactions, balance] = await Promise.all([
+        // Monthly totals use only the month filter (not search/category) so stat cards reflect the whole month
+        const monthFilter = { user: req.user.id };
+        if (month) monthFilter.time = filter.time;
+
+        const [total, transactions, balance, monthTotals] = await Promise.all([
             Transaction.countDocuments(filter),
             Transaction.find(filter)
                 .sort({ [sortBy]: order })
@@ -148,14 +152,23 @@ const getUserTransaction = async (req, res, next) => {
                 .limit(limit)
                 .exec(),
             Balance.findOne({ user: req.user.id }).exec(),
+            Transaction.aggregate([
+                { $match: monthFilter },
+                { $group: { _id: '$type', total: { $sum: '$amount' } } }
+            ]),
         ]);
 
         if (!balance) {
             return res.status(404).json(BaseResponseDTO.error('User balance not found'));
         }
 
-        const totalPages = Math.ceil(total / limit);
+        const monthlyIncome  = monthTotals.find(r => r._id === 'income')?.total  ?? 0;
+        const monthlyExpense = monthTotals.find(r => r._id === 'expense')?.total ?? 0;
+
+        const totalPages = Math.ceil(total / limit) || 1;
         const responseDTO = new GetTransactionsResponseDTO(transactions, balance, { total, page, totalPages, limit });
+        responseDTO.monthlyIncome  = monthlyIncome;
+        responseDTO.monthlyExpense = monthlyExpense;
         logger.info(`Get user transaction Response: ${req.user.id} retrieved`);
         res.status(200).json(BaseResponseDTO.success('User transactions retrieved', responseDTO));
 
