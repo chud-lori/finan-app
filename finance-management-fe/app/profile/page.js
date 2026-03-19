@@ -13,6 +13,7 @@ import {
   logoutAllDevices,
 } from '@/lib/api';
 import { formatIDR, toTitleCase } from '@/lib/format';
+import MonthCalendarPicker from '@/components/MonthCalendarPicker';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -668,8 +669,11 @@ export default function ProfilePage() {
                       className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                   )}
                   {exportPeriod === 'monthly' && (
-                    <input type="month" value={exportMonth} onChange={e => setExportMonth(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                    <MonthCalendarPicker
+                      value={exportMonth}
+                      onChange={setExportMonth}
+                      placeholder="Pick a month…"
+                    />
                   )}
                   {exportError && <p className="text-xs text-red-600">{exportError}</p>}
                   <button onClick={handleExport} disabled={exportDisabled}
