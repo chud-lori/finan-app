@@ -85,9 +85,13 @@ class AddTransactionResponseDTO {
  * Get Transactions Response DTO
  */
 class GetTransactionsResponseDTO {
-    constructor(transactions, balance) {
+    constructor(transactions, balance, meta = {}) {
         this.transactions = transactions.map(t => new TransactionResponseDTO(t));
         this.balance = balance ? new BalanceResponseDTO(balance) : null;
+        this.total = meta.total ?? transactions.length;
+        this.page = meta.page ?? 1;
+        this.totalPages = meta.totalPages ?? 1;
+        this.limit = meta.limit ?? transactions.length;
     }
 }
 

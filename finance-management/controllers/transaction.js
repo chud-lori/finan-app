@@ -111,54 +111,55 @@ const getUserTransaction = async (req, res, next) => {
     try {
         logger.info(`Get user transaction: ${req.user.id}`);
 
-        // Add month filter: expects req.query.month in 'YYYY-MM' format
-        const month = req.query.month;
+        const month    = req.query.month;
+        const category = req.query.category;
+        const search   = req.query.search;
+        const sortBy   = ['description', 'amount', 'time'].includes(req.query.sortBy) ? req.query.sortBy : 'time';
+        const order    = req.query.order === 'asc' ? 1 : -1;
+        const page     = Math.max(1, parseInt(req.query.page)  || 1);
+        const limit    = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
         let filter = { user: req.user.id };
 
         if (month) {
             const startDate = moment.tz(month, 'YYYY-MM', 'Asia/Jakarta').startOf('month').toDate();
-            const endDate = moment.tz(month, 'YYYY-MM', 'Asia/Jakarta').endOf('month').toDate();
+            const endDate   = moment.tz(month, 'YYYY-MM', 'Asia/Jakarta').endOf('month').toDate();
             filter.time = { $gte: startDate, $lte: endDate };
         }
 
-        // Add case-insensitive category filter from query param
-        const category = req.query.category;
         if (category) {
-            filter.category = { $regex: new RegExp(`^${category}$`, 'i') };
+            filter.category = { $regex: new RegExp(`^${escapeRegex(category)}$`, 'i') };
         }
 
-        if (!req.params.type) {
-            // Get all transactions
-            const transactions = await Transaction.find(filter).sort([['time', -1]]).exec();
-            const balance = await Balance.findOne({ user: req.user.id }).exec();
+        if (search) {
+            filter.description = { $regex: new RegExp(escapeRegex(search.trim()), 'i') };
+        }
 
-            if (!balance) {
-                return res.status(404).json(BaseResponseDTO.error('User balance not found'));
-            }
-
-            // Return DTO response
-            const responseDTO = new GetTransactionsResponseDTO(transactions, balance);
-            logger.info(`Get user transaction Response: ${req.user.id} retrieved`);
-            res.status(200).json(BaseResponseDTO.success('User transactions retrieved', responseDTO));
-
-        } else {
-            // Validate transaction type
+        if (req.params.type) {
             if (!['income', 'expense'].includes(req.params.type)) {
                 return res.status(404).json(BaseResponseDTO.error('Invalid transaction type'));
             }
-
             filter.type = req.params.type;
-            const transactions = await Transaction.find(filter).exec();
-            const balance = await Balance.findOne({ user: req.user.id }).exec();
-
-            if (!balance) {
-                return res.status(404).json(BaseResponseDTO.error('User balance not found'));
-            }
-
-            // Return DTO response
-            const responseDTO = new GetTransactionsResponseDTO(transactions, balance);
-            res.status(200).json(BaseResponseDTO.success('User transactions retrieved', responseDTO));
         }
+
+        const [total, transactions, balance] = await Promise.all([
+            Transaction.countDocuments(filter),
+            Transaction.find(filter)
+                .sort({ [sortBy]: order })
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .exec(),
+            Balance.findOne({ user: req.user.id }).exec(),
+        ]);
+
+        if (!balance) {
+            return res.status(404).json(BaseResponseDTO.error('User balance not found'));
+        }
+
+        const totalPages = Math.ceil(total / limit);
+        const responseDTO = new GetTransactionsResponseDTO(transactions, balance, { total, page, totalPages, limit });
+        logger.info(`Get user transaction Response: ${req.user.id} retrieved`);
+        res.status(200).json(BaseResponseDTO.success('User transactions retrieved', responseDTO));
 
     } catch (error) {
         logger.error(`Get user transaction error: ${error.message}`);
