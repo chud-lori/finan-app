@@ -62,20 +62,26 @@ function buildInsights(explain, ttz, anomaly) {
 }
 
 const LEVEL = {
-  danger: { bar: 'bg-rose-500',    bg: 'bg-rose-50',    border: 'border-rose-100',    text: 'text-rose-800'    },
-  warn:   { bar: 'bg-amber-400',   bg: 'bg-amber-50',   border: 'border-amber-100',   text: 'text-amber-800'   },
-  info:   { bar: 'bg-teal-500',    bg: 'bg-teal-50',    border: 'border-teal-100',    text: 'text-teal-800'    },
-  good:   { bar: 'bg-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-100', text: 'text-emerald-800' },
+  danger: { dot: 'bg-rose-500',    badge: 'bg-rose-100 text-rose-700',    label: 'Alert'   },
+  warn:   { dot: 'bg-amber-400',   badge: 'bg-amber-100 text-amber-700',   label: 'Watch'   },
+  info:   { dot: 'bg-teal-500',    badge: 'bg-teal-100 text-teal-700',     label: 'Info'    },
+  good:   { dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700', label: 'Good'  },
 };
+
+const LEVEL_ORDER = { danger: 0, warn: 1, good: 2, info: 3 };
 
 function InsightFeed({ explain, ttz, anomaly, loading }) {
   if (loading) {
     return (
-      <div className="mb-8 space-y-2 animate-pulse">
-        {['w-4/5', 'w-2/3', 'w-full', 'w-3/4'].map((w, i) => (
-          <div key={i} className="flex gap-3 items-center p-4 rounded-xl border border-gray-100 bg-white">
-            <div className="w-1 h-8 rounded-full bg-gray-200 flex-shrink-0" />
-            <div className={`h-4 ${w} bg-gray-100 rounded`} />
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6 animate-pulse">
+        <div className="px-5 py-3 border-b border-gray-100">
+          <div className="h-3 w-40 bg-gray-100 rounded" />
+        </div>
+        {[1,2,3,4].map(i => (
+          <div key={i} className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-50">
+            <div className="w-2 h-2 rounded-full bg-gray-200 flex-shrink-0" />
+            <div className="h-3 bg-gray-100 rounded flex-1" />
+            <div className="w-12 h-5 bg-gray-100 rounded-full flex-shrink-0" />
           </div>
         ))}
       </div>
@@ -85,17 +91,25 @@ function InsightFeed({ explain, ttz, anomaly, loading }) {
   const insights = buildInsights(explain, ttz, anomaly);
   if (!insights.length) return null;
 
+  const top = [...insights]
+    .sort((a, b) => (LEVEL_ORDER[a.level] ?? 3) - (LEVEL_ORDER[b.level] ?? 3))
+    .slice(0, 5);
+
   return (
-    <div className="mb-8">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">What your data is saying</p>
-      <div className="space-y-2">
-        {insights.map((ins, i) => {
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+      <div className="px-5 py-3 border-b border-gray-100">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">What your data is saying</p>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {top.map((ins, i) => {
           const s = LEVEL[ins.level] ?? LEVEL.info;
           return (
-            <div key={i} className={`flex gap-3 items-start p-4 rounded-xl border ${s.bg} ${s.border}`}>
-              <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${s.bar}`} />
-              <span className="text-base leading-none flex-shrink-0 mt-0.5">{ins.icon}</span>
-              <p className={`text-sm font-medium leading-snug ${s.text}`}>{ins.text}</p>
+            <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
+              <p className="text-sm text-gray-700 flex-1 leading-snug">{ins.text}</p>
+              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full flex-shrink-0 ${s.badge}`}>
+                {s.label}
+              </span>
             </div>
           );
         })}
