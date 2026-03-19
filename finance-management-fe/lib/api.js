@@ -155,6 +155,11 @@ export const importCsv = (file) => {
   }).then(handleResponse);
 };
 
+export const getActiveMonths = () =>
+  fetch(`${BASE_URL}/api/transaction/active-months`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 export const getProfile = () =>
   fetch(`${BASE_URL}/api/profile`, { headers: authHeaders() }).then(handleResponse);
 

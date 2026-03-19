@@ -2,23 +2,133 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getTransactions, deleteTransaction } from '@/lib/api';
+import { getTransactions, deleteTransaction, getActiveMonths } from '@/lib/api';
 import { formatIDR, formatDate, toTitleCase } from '@/lib/format';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 
-const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_LABELS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LIMIT = 20;
 
-function buildMonthOptions() {
+function toYM(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function ymLabel(ym) {
+  const [y, m] = ym.split('-');
+  return `${MONTH_LABELS[parseInt(m, 10)]} ${y}`;
+}
+
+// Build a gapless month list: from earliest active month (or current) back to current.
+// No gaps — every month between earliest-with-data and today is included.
+function buildMonthOptions(activeMonths = []) {
   const now = new Date();
-  const options = [];
-  for (let i = 0; i < 13; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    options.push({ value: val, label: `${MONTHS[d.getMonth() + 1]} ${d.getFullYear()}` });
+  const currentYM = toYM(now);
+
+  if (activeMonths.length === 0) {
+    return [{ value: currentYM, label: ymLabel(currentYM), hasData: false }];
   }
+
+  const earliest = activeMonths[0]; // already sorted asc from backend
+  const [ey, em] = earliest.split('-').map(Number);
+
+  const options = [];
+  let y = now.getFullYear(), m = now.getMonth() + 1;
+
+  while (true) {
+    const ym = `${y}-${String(m).padStart(2, '0')}`;
+    options.push({ value: ym, label: ymLabel(ym), hasData: activeMonths.includes(ym) });
+    if (y === ey && m === em) break;
+    m--;
+    if (m === 0) { m = 12; y--; }
+    // safety: don't go before year 2000
+    if (y < 2000) break;
+  }
+
   return options;
+}
+
+// ─── Custom month picker dropdown ─────────────────────────────────────────────
+function MonthPicker({ value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const listRef = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Scroll selected item into view when opening
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const selected = listRef.current.querySelector('[data-selected="true"]');
+    if (selected) selected.scrollIntoView({ block: 'nearest' });
+  }, [open]);
+
+  const selected = options.find(o => o.value === value) || options[0];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+          open ? 'border-teal-400 bg-teal-50 text-teal-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+        }`}
+      >
+        <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span>{selected?.label ?? '—'}</span>
+        {selected?.hasData && (
+          <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0" />
+        )}
+        <svg className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-50 mt-1.5 w-44 bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
+          <div ref={listRef} className="max-h-64 overflow-y-auto py-1">
+            {options.map((o) => {
+              const isSelected = o.value === value;
+              return (
+                <button
+                  key={o.value}
+                  data-selected={isSelected}
+                  type="button"
+                  onClick={() => { onChange(o.value); setOpen(false); }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2 text-sm transition-colors ${
+                    isSelected
+                      ? 'bg-teal-50 text-teal-700 font-semibold'
+                      : o.hasData
+                        ? 'text-gray-800 hover:bg-gray-50'
+                        : 'text-gray-400 hover:bg-gray-50'
+                  }`}
+                >
+                  <span>{o.label}</span>
+                  {isSelected && (
+                    <svg className="w-3.5 h-3.5 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {!isSelected && o.hasData && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Sort button ─────────────────────────────────────────────────────────────
@@ -116,6 +226,8 @@ export default function DashboardPage() {
   const [order, setOrder]     = useState('desc');
   const [page, setPage]       = useState(1);
 
+  const [activeMonths, setActiveMonths] = useState([]);
+
   // Bootstrap from URL params (e.g. navigated here from Analytics)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -123,6 +235,13 @@ export default function DashboardPage() {
     const mo  = params.get('month');
     if (cat) setCategoryFilter(decodeURIComponent(cat));
     if (mo && /^\d{4}-\d{2}$/.test(mo)) setMonth(mo);
+  }, []);
+
+  // Fetch active months once on mount
+  useEffect(() => {
+    getActiveMonths()
+      .then(res => setActiveMonths(res.data?.months ?? []))
+      .catch(() => {}); // non-critical, falls back to current month only
   }, []);
 
   // Debounce search input
@@ -137,7 +256,7 @@ export default function DashboardPage() {
     }, 350);
   };
 
-  const monthOptions = buildMonthOptions();
+  const monthOptions = buildMonthOptions(activeMonths);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -207,15 +326,11 @@ export default function DashboardPage() {
             {/* Header row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900 shrink-0">Transactions</h2>
-              <select
+              <MonthPicker
                 value={month}
-                onChange={(e) => handleMonthChange(e.target.value)}
-                className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-              >
-                {monthOptions.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+                options={monthOptions}
+                onChange={handleMonthChange}
+              />
             </div>
 
             {/* Active category filter badge */}

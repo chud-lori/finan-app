@@ -12,6 +12,7 @@ const User = require('../models/user.model');
 const logger = require("../helpers/logger");
 const cache = require('../helpers/cache');
 const { refreshSnapshot } = require('../helpers/snapshot');
+const Snapshot = require('../models/snapshot.model');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -927,6 +928,23 @@ const getTimeToZero = async (req, res) => {
     }
 };
 
+// ── GET /api/transaction/active-months ────────────────────────────────────────
+// Returns sorted list of YYYY-MM strings that have at least one transaction (via snapshots)
+const getActiveMonths = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const snapshots = await Snapshot.find({ user: userId })
+            .select('yearMonth')
+            .sort({ yearMonth: 1 })
+            .lean();
+        const months = snapshots.map(s => s.yearMonth);
+        res.status(200).json(BaseResponseDTO.success('Active months retrieved', { months }));
+    } catch (e) {
+        logger.error(`Get active months error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to get active months', e.message));
+    }
+};
+
 module.exports = {
     addTransaction,
     getUserTransaction,
@@ -943,4 +961,5 @@ module.exports = {
     getAnomalies,
     getExplainability,
     getTimeToZero,
+    getActiveMonths,
 };

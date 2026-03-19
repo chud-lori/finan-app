@@ -19,6 +19,7 @@ const {
     getExplainability,
     getTimeToZero,
     getSuggestedCategories,
+    getActiveMonths,
 } = require('../controllers/transaction');
 
 const upload = multer({
@@ -69,11 +70,12 @@ const upload = multer({
  *       500:
  *         description: Server error
  */
-router.get('/expense',     authenticateJWT, limiter.byUser(60), getExpense);
-router.get('/analytics',   authenticateJWT, limiter.byUser(60), getAnalytics);
-router.get('/anomalies',   authenticateJWT, limiter.byUser(60), getAnomalies);
-router.get('/explain',     authenticateJWT, limiter.byUser(60), getExplainability);
-router.get('/time-to-zero', authenticateJWT, limiter.byUser(60), getTimeToZero);
+router.get('/expense',        authenticateJWT, limiter.byUser(60), getExpense);
+router.get('/analytics',      authenticateJWT, limiter.byUser(60), getAnalytics);
+router.get('/anomalies',      authenticateJWT, limiter.byUser(60), getAnomalies);
+router.get('/explain',        authenticateJWT, limiter.byUser(60), getExplainability);
+router.get('/time-to-zero',   authenticateJWT, limiter.byUser(60), getTimeToZero);
+router.get('/active-months',  authenticateJWT, limiter.byUser(60), getActiveMonths);
 
 /**
  * @openapi
