@@ -237,7 +237,7 @@ function ImportSuccessModal({ result, onClose }) {
           </div>
         )}
         <div className="px-5 pb-4 flex gap-2">
-          <button onClick={() => router.push('/')}
+          <button onClick={() => router.push('/dashboard')}
             className="flex-1 py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700">
             Dashboard
           </button>

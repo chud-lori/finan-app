@@ -38,7 +38,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('token')) router.replace('/');
+    if (localStorage.getItem('token')) router.replace('/dashboard');
   }, [router]);
 
   const handleSubmit = async (e) => {

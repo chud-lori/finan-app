@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useTheme } from '@/components/ThemeContext';
 
 const NAV_LINKS = [
-  { href: '/', label: 'Dashboard', icon: '📊' },
+  { href: '/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/analytics', label: 'Analytics', icon: '📈' },
   { href: '/reports', label: 'Reports', icon: '📅' },
   { href: '/recommendation', label: 'Planner', icon: '💡' },
