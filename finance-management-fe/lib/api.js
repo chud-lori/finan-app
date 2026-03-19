@@ -164,6 +164,20 @@ export const importCsv = (file) => {
   }).then(handleResponse);
 };
 
+export const forgotPassword = (email) =>
+  fetch(`${BASE_URL}/api/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  }).then(handleResponse);
+
+export const resetPassword = (token, newPassword) =>
+  fetch(`${BASE_URL}/api/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, newPassword }),
+  }).then(handleResponse);
+
 export const getActiveMonths = () =>
   fetch(`${BASE_URL}/api/transaction/active-months`, {
     headers: authHeaders(),

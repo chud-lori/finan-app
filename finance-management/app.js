@@ -7,7 +7,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const connectDB = require("./config/db");
 const logMiddleware = require('./middleware/log');
-const {PORT: port, HOST: host} = require("./config/keys");
+const {PORT: port, HOST: host, FE_URL} = require("./config/keys");
 const logger = require("./helpers/logger");
 // connect database (skip in test environment)
 if (process.env.NODE_ENV !== 'test') {
@@ -34,8 +34,12 @@ const morganJSONFormat = () => JSON.stringify({
     user_agent: ':user-agent',
 });
 
-// middleware
-app.use(cors());
+// middleware — lock CORS to the frontend origin only
+app.use(cors({
+  origin: FE_URL,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(helmet());
 app.use(morgan(morganJSONFormat(), {
     stream: logger.stream

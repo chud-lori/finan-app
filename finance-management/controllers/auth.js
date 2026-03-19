@@ -1,10 +1,13 @@
+const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/user.model');
 const Balance = require('../models/balance.model');
+const PasswordReset = require('../models/passwordReset.model');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const {USER_EMAIL:email, SECRET_TOKEN, FE_URL, GOOGLE_CLIENT_ID} = require('../config/keys');
 const logger = require("../helpers/logger");
+const { sendPasswordResetEmail } = require('../helpers/mailer');
 const {
     RegisterRequestDTO,
     LoginRequestDTO,
@@ -269,4 +272,70 @@ const logoutAllDevices = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices };
+const forgotPassword = async (req, res) => {
+  // Always return 200 to prevent user enumeration
+  const OK = () => res.status(200).json(BaseResponseDTO.success('If that email is registered, a reset link has been sent'));
+  try {
+    const rawEmail = (req.body.email || '').trim().toLowerCase();
+    if (!rawEmail) return res.status(400).json(BaseResponseDTO.error('Email is required'));
+
+    const user = await User.findOne({ email: rawEmail });
+    // Only send email for password-based accounts (not Google-only accounts)
+    if (!user || !user.password) return OK();
+
+    // Invalidate previous reset tokens for this user
+    await PasswordReset.deleteMany({ user: user._id });
+
+    const token     = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await PasswordReset.create({ user: user._id, token, expiresAt });
+
+    const resetUrl = `${FE_URL}/reset-password/${token}`;
+    await sendPasswordResetEmail(user.email, resetUrl);
+
+    return OK();
+  } catch (err) {
+    logger.error(`Forgot password error: ${err.message}`);
+    return OK(); // still 200 to avoid leaking info
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json(BaseResponseDTO.error('Token and new password are required'));
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json(BaseResponseDTO.error('Password must be at least 8 characters'));
+    }
+
+    const record = await PasswordReset.findOne({
+      token,
+      used:      false,
+      expiresAt: { $gt: new Date() },
+    });
+    if (!record) {
+      return res.status(400).json(BaseResponseDTO.error('Invalid or expired reset link. Please request a new one.'));
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(newPassword, salt);
+
+    // Update password and invalidate all existing sessions via tokenVersion bump
+    await User.findByIdAndUpdate(record.user, {
+      password: hash,
+      $inc: { tokenVersion: 1 },
+    });
+
+    record.used = true;
+    await record.save();
+
+    res.status(200).json(BaseResponseDTO.success('Password reset successfully. You can now log in.'));
+  } catch (err) {
+    logger.error(`Reset password error: ${err.message}`);
+    res.status(500).json(BaseResponseDTO.error('Failed to reset password'));
+  }
+};
+
+module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices, forgotPassword, resetPassword };

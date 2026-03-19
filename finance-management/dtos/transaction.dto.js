@@ -1,14 +1,19 @@
 const { BaseRequestDTO, BaseResponseDTO } = require('./base.dto');
 
+// Strip HTML tags and null bytes from text — prevents stored XSS
+const sanitizeText = (s) => typeof s === 'string'
+  ? s.replace(/<[^>]*>/g, '').replace(/\0/g, '').trim()
+  : s;
+
 /**
  * Add Transaction Request DTO
  */
 class AddTransactionRequestDTO extends BaseRequestDTO {
     constructor(data) {
         super(data);
-        this.description = data.description;
+        this.description = sanitizeText(data.description);
         this.amount = data.amount;
-        this.category = data.category;
+        this.category = sanitizeText(data.category);
         this.type = data.type;
         this.time = data.time;
         this.transaction_timezone = data.transaction_timezone;
