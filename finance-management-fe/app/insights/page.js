@@ -301,7 +301,7 @@ function Section({ title, subtitle, tooltip, children, loading, error }) {
     <section>
       <div className="flex items-center gap-2">
         <h2 className="text-base font-bold text-gray-900">{title}</h2>
-        {tooltip && <Tooltip text={tooltip} align="left" />}
+        {tooltip && <Tooltip text={tooltip} align="left" fixed />}
       </div>
       {subtitle && <p className="text-xs text-gray-500 mt-0.5 mb-3">{subtitle}</p>}
       {!subtitle && <div className="mb-3" />}

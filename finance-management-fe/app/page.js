@@ -4,24 +4,50 @@ import LandingNav from '@/components/LandingNav';
 import LandingHeroCTA from '@/components/LandingHeroCTA';
 import ForceLightMode from '@/components/ForceLightMode';
 
+const SITE_URL = 'https://finance.lori.my.id';
+const SITE_NAME = 'Finan App';
+const TITLE = 'Finan App — Free Personal Finance Tracker & Planner';
+const DESCRIPTION =
+  'Track income and expenses, analyse spending patterns, plan budgets, calculate debt payoff, FIRE number, and tax estimates — all in one clean dashboard. Free to use.';
+
 export const metadata = {
-  title: 'Finan App — Personal Finance Tracker & Planner',
-  description:
-    'Track income and expenses, analyse spending patterns, plan budgets, calculate debt payoff, FIRE number, and tax estimates — all in one clean dashboard. Free to use.',
+  title: TITLE,
+  description: DESCRIPTION,
   keywords: [
     'personal finance', 'finance tracker', 'expense tracker', 'budget planner',
-    'FIRE calculator', 'debt payoff', 'tax estimator Indonesia', 'PPh 21',
-    'savings goal', 'net worth tracker', 'financial dashboard',
+    'income expense tracker', 'FIRE calculator', 'debt payoff calculator',
+    'tax estimator Indonesia', 'PPh 21', 'savings goal tracker',
+    'net worth tracker', 'financial dashboard', 'free finance app',
   ],
+  alternates: {
+    canonical: SITE_URL,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, 'max-image-preview': 'large' },
+  },
   openGraph: {
-    title: 'Finan App — Personal Finance Tracker & Planner',
-    description: 'Track, analyse, and plan your finances with 10 built-in financial tools.',
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: SITE_NAME,
     type: 'website',
+    locale: 'en_US',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Finan App — Personal Finance Dashboard',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Finan App — Personal Finance Tracker & Planner',
-    description: 'Track, analyse, and plan your finances with 10 built-in financial tools.',
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ['/og-image.png'],
   },
 };
 
@@ -176,10 +202,38 @@ function LandingFooter() {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: SITE_NAME,
+  url: SITE_URL,
+  description: DESCRIPTION,
+  applicationCategory: 'FinanceApplication',
+  operatingSystem: 'All',
+  browserRequirements: 'Requires JavaScript',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
+  featureList: [
+    'Income & expense tracking',
+    'Monthly & yearly analytics',
+    'Budget planning tools',
+    'FIRE calculator',
+    'Debt payoff calculator',
+    'PPh 21 tax estimator',
+    'Anomaly detection',
+    'CSV import & export',
+    'Google OAuth',
+    'Dark mode',
+  ],
+};
+
 export default function LandingPage() {
   return (
     <>
       <ForceLightMode />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="bg-white overflow-x-hidden">
 
         {/* ── Sticky nav ── */}

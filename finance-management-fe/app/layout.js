@@ -6,7 +6,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 export const metadata = {
   title: 'Finan App — Personal Finance Tracker & Planner',
   description: 'Track income and expenses, analyse spending patterns, plan budgets, calculate debt payoff, FIRE number, and tax estimates. Free personal finance dashboard.',
-  metadataBase: new URL('https://finan-app.vercel.app'),
+  metadataBase: new URL('https://finance.lori.my.id'),
 };
 
 export default function RootLayout({ children }) {
