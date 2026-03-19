@@ -11,6 +11,10 @@ const authHeaders = () => ({
 });
 
 const handleResponse = async (res) => {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Server error (${res.status}) — expected JSON but got ${contentType || 'unknown content type'}. Check that the API is reachable.`);
+  }
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.message || `Request failed: ${res.status}`);
