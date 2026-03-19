@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getAnalytics } from '@/lib/api';
@@ -20,7 +21,7 @@ const PIE_COLORS    = [
 ];
 
 // ─── "So What?" insight ───────────────────────────────────────────────────────
-function SoWhatInsight({ categories }) {
+function SoWhatInsight({ categories, onCategoryClick }) {
   if (!categories?.length) return null;
   const grandTotal = categories.reduce((s, c) => s + c.total, 0);
   if (!grandTotal) return null;
@@ -62,7 +63,11 @@ function SoWhatInsight({ categories }) {
         <div className="border-t border-amber-200 pt-2.5">
           <p className="text-xs text-amber-600 font-medium mb-0.5">Suggestion</p>
           <p className="text-sm text-gray-800">
-            Cut <span className="font-semibold capitalize">{topProblem.category}</span> by 20%
+            Cut{' '}
+            <button
+              onClick={() => onCategoryClick?.(topProblem.category)}
+              className="font-semibold capitalize underline decoration-dotted hover:text-indigo-700 transition-colors"
+            >{topProblem.category}</button>{' '}by 20%
             {' → '}
             save <span className="font-semibold text-emerald-700">{formatIDR(savingIfReduce20)}</span>/month
           </p>
@@ -88,7 +93,7 @@ function DeltaBadge({ delta }) {
 }
 
 // ─── Category section ─────────────────────────────────────────────────────────
-function CategorySection({ categories, showAvg, compareMode, compCategories }) {
+function CategorySection({ categories, showAvg, compareMode, compCategories, onCategoryClick }) {
   if (!categories?.length) {
     return (
       <div className="text-center py-10 text-gray-400 text-sm">
@@ -169,7 +174,13 @@ function CategorySection({ categories, showAvg, compareMode, compCategories }) {
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                        <span className="font-medium text-gray-700 capitalize">{c.category}</span>
+                        <button
+                          onClick={() => onCategoryClick?.(c.category)}
+                          className="font-medium text-gray-700 capitalize hover:text-indigo-600 hover:underline decoration-dotted transition-colors text-left"
+                          title="View transactions in this category"
+                        >
+                          {c.category}
+                        </button>
                       </div>
                     </td>
                     <td className="py-2 text-right text-rose-600">{formatIDR(c.total)}</td>
@@ -200,6 +211,7 @@ function CategorySection({ categories, showAvg, compareMode, compCategories }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
+  const router = useRouter();
   const now = new Date();
   const [tab,   setTab]   = useState('Monthly');
   const [year,  setYear]  = useState(now.getFullYear());
@@ -269,6 +281,14 @@ export default function AnalyticsPage() {
 
   // For 'average' mode, compCategories come from the yearly fetch
   const compCategories = compareMode === 'none' ? null : compData?.categories ?? null;
+
+  // Navigate to dashboard filtered by category + current month
+  const handleCategoryClick = (cat) => {
+    const monthParam = tab === 'Monthly'
+      ? `${year}-${String(month).padStart(2, '0')}`
+      : `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    router.push(`/?category=${encodeURIComponent(cat)}&month=${monthParam}`);
+  };
 
   return (
     <AuthGuard>
@@ -386,7 +406,7 @@ export default function AnalyticsPage() {
 
                   {/* "So What?" insight — only when there's expense data */}
                   {data?.categories?.length > 0 && (
-                    <SoWhatInsight categories={data.categories} />
+                    <SoWhatInsight categories={data.categories} onCategoryClick={handleCategoryClick} />
                   )}
 
                   {/* Comparison toolbar */}
@@ -431,6 +451,7 @@ export default function AnalyticsPage() {
                     showAvg={false}
                     compareMode={compareMode}
                     compCategories={compCategories}
+                    onCategoryClick={handleCategoryClick}
                   />
                 </div>
               )}
@@ -501,6 +522,7 @@ export default function AnalyticsPage() {
                     showAvg={true}
                     compareMode="none"
                     compCategories={null}
+                    onCategoryClick={handleCategoryClick}
                   />
                 </div>
               )}

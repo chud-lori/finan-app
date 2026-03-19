@@ -48,7 +48,7 @@ export const login = (identifier, password) =>
 export const getTransactions = (params = {}) => {
   const qs = new URLSearchParams();
   if (params.month)    qs.set('month',    params.month);
-  if (params.category) qs.set('category', params.category);
+  if (params.category) qs.set('category', params.category.toLowerCase());
   if (params.search)   qs.set('search',   params.search);
   if (params.sortBy)   qs.set('sortBy',   params.sortBy);
   if (params.order)    qs.set('order',    params.order);

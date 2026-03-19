@@ -109,10 +109,20 @@ export default function DashboardPage() {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
   });
-  const [search, setSearch]   = useState('');
+  const [search, setSearch]         = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [sortBy, setSortBy]   = useState('time');
   const [order, setOrder]     = useState('desc');
   const [page, setPage]       = useState(1);
+
+  // Bootstrap from URL params (e.g. navigated here from Analytics)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cat = params.get('category');
+    const mo  = params.get('month');
+    if (cat) setCategoryFilter(decodeURIComponent(cat));
+    if (mo && /^\d{4}-\d{2}$/.test(mo)) setMonth(mo);
+  }, []);
 
   // Debounce search input
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -132,14 +142,14 @@ export default function DashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await getTransactions({ month, search: debouncedSearch, sortBy, order, page, limit: LIMIT });
+      const res = await getTransactions({ month, search: debouncedSearch, sortBy, order, page, limit: LIMIT, category: categoryFilter || undefined });
       setData(res.data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [month, debouncedSearch, sortBy, order, page]);
+  }, [month, debouncedSearch, sortBy, order, page, categoryFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -204,6 +214,21 @@ export default function DashboardPage() {
               </select>
             </div>
 
+            {/* Active category filter badge */}
+            {categoryFilter && (
+              <div className="flex items-center gap-2 px-5 py-2 border-b border-gray-100 bg-indigo-50/60">
+                <span className="text-xs text-indigo-600 font-medium">Filtered by category:</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+                  {toTitleCase(categoryFilter)}
+                  <button
+                    onClick={() => { setCategoryFilter(''); setPage(1); }}
+                    className="ml-0.5 text-indigo-400 hover:text-indigo-600"
+                    title="Clear filter"
+                  >✕</button>
+                </span>
+              </div>
+            )}
+
             {/* Search + sort toolbar */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50/50">
               {/* Search */}
@@ -266,7 +291,17 @@ export default function DashboardPage() {
                         <td className="px-5 py-3 text-gray-400">{(page - 1) * LIMIT + i + 1}</td>
                         <td className="px-5 py-3 font-medium text-gray-900 max-w-xs truncate">{t.description}</td>
                         <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
-                          <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md text-xs">{toTitleCase(t.category)}</span>
+                          <button
+                            onClick={() => { setCategoryFilter(t.category); setPage(1); }}
+                            className={`px-2 py-0.5 rounded-md text-xs transition-colors hover:bg-indigo-100 hover:text-indigo-700 ${
+                              categoryFilter === t.category
+                                ? 'bg-indigo-100 text-indigo-700 font-medium'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}
+                            title="Filter by this category"
+                          >
+                            {toTitleCase(t.category)}
+                          </button>
                         </td>
                         <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatIDR(t.amount)}</td>
                         <td className="px-5 py-3"><TypeBadge type={t.type} /></td>
