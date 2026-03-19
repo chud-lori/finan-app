@@ -204,7 +204,7 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-100">
               {categories.map((c, i) => {
                 const share = grandTotal > 0 ? Math.round((c.total / grandTotal) * 100) : 0;
                 const delta = getDelta(c);
@@ -215,7 +215,7 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                         <button
                           onClick={() => onCategoryClick?.(c.category)}
-                          className="font-medium text-gray-700 dark:text-gray-200 capitalize hover:text-teal-600 dark:hover:text-teal-400 hover:underline decoration-dotted transition-colors text-left"
+                          className="font-medium text-gray-700 capitalize hover:text-teal-600 hover:underline decoration-dotted transition-colors text-left"
                           title="View transactions in this category"
                         >
                           {c.category}
@@ -537,7 +537,7 @@ export default function AnalyticsPage() {
                             <th className="py-2 text-right font-medium text-teal-600">Net</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
+                        <tbody className="divide-y divide-gray-100">
                           {monthlyBars.map(m => {
                             const net     = m.Income - m.Expense;
                             const hasData = m.Income > 0 || m.Expense > 0;

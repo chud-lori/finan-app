@@ -222,9 +222,9 @@ function ExplainCard({ data }) {
         ))}
       </div>
 
-      <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-        <p className="text-xs text-gray-400 dark:text-gray-500">Total this month</p>
-        <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{formatIDR(data.totalOutcome)}</p>
+      <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between">
+        <p className="text-xs text-gray-400">Total this month</p>
+        <p className="text-sm font-bold text-gray-700">{formatIDR(data.totalOutcome)}</p>
       </div>
     </div>
   );
@@ -261,22 +261,24 @@ function AnomalyList({ data }) {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
       {data.anomalies.map((a) => (
-        <div key={String(a.id)} className="p-4 hover:bg-gray-50 transition-colors">
-          <div className="flex items-start justify-between gap-2">
+        <div key={String(a.id)} className="p-4 sm:p-5 hover:bg-gray-50 transition-colors">
+          <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 break-words">{a.description}</p>
+              <p className="text-sm font-semibold text-gray-900 break-words leading-snug">{a.description}</p>
               <p className="text-xs text-gray-400 mt-0.5 capitalize">{a.category}</p>
             </div>
-            <p className="text-sm font-bold text-gray-900 flex-shrink-0 whitespace-nowrap tabular-nums">{formatIDR(a.amount)}</p>
+            <p className="text-sm font-bold text-gray-900 shrink-0 tabular-nums whitespace-nowrap">{formatIDR(a.amount)}</p>
           </div>
           <div className="flex flex-wrap gap-1.5 mt-2.5">
             {a.flags.map((f, i) => <AnomalyBadge key={i} flag={f} />)}
           </div>
-          {a.flags.map((f, i) => (
-            <p key={i} className="text-xs text-gray-500 mt-1.5 leading-relaxed">{f.message}</p>
-          ))}
+          <div className="mt-1.5 space-y-0.5">
+            {a.flags.map((f, i) => (
+              <p key={i} className="text-xs text-gray-500 leading-relaxed">{f.message}</p>
+            ))}
+          </div>
         </div>
       ))}
     </div>

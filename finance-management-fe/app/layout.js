@@ -1,6 +1,7 @@
 import "./globals.css";
 import GoogleProvider from "@/components/GoogleProvider";
 import { ThemeProvider } from "@/components/ThemeContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export const metadata = {
   title: 'Finan App — Personal Finance Tracker & Planner',
@@ -29,9 +30,11 @@ export default function RootLayout({ children }) {
       <body className="bg-gray-50 min-h-screen antialiased flex flex-col">
         <ThemeProvider>
           <GoogleProvider>
-            <div className="flex flex-col min-h-screen">
-              {children}
-            </div>
+            <ErrorBoundary>
+              <div className="flex flex-col min-h-screen">
+                {children}
+              </div>
+            </ErrorBoundary>
           </GoogleProvider>
         </ThemeProvider>
       </body>

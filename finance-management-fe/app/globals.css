@@ -26,8 +26,8 @@ body {
 .dark .bg-gray-200         { background-color: #475569; }
 .dark .min-h-screen        { background-color: #0f172a; }
 
-/* Hover backgrounds */
-.dark .hover\:bg-gray-50:hover   { background-color: #1e293b; }
+/* Hover backgrounds — slightly lighter than the bg-white (#1e293b) container so the effect is visible */
+.dark .hover\:bg-gray-50:hover   { background-color: #253348; }
 .dark .hover\:bg-gray-100:hover  { background-color: #334155; }
 
 /* Text colours */

@@ -158,11 +158,13 @@ function LandingFooter() {
 
       {/* Bottom bar */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <p className="text-xs text-gray-500">
-          © {new Date().getFullYear()} Finan App. Personal finance tracker.
-        </p>
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <span>© {new Date().getFullYear()} Finan App</span>
+          <Link href="/privacy" className="hover:text-teal-400 transition-colors">Privacy Policy</Link>
+          <Link href="/terms"   className="hover:text-teal-400 transition-colors">Terms</Link>
+        </div>
         <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span>Built with Hehe · Built by</span>
+          <span>Built with Next.js + Tailwind · Built by</span>
           <a href="https://profile.lori.my.id/" target="_blank" rel="noopener noreferrer"
             className="text-teal-400 font-semibold hover:text-teal-300 transition-colors">
             Lori
