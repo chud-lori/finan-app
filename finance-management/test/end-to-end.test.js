@@ -216,10 +216,7 @@ describe('End-to-End Integration Tests', () => {
                 userIds.push(loginRes.body.data.user.id);
             }
 
-            // Seed categories
-            await Category.create({ name: 'Food & Dining' });
-
-            // User 1 creates a transaction
+            // User 1 creates a transaction (category auto-created per user)
             const transaction1 = {
                 description: 'User 1 transaction',
                 amount: 100000,

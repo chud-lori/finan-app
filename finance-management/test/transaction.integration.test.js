@@ -48,10 +48,10 @@ describe('Transaction Integration Tests', () => {
         authToken = loginRes.body.data.token;
         userId = loginRes.body.data.user.id;
 
-        // Seed categories
-        await Category.create({ name: 'Food & Dining' });
-        await Category.create({ name: 'Transportation' });
-        await Category.create({ name: 'Entertainment' });
+        // Seed categories for this user
+        await Category.create({ user: userId, name: 'Food & Dining' });
+        await Category.create({ user: userId, name: 'Transportation' });
+        await Category.create({ user: userId, name: 'Entertainment' });
     });
 
     describe('POST /api/transaction', () => {

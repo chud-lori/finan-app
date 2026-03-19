@@ -210,10 +210,12 @@ const deleteAccount = async (req, res) => {
     try {
         const userId = req.user.id;
         const Transaction = require('../models/transaction.model');
+        const Category = require('../models/category.model');
 
         await Promise.all([
             Transaction.deleteMany({ user: userId }),
             Balance.deleteOne({ user: userId }),
+            Category.deleteMany({ user: userId }),
         ]);
         await User.deleteOne({ _id: userId });
 

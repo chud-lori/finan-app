@@ -32,14 +32,14 @@ const addTransaction = async (req, res, next) => {
             return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
         }
 
-        // Find or create the category for both income and expense
+        // Find or create the category scoped to this user
         const nameLower = (transactionDTO.category || '').trim().toLowerCase();
         if (!nameLower) {
             return res.status(400).json(BaseResponseDTO.error('Category is required'));
         }
         const category = await Category.findOneAndUpdate(
-            { name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') } },
-            { $setOnInsert: { name: nameLower } },
+            { user: user.id, name: { $regex: new RegExp(`^${escapeRegex(nameLower)}$`, 'i') } },
+            { $setOnInsert: { user: user.id, name: nameLower } },
             { upsert: true, new: true }
         );
         const resolvedCategory = category.name;
@@ -346,11 +346,12 @@ const seedCategory = async (req, res, next) => {
             typeof c === 'string' ? { name: c, type: 'expense' } : { name: c.name, type: c.type || 'expense' }
         );
 
-        // Upsert each category — preserves auto-created ones from CSV imports
+        const userId = req.user.id;
+        // Upsert each category scoped to this user
         await Promise.all(categories.map(c =>
             Category.findOneAndUpdate(
-                { name: { $regex: new RegExp(`^${escapeRegex(c.name)}$`, 'i') } },
-                { $set: { type: c.type }, $setOnInsert: { name: c.name } },
+                { user: userId, name: { $regex: new RegExp(`^${escapeRegex(c.name)}$`, 'i') } },
+                { $set: { type: c.type }, $setOnInsert: { user: userId, name: c.name } },
                 { upsert: true }
             )
         ));
@@ -371,16 +372,14 @@ const getCategory = async (req, res, next) => {
         const search = req.query.search || '';
         const typeFilter = req.query.type; // 'income' | 'expense' | undefined
 
-        const query = {};
+        const query = { user: req.user.id };
         if (search) {
             query.name = { $regex: `^${escapeRegex(search)}`, $options: 'i' };
         }
         if (typeFilter === 'income' || typeFilter === 'expense') {
-            // Include exact type match + docs without a type (legacy auto-created)
             query.$or = [{ type: typeFilter }, { type: { $exists: false } }];
         }
 
-        // Fetch categories from the Categories model
         const categories = await Category.find(query).select('name -_id').lean();
 
         // Extract just the 'name' values into an array
@@ -472,16 +471,11 @@ const importCsv = async (req, res, next) => {
 
                 const categoryLower = categoryRaw.trim().toLowerCase();
                 const safeCategory = escapeRegex(categoryLower);
-                let categoryDoc = await Category.findOne({
-                    name: { $regex: new RegExp(`^${safeCategory}$`, 'i') }
-                });
-                if (!categoryDoc) {
-                    categoryDoc = await Category.findOneAndUpdate(
-                        { name: { $regex: new RegExp(`^${safeCategory}$`, 'i') } },
-                        { $setOnInsert: { name: categoryLower, type: type === 'income' ? 'income' : 'expense' } },
-                        { upsert: true, new: true }
-                    );
-                }
+                const categoryDoc = await Category.findOneAndUpdate(
+                    { user: req.user.id, name: { $regex: new RegExp(`^${safeCategory}$`, 'i') } },
+                    { $setOnInsert: { user: req.user.id, name: categoryLower, type: type === 'income' ? 'income' : 'expense' } },
+                    { upsert: true, new: true }
+                );
 
                 let transactionTime = null;
                 for (const fmt of TIME_FORMATS_IMPORT) {
