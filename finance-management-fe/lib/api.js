@@ -45,8 +45,13 @@ export const login = (identifier, password) =>
 
 export const getTransactions = (params = {}) => {
   const qs = new URLSearchParams();
-  if (params.month) qs.set('month', params.month);
+  if (params.month)    qs.set('month',    params.month);
   if (params.category) qs.set('category', params.category);
+  if (params.search)   qs.set('search',   params.search);
+  if (params.sortBy)   qs.set('sortBy',   params.sortBy);
+  if (params.order)    qs.set('order',    params.order);
+  if (params.page)     qs.set('page',     params.page);
+  if (params.limit)    qs.set('limit',    params.limit);
   const query = qs.toString() ? `?${qs}` : '';
   return fetch(`${BASE_URL}/api/transaction${query}`, {
     headers: authHeaders(),

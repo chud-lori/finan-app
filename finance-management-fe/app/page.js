@@ -1,15 +1,13 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getTransactions, deleteTransaction } from '@/lib/api';
 import { formatIDR, formatDate, toTitleCase } from '@/lib/format';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 
-const MONTHS = [
-  '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
+const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const LIMIT = 20;
 
 function buildMonthOptions() {
   const now = new Date();
@@ -22,15 +20,111 @@ function buildMonthOptions() {
   return options;
 }
 
+// ─── Sort button ─────────────────────────────────────────────────────────────
+function SortButton({ field, label, current, order, onClick }) {
+  const active = current === field;
+  return (
+    <button
+      onClick={() => onClick(field)}
+      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+        active
+          ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+          : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700'
+      }`}
+    >
+      {label}
+      <span className={`transition-transform ${active ? 'opacity-100' : 'opacity-30'}`}>
+        {active && order === 'asc' ? '↑' : '↓'}
+      </span>
+    </button>
+  );
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+function Pagination({ page, totalPages, total, limit, onPage }) {
+  if (totalPages <= 1) return null;
+
+  const start = (page - 1) * limit + 1;
+  const end   = Math.min(page * limit, total);
+
+  // Build page numbers: always show first, last, current ±1, with ellipsis
+  const pages = new Set([1, totalPages, page, page - 1, page + 1].filter(p => p >= 1 && p <= totalPages));
+  const sorted = [...pages].sort((a, b) => a - b);
+  const withGaps = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) withGaps.push('…');
+    withGaps.push(sorted[i]);
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3 border-t border-gray-100">
+      <p className="text-xs text-gray-400">
+        Showing {start}–{end} of {total} transactions
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPage(page - 1)}
+          disabled={page === 1}
+          className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          ‹ Prev
+        </button>
+        {withGaps.map((p, i) =>
+          p === '…' ? (
+            <span key={`gap-${i}`} className="px-1.5 text-gray-400 text-xs">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onPage(p)}
+              className={`w-8 h-8 rounded-lg border text-xs font-medium transition-colors ${
+                p === page
+                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {p}
+            </button>
+          )
+        )}
+        <button
+          onClick={() => onPage(page + 1)}
+          disabled={page === totalPages}
+          className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          Next ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const [data, setData] = useState({ transactions: [], balance: { amount: 0 } });
+  const [data, setData]       = useState({ transactions: [], balance: { amount: 0 }, total: 0, page: 1, totalPages: 1 });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError]     = useState('');
+  const [deleting, setDeleting] = useState(null);
+
   const [month, setMonth] = useState(() => {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
   });
-  const [deleting, setDeleting] = useState(null);
+  const [search, setSearch]   = useState('');
+  const [sortBy, setSortBy]   = useState('time');
+  const [order, setOrder]     = useState('desc');
+  const [page, setPage]       = useState(1);
+
+  // Debounce search input
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchTimer = useRef(null);
+  const handleSearchChange = (val) => {
+    setSearch(val);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setDebouncedSearch(val);
+      setPage(1);
+    }, 350);
+  };
 
   const monthOptions = buildMonthOptions();
 
@@ -38,16 +132,28 @@ export default function DashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await getTransactions({ month });
+      const res = await getTransactions({ month, search: debouncedSearch, sortBy, order, page, limit: LIMIT });
       setData(res.data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [month, debouncedSearch, sortBy, order, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setOrder(o => o === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortBy(field);
+      setOrder('desc');
+    }
+    setPage(1);
+  };
+
+  const handleMonthChange = (val) => { setMonth(val); setPage(1); };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this transaction?')) return;
@@ -62,8 +168,8 @@ export default function DashboardPage() {
     }
   };
 
-  const txns = data.transactions || [];
-  const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const txns    = data.transactions || [];
+  const income  = txns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expense = txns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
   return (
@@ -72,8 +178,8 @@ export default function DashboardPage() {
         <Navbar />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
 
-          {/* Stats row */}
-          {loading ? <SkeletonStatCards /> : (
+          {/* Stats */}
+          {loading && !data.transactions.length ? <SkeletonStatCards /> : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               <StatCard label="Balance"            value={formatIDR(data.balance?.amount ?? 0)} color="indigo"  icon="💰" />
               <StatCard label="Income this month"  value={formatIDR(income)}                    color="emerald" icon="📈" />
@@ -83,12 +189,13 @@ export default function DashboardPage() {
 
           {/* Table card */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Header */}
+
+            {/* Header row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900">Transactions</h2>
+              <h2 className="font-semibold text-gray-900 shrink-0">Transactions</h2>
               <select
                 value={month}
-                onChange={(e) => setMonth(e.target.value)}
+                onChange={(e) => handleMonthChange(e.target.value)}
                 className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
               >
                 {monthOptions.map(o => (
@@ -97,16 +204,47 @@ export default function DashboardPage() {
               </select>
             </div>
 
+            {/* Search + sort toolbar */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+              {/* Search */}
+              <div className="relative flex-1 max-w-xs">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder="Search description…"
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                />
+                {search && (
+                  <button
+                    onClick={() => handleSearchChange('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Sort */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-xs text-gray-400 mr-0.5">Sort:</span>
+                <SortButton field="time"        label="Date"        current={sortBy} order={order} onClick={handleSort} />
+                <SortButton field="amount"      label="Amount"      current={sortBy} order={order} onClick={handleSort} />
+                <SortButton field="description" label="Description" current={sortBy} order={order} onClick={handleSort} />
+              </div>
+            </div>
+
             {error && (
               <div className="m-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
             )}
 
             {loading ? (
-              <SkeletonTableRows rows={6} />
+              <SkeletonTableRows rows={LIMIT} />
             ) : txns.length === 0 ? (
               <div className="text-center py-16 text-gray-400">
-                <div className="text-4xl mb-3">📭</div>
-                <p className="text-sm">No transactions for this month</p>
+                <div className="text-4xl mb-3">{search ? '🔍' : '📭'}</div>
+                <p className="text-sm">{search ? `No results for "${search}"` : 'No transactions for this month'}</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -125,17 +263,13 @@ export default function DashboardPage() {
                   <tbody className="divide-y divide-gray-100">
                     {txns.map((t, i) => (
                       <tr key={t.id || t._id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-5 py-3 text-gray-400">{i + 1}</td>
+                        <td className="px-5 py-3 text-gray-400">{(page - 1) * LIMIT + i + 1}</td>
                         <td className="px-5 py-3 font-medium text-gray-900 max-w-xs truncate">{t.description}</td>
                         <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
                           <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md text-xs">{toTitleCase(t.category)}</span>
                         </td>
-                        <td className="px-5 py-3 text-right font-semibold text-gray-800">
-                          {formatIDR(t.amount)}
-                        </td>
-                        <td className="px-5 py-3">
-                          <TypeBadge type={t.type} />
-                        </td>
+                        <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatIDR(t.amount)}</td>
+                        <td className="px-5 py-3"><TypeBadge type={t.type} /></td>
                         <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
                           {formatDate(t.time, t.transaction_timezone)}
                         </td>
@@ -161,6 +295,14 @@ export default function DashboardPage() {
                 </table>
               </div>
             )}
+
+            <Pagination
+              page={data.page}
+              totalPages={data.totalPages}
+              total={data.total}
+              limit={LIMIT}
+              onPage={setPage}
+            />
           </div>
         </main>
       </div>
@@ -169,11 +311,6 @@ export default function DashboardPage() {
 }
 
 function StatCard({ label, value, color, icon }) {
-  const colors = {
-    indigo: 'from-indigo-500 to-indigo-600',
-    emerald: 'from-emerald-500 to-emerald-600',
-    rose: 'from-rose-500 to-rose-600',
-  };
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
       <div className="flex items-center justify-between mb-3">
