@@ -29,7 +29,7 @@ const transactionValidatorRules = () => {
         body('description').notEmpty().withMessage('Invalid value'),
         body('category').notEmpty().withMessage('Invalid value'),
         body('amount').isNumeric().withMessage('Invalid value'),
-        body('type').isIn(['income', 'outcome']).withMessage('Invalid value'),
+        body('type').isIn(['income', 'expense']).withMessage('Invalid value'),
         // body('time').isDate().withMessage('Invalid value'),
     ]
 }

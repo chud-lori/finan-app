@@ -26,8 +26,8 @@ const TransactionSchema = new Schema({
     },
     type: {
         type: String,
-        enum: ['income', 'outcome'],
-        default: 'outcome'
+        enum: ['income', 'expense'],
+        default: 'expense'
     },
     // time: {
     //     type: Date,

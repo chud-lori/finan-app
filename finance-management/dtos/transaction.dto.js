@@ -26,8 +26,8 @@ class AddTransactionRequestDTO extends BaseRequestDTO {
         if (this.type !== 'income' && (!this.category || typeof this.category !== 'string')) {
             errors.push('Category is required and must be a string');
         }
-        if (!this.type || !['income', 'outcome'].includes(this.type)) {
-            errors.push('Type is required and must be either "income" or "outcome"');
+        if (!this.type || !['income', 'expense'].includes(this.type)) {
+            errors.push('Type is required and must be either "income" or "expense"');
         }
         if (!this.time || typeof this.time !== 'string') {
             errors.push('Time is required and must be a string');
@@ -95,9 +95,9 @@ class GetTransactionsResponseDTO {
  * Transaction Summary Response DTO
  */
 class TransactionSummaryResponseDTO {
-    constructor(income, outcome, transactions) {
+    constructor(income, expense, transactions) {
         this.income = income;
-        this.outcome = outcome;
+        this.expense = expense;
         this.transactions = transactions.map(t => new TransactionResponseDTO(t));
     }
 }
