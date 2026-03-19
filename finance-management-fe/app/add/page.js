@@ -297,7 +297,7 @@ export default function AddPage() {
       };
       await addTransaction(payload);
       setSuccess(true);
-      setTimeout(() => router.push('/'), 1200);
+      setTimeout(() => router.push('/dashboard'), 1200);
     } catch (err) {
       setError(err.message || 'Failed to add transaction');
     } finally {
