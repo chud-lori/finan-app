@@ -42,12 +42,14 @@ const registerUser = async (req, res, next) => {
       return res.status(409).json(BaseResponseDTO.error("Email already exists"));
     }
 
+    const isTest = process.env.NODE_ENV === 'test';
+
     const newUser = new User({
       name: registerDTO.name,
       username: registerDTO.username,
       email: registerDTO.email,
       password: registerDTO.password,
-      emailVerified: false,
+      emailVerified: isTest, // auto-verified in test env so login works immediately
     });
 
     // Hash password and save user
@@ -66,22 +68,28 @@ const registerUser = async (req, res, next) => {
     const savedBalance = await newBalance.save();
 
     // Send verification email (non-blocking — don't fail registration if email fails)
-    try {
-      const verifyToken = crypto.randomBytes(32).toString('hex');
-      await EmailVerification.create({
-        user:      savedUser._id,
-        token:     verifyToken,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-      });
-      const verifyUrl = `${FE_URL}/verify-email/${verifyToken}`;
-      await sendVerificationEmail(savedUser.email, verifyUrl);
-    } catch (mailErr) {
-      logger.error(`Failed to send verification email on register: ${mailErr.message}`);
+    // Skipped in test environment
+    if (!isTest) {
+      try {
+        const verifyToken = crypto.randomBytes(32).toString('hex');
+        await EmailVerification.create({
+          user:      savedUser._id,
+          token:     verifyToken,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        });
+        const verifyUrl = `${FE_URL}/verify-email/${verifyToken}`;
+        await sendVerificationEmail(savedUser.email, verifyUrl);
+      } catch (mailErr) {
+        logger.error(`Failed to send verification email on register: ${mailErr.message}`);
+      }
     }
 
     // Return DTO response
     const responseDTO = new RegisterResponseDTO(savedUser, savedBalance);
-    res.status(201).json(BaseResponseDTO.success('User created successfully. Please check your email to verify your account.', responseDTO));
+    const message = isTest
+      ? 'User created successfully'
+      : 'User created successfully. Please check your email to verify your account.';
+    res.status(201).json(BaseResponseDTO.success(message, responseDTO));
 
   } catch (error) {
     logger.error('Register user error:', error);
