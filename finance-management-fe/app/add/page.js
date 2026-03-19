@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
@@ -7,68 +7,96 @@ import DateTimePicker from '@/components/DateTimePicker';
 import { addTransaction, getCategories, getCategorySuggestions, getTransactions } from '@/lib/api';
 import { toTitleCase, formatIDR, formatDate } from '@/lib/format';
 
-// ─── Category picker ─────────────────────────────────────────────────────────
-function CategoryCombobox({ value, onChange, categories, suggestions = [], disabled }) {
+// ─── Category picker — click-to-open dropdown ─────────────────────────────────
+function CategoryCombobox({ value, onChange, categories }) {
+  const [open,  setOpen]  = useState(false);
   const [query, setQuery] = useState('');
+  const containerRef      = useRef(null);
+  const inputRef          = useRef(null);
 
+  // Close on outside click
   useEffect(() => {
-    if (!value) setQuery('');
-  }, [value]);
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const filtered   = categories.filter(c => c.toLowerCase().includes(query.toLowerCase()));
   const trimmed    = query.trim().toLowerCase();
   const exactMatch = categories.some(c => c.toLowerCase() === trimmed);
   const showCreate = trimmed && !exactMatch;
 
-  const visibleSuggestions = !query && suggestions.length > 0
-    ? suggestions.filter(s => s !== value)
-    : [];
-
   const select = (cat) => {
     onChange(cat.toLowerCase());
+    setOpen(false);
     setQuery('');
   };
 
+  const clear = (e) => {
+    e.stopPropagation();
+    onChange('');
+    setQuery('');
+    setOpen(false);
+  };
+
+  const openDropdown = () => {
+    setOpen(true);
+    // autofocus the search input after paint
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   return (
-    <div>
-      {!disabled && visibleSuggestions.length > 0 && (
-        <div className="mb-2">
-          <p className="text-xs text-gray-400 mb-1.5">✨ Suggested for now</p>
-          <div className="flex flex-wrap gap-1.5">
-            {visibleSuggestions.map(s => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => select(s)}
-                className="px-3 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors"
-              >
-                {toTitleCase(s)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <input
-        type="text"
-        disabled={disabled}
-        placeholder={disabled ? 'Select a type first' : 'Filter categories…'}
-        value={query}
-        autoComplete="off"
-        onChange={(e) => setQuery(e.target.value)}
-        className={`${inputCls} disabled:opacity-50 disabled:cursor-not-allowed mb-2`}
-      />
-
-      {!disabled && (
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div ref={containerRef} className="relative">
+      {/* Trigger button */}
+      <button
+        type="button"
+        onClick={() => open ? setOpen(false) : openDropdown()}
+        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white text-sm hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+      >
+        <span className={value ? 'text-gray-900 font-medium capitalize' : 'text-gray-400'}>
+          {value ? toTitleCase(value) : 'Select or create a category…'}
+        </span>
+        <span className="flex items-center gap-1.5 shrink-0 ml-2">
           {value && (
-            <div className="px-3.5 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
-              <span className="text-xs text-indigo-500 font-medium">Selected</span>
-              <span className="text-sm font-semibold text-indigo-700">{toTitleCase(value)}</span>
-            </div>
+            <span
+              onClick={clear}
+              className="text-gray-300 hover:text-gray-500 text-xs px-1 rounded transition-colors"
+              title="Clear"
+            >
+              ✕
+            </span>
           )}
+          <svg
+            className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </span>
+      </button>
 
-          <ul className="max-h-44 overflow-y-auto py-1">
+      {/* Dropdown panel */}
+      {open && (
+        <div className="absolute z-20 top-full mt-1.5 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          {/* Search */}
+          <div className="p-2 border-b border-gray-100">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Search or type to create…"
+              value={query}
+              autoComplete="off"
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            />
+          </div>
+
+          <ul className="max-h-52 overflow-y-auto py-1">
             {filtered.map(c => (
               <li
                 key={c}
@@ -79,26 +107,27 @@ function CategoryCombobox({ value, onChange, categories, suggestions = [], disab
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <span className="flex items-center gap-2">
-                  {suggestions.includes(c) && !query && (
-                    <span className="text-xs text-indigo-300" title="Suggested">✨</span>
-                  )}
-                  {toTitleCase(c)}
-                </span>
-                {value === c.toLowerCase() && <span className="text-indigo-400 text-xs">✓</span>}
+                <span className="capitalize">{toTitleCase(c)}</span>
+                {value === c.toLowerCase() && (
+                  <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
               </li>
             ))}
 
             {filtered.length === 0 && !showCreate && (
-              <li className="px-3.5 py-3 text-sm text-gray-400 text-center">No categories yet</li>
+              <li className="px-3.5 py-4 text-sm text-gray-400 text-center">
+                No categories yet — type to create one
+              </li>
             )}
 
             {showCreate && (
               <li
                 onClick={() => select(trimmed)}
-                className="px-3.5 py-2 text-sm cursor-pointer text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100"
+                className="px-3.5 py-2.5 text-sm cursor-pointer text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100"
               >
-                <span className="text-indigo-400 font-bold">+</span>
+                <span className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 font-bold text-xs shrink-0">+</span>
                 Create &ldquo;{toTitleCase(trimmed)}&rdquo;
               </li>
             )}
@@ -330,6 +359,29 @@ export default function AddPage() {
                     <input type="hidden" name="type" value={form.type} required />
                   </Field>
 
+                  {/* Suggestions — shown immediately after type selection */}
+                  {form.type && suggestions.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1.5">✨ Suggested</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {suggestions.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setForm(f => ({ ...f, category: s }))}
+                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              form.category === s
+                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                            }`}
+                          >
+                            {toTitleCase(s)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Amount — large, prominent */}
                   <Field label="Amount (IDR)">
                     <div className="relative">
@@ -362,8 +414,6 @@ export default function AddPage() {
                         value={form.category}
                         onChange={(val) => setForm(f => ({ ...f, category: val }))}
                         categories={[...new Set([...categories, ...suggestions])]}
-                        suggestions={suggestions}
-                        disabled={false}
                       />
                     </Field>
                   )}
