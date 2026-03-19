@@ -66,7 +66,7 @@ const registerUser = async (req, res, next) => {
 
   } catch (error) {
     logger.error('Register user error:', error);
-    res.status(500).json(BaseResponseDTO.error('Failed to create user', error.message));
+    res.status(500).json(BaseResponseDTO.error('\1'));
   }
 }
 
@@ -112,10 +112,8 @@ const loginUser = async (req, res, next) => {
 
     // Sign token
     const token = jwt.sign(payload, SECRET_TOKEN, {
-      expiresIn: 31556926, // 1 year in seconds
+      expiresIn: '30d',
     });
-
-    logger.info(`Auth Login Response: ${token}`);
 
     User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
 
@@ -125,7 +123,7 @@ const loginUser = async (req, res, next) => {
 
   } catch (error) {
     logger.error('Login user error:', error);
-    res.status(500).json(BaseResponseDTO.error('Login failed', error.message));
+    res.status(500).json(BaseResponseDTO.error('\1'));
   }
 }
 
@@ -152,7 +150,7 @@ const checkAuth = (req, res, next) => {
     });
   } catch (error) {
     logger.error('Check auth error:', error);
-    res.status(500).json(BaseResponseDTO.error('Auth check failed', error.message));
+    res.status(500).json(BaseResponseDTO.error('\1'));
   }
 }
 
@@ -195,7 +193,7 @@ const verifyGoogleToken = async (req, res) => {
     const { sub: googleId, email, name } = ticket.getPayload();
     const user = await findOrCreateGoogleUser(googleId, email, name);
 
-    const token = jwt.sign({ id: user._id, name: user.name, tv: user.tokenVersion || 0 }, SECRET_TOKEN, { expiresIn: 31556926 });
+    const token = jwt.sign({ id: user._id, name: user.name, tv: user.tokenVersion || 0 }, SECRET_TOKEN, { expiresIn: '30d' });
     logger.info(`Google verify: issued token for user ${user._id}`);
 
     User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
@@ -207,7 +205,7 @@ const verifyGoogleToken = async (req, res) => {
     }));
   } catch (error) {
     logger.error(`Google verify error: ${error.message}`);
-    res.status(401).json(BaseResponseDTO.error('Google authentication failed', error.message));
+    res.status(401).json(BaseResponseDTO.error('\1'));
   }
 };
 
@@ -228,7 +226,7 @@ const deleteAccount = async (req, res) => {
         res.status(200).json(BaseResponseDTO.success('Account and all data deleted successfully'));
     } catch (error) {
         logger.error(`Delete account error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to delete account', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 };
 

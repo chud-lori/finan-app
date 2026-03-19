@@ -120,7 +120,7 @@ const addTransaction = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Add transaction ${req.user?.id} error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to create transaction', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -196,7 +196,7 @@ const getUserTransaction = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get user transaction error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get transactions', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -220,7 +220,7 @@ const getByDate = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get by date error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get transactions by date', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -230,8 +230,8 @@ const getByTimeRange = async (req, res, next) => {
         const end    = req.params.end;
         const userTz = validTz(req.query.tz);
 
-        const startDate = moment.tz(start, userTz).startOf('day').toDate();
-        const endDate   = moment.tz(end,   userTz).endOf('day').toDate();
+        const startDate = moment.tz(start, 'YYYY-MM-DD', userTz).startOf('day').toDate();
+        const endDate   = moment.tz(end,   'YYYY-MM-DD', userTz).endOf('day').toDate();
 
         const transactions = await Transaction.find({
             user: req.user.id,
@@ -251,7 +251,7 @@ const getByTimeRange = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get by time range error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get transactions by time range', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -293,7 +293,7 @@ const deleteTransaction = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Delete transaction error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to delete transaction', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -309,7 +309,7 @@ const getExpense = async (req, res, next) => {
         res.status(200).json(BaseResponseDTO.success('Total expense retrieved', { totalExpense: sum, transactions: responseDTO.transactions }));
     } catch (error) {
         logger.error(`Get expense error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get expense', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -374,7 +374,7 @@ const getRecommendation = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get recommendation error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get recommendation', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -405,7 +405,7 @@ const seedCategory = async (req, res, next) => {
 
     } catch (error) {
         logger.error("Seed category error", error);
-        res.status(500).json(BaseResponseDTO.error('Failed to seed categories', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -433,7 +433,7 @@ const getCategory = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Error fetching categories: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to fetch categories', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -489,7 +489,7 @@ const getSuggestedCategories = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get suggested categories error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get suggestions', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 }
 
@@ -648,7 +648,7 @@ const importCsv = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Import CSV error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to import CSV', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 };
 
@@ -746,7 +746,7 @@ const getAnalytics = async (req, res) => {
         res.status(200).json(analyticsResponse);
     } catch (error) {
         logger.error(`Get analytics error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get analytics', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 };
 
@@ -813,7 +813,7 @@ const getAnomalies = async (req, res) => {
         res.status(200).json(anomalyResponse);
     } catch (error) {
         logger.error(`Get anomalies error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get anomalies', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 };
 
@@ -876,7 +876,7 @@ const getExplainability = async (req, res) => {
         res.status(200).json(explainResponse);
     } catch (error) {
         logger.error(`Get explainability error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to get explainability', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 };
 
@@ -924,7 +924,7 @@ const getTimeToZero = async (req, res) => {
         res.status(200).json(ttzResponse);
     } catch (error) {
         logger.error(`Get time to zero error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('Failed to calculate time to zero', error.message));
+        res.status(500).json(BaseResponseDTO.error('\1'));
     }
 };
 

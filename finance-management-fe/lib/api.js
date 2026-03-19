@@ -2,10 +2,12 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const getToken = () => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('token');
+  try { return localStorage.getItem('token'); } catch { return null; }
 };
 
-const browserTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+const browserTz = () => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+};
 
 const authHeaders = () => ({
   Authorization: `Bearer ${getToken()}`,
@@ -22,8 +24,7 @@ const handleResponse = async (res) => {
     // Session invalidated (password change, logout-all, or tokenVersion mismatch)
     if (res.status === 401 || res.status === 403) {
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('username');
+        try { localStorage.removeItem('token'); localStorage.removeItem('username'); } catch {}
         window.location.href = '/login';
       }
     }
