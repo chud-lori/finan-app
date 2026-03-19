@@ -157,7 +157,7 @@ export default function ReportsPage() {
 
           {/* Custom range form */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-6">
-            <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 items-end">
+            <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 sm:items-end">
               <div className="flex-1">
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">From</label>
                 <input type="date" value={start} onChange={e => { setStart(e.target.value); setActive(null); }}
@@ -169,7 +169,7 @@ export default function ReportsPage() {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
               </div>
               <button type="submit" disabled={loading}
-                className="px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 whitespace-nowrap flex items-center gap-2">
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 whitespace-nowrap flex items-center justify-center gap-2">
                 {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
                 Search
               </button>
@@ -181,18 +181,18 @@ export default function ReportsPage() {
           {result && (
             <div className="space-y-5">
               {/* Summary cards */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
                   <p className="text-xs text-gray-500 mb-1">Income</p>
-                  <p className="text-lg font-bold text-emerald-600">{formatIDR(result.income)}</p>
+                  <p className="text-base sm:text-lg font-bold text-emerald-600 tabular-nums">{formatIDR(result.income)}</p>
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
                   <p className="text-xs text-gray-500 mb-1">Expense</p>
-                  <p className="text-lg font-bold text-rose-600">{formatIDR(result.expense)}</p>
+                  <p className="text-base sm:text-lg font-bold text-rose-600 tabular-nums">{formatIDR(result.expense)}</p>
                 </div>
-                <div className={`rounded-2xl border shadow-sm p-4 ${net >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                <div className={`col-span-2 sm:col-span-1 rounded-2xl border shadow-sm p-4 ${net >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
                   <p className="text-xs text-gray-500 mb-1">Net</p>
-                  <p className={`text-lg font-bold ${net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  <p className={`text-base sm:text-lg font-bold tabular-nums ${net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                     {net >= 0 ? '+' : ''}{formatIDR(net)}
                   </p>
                 </div>
