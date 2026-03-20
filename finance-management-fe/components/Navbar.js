@@ -54,7 +54,7 @@ export default function Navbar() {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+    <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
         {/* Brand */}
         <Link href="/" className="flex items-center">
@@ -71,8 +71,8 @@ export default function Navbar() {
                 href={href}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   active
-                    ? 'bg-teal-50 text-teal-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    ? 'bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
                 }`}
               >
                 <span className="text-base">{icon}</span>
@@ -98,8 +98,8 @@ export default function Navbar() {
             href="/profile"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               pathname === '/profile'
-                ? 'bg-teal-50 text-teal-700'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                ? 'bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
             }`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,7 +110,7 @@ export default function Navbar() {
           </Link>
           <button
             onClick={logout}
-            className="text-sm px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 font-medium transition-colors"
+            className="text-sm px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 font-medium transition-colors"
           >
             Log out
           </button>
@@ -120,7 +120,7 @@ export default function Navbar() {
         <div className="md:hidden flex items-center gap-1">
           <ThemeToggle />
           <button
-            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Toggle menu"
           >
@@ -146,7 +146,7 @@ export default function Navbar() {
       )}
 
       {/* Mobile dropdown */}
-      <div className={`md:hidden border-t border-gray-100 bg-white px-4 pb-4 overflow-hidden transition-all duration-250 ease-in-out relative z-30 ${mobileOpen ? 'max-h-[480px] opacity-100' : 'max-h-0 opacity-0 border-t-0'}`}>
+      <div className={`md:hidden border-t border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 pb-4 overflow-hidden transition-all duration-250 ease-in-out relative z-30 ${mobileOpen ? 'max-h-[480px] opacity-100' : 'max-h-0 opacity-0 border-t-0'}`}>
           <nav className="flex flex-col gap-1 pt-2">
             <Link
               href="/add"
@@ -166,7 +166,7 @@ export default function Navbar() {
                   href={href}
                   onClick={() => setMobileOpen(false)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    active ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-100'
+                    active ? 'bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400' : 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'
                   }`}
                 >
                   <span>{icon}</span>
@@ -178,7 +178,7 @@ export default function Navbar() {
               href="/profile"
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname === '/profile' ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-100'
+                pathname === '/profile' ? 'bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400' : 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,9 +188,9 @@ export default function Navbar() {
               Profile & Settings
             </Link>
           </nav>
-          <div className="border-t border-gray-100 mt-3 pt-3 flex items-center justify-between">
-            <span className="text-sm text-gray-500 capitalize">{username}</span>
-            <button onClick={logout} className="text-sm text-red-600 font-medium">
+          <div className="border-t border-gray-100 dark:border-slate-700 mt-3 pt-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500 dark:text-slate-400 capitalize">{username}</span>
+            <button onClick={logout} className="text-sm text-red-600 dark:text-red-400 font-medium">
               Log out
             </button>
           </div>
