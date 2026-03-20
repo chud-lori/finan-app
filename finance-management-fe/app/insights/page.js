@@ -20,12 +20,17 @@ function timeAgo(date) {
   return `${Math.floor(secs / 86400)}d ago`;
 }
 
-function RefreshButton({ generatedAt, onRefresh, loading }) {
+function RefreshButton({ generatedAt, onRefresh, loading, stale }) {
   return (
     <div className="flex items-center gap-2 shrink-0">
-      {generatedAt && (
+      {stale && (
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+          Stale
+        </span>
+      )}
+      {!stale && generatedAt?.ts && (
         <span className="text-xs text-gray-400 dark:text-slate-500 hidden sm:block">
-          {generatedAt.fromCache === false && !generatedAt.ts ? '' : `Generated ${timeAgo(generatedAt.ts)}`}
+          {`Updated ${timeAgo(generatedAt.ts)}`}
         </span>
       )}
       <button
@@ -496,15 +501,19 @@ export default function InsightsPage() {
   const [ttz,        setTtz]        = useState(null);
   const [explain,    setExplain]    = useState(null);
   const [anomaly,    setAnomaly]    = useState(null);
-  const [ml,         setMl]         = useState(null);
-  const [mlMeta,     setMlMeta]     = useState(null); // { ts, fromCache }
-  const [loading,    setLoading]    = useState({ ttz: true, explain: true, anomaly: true, ml: true });
-  const [refreshing, setRefreshing] = useState(false);
-  const [errors,     setErrors]     = useState({});
+  const [ml,           setMl]           = useState(null);
+  const [mlMeta,       setMlMeta]       = useState(null); // { ts, fromCache }
+  const [mlStale,      setMlStale]      = useState(false);
+  const [mlUnavailable, setMlUnavailable] = useState(false);
+  const [loading,      setLoading]      = useState({ ttz: true, explain: true, anomaly: true, ml: true });
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [errors,       setErrors]       = useState({});
 
   const applyMlResult = (data) => {
     setMl(data);
     setMlMeta({ ts: data.generatedAt, fromCache: data.fromCache });
+    setMlStale(!!data.stale);
+    setMlUnavailable(!!data.unavailable);
   };
 
   useEffect(() => {
@@ -549,13 +558,15 @@ export default function InsightsPage() {
   };
 
   const feedLoading = loading.ttz || loading.explain || loading.anomaly || loading.ml;
-  const mlAvailable = ml && !errors.ml;
+  // mlAvailable: we have data and it's not the empty "no data at all" shell
+  const mlAvailable = ml && !mlUnavailable;
 
   const mlHeaderRight = (
     <RefreshButton
       generatedAt={mlMeta}
       onRefresh={handleRefresh}
       loading={refreshing}
+      stale={mlStale}
     />
   );
 
@@ -583,11 +594,14 @@ export default function InsightsPage() {
                 tooltip="Uses linear regression on your daily spending pattern to project your month-end total. The two-layer progress bar shows what you've spent (solid) vs. where you're headed (light)."
                 headerRight={mlHeaderRight}
                 loading={loading.ml}
-                error={!mlAvailable && errors.ml ? null : undefined}
+                error={undefined}
               >
                 {mlAvailable && ml.forecast && <ForecastCard data={ml.forecast} />}
                 {!mlAvailable && !loading.ml && (
-                  <div className="p-8 text-center text-sm text-gray-400">Forecast unavailable — AI service not running</div>
+                  <div className="p-8 text-center space-y-1">
+                    <p className="text-sm text-gray-500 dark:text-slate-400">No forecast yet</p>
+                    <p className="text-xs text-gray-400 dark:text-slate-500">Add a few transactions and hit Refresh to generate your first forecast.</p>
+                  </div>
                 )}
               </Section>
             </div>
@@ -628,7 +642,7 @@ export default function InsightsPage() {
                   ? "Powered by Isolation Forest — a statistical ML model trained on your own transaction history. It finds transactions that don't fit your typical spending distribution, not just simple thresholds."
                   : "A transaction is flagged if its amount is 2× higher than your category average, or if it's a category you've never used before."}
                 loading={mlAvailable ? loading.ml : loading.anomaly}
-                error={mlAvailable ? errors.ml : errors.anomaly}
+                error={mlAvailable ? undefined : errors.anomaly}
               >
                 {mlAvailable
                   ? <MLAnomalyList data={ml} />

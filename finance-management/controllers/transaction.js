@@ -1182,6 +1182,16 @@ const _runMLPipeline = async (userId, tz) => {
     return { aiData, yearMonth, currentMonthTxCount };
 };
 
+// Shared: return cached MLInsight doc as a response payload
+const _serveCache = (cached, stale = false) => ({
+    anomalies:    cached.anomalies,
+    anomalyCount: cached.anomalyCount,
+    forecast:     cached.forecast,
+    generatedAt:  cached.generatedAt,
+    fromCache:    true,
+    stale,
+});
+
 const getMLInsights = async (req, res) => {
     const userId = req.user.id;
     const tz     = validTz(req.query.tz);
@@ -1190,95 +1200,128 @@ const getMLInsights = async (req, res) => {
         const now       = moment.tz(tz);
         const yearMonth = now.format('YYYY-MM');
 
-        // Check cache
-        const cached = await MLInsight.findOne({ user: userId, yearMonth }).lean();
-        if (cached) {
-            // Validate freshness: count current-month expense transactions
-            const currentCount = await Transaction.countDocuments({
+        const [cached, currentCount] = await Promise.all([
+            MLInsight.findOne({ user: userId, yearMonth }).lean(),
+            Transaction.countDocuments({
                 user: userId,
                 type: 'expense',
                 time: {
                     $gte: moment.tz(yearMonth + '-01', tz).startOf('day').toDate(),
                     $lte: moment.tz(yearMonth + '-01', tz).endOf('month').toDate(),
                 },
-            });
+            }),
+        ]);
 
-            if (currentCount === cached.txCountSnapshot) {
-                return res.status(200).json(BaseResponseDTO.success('ML insights (cached)', {
-                    anomalies:    cached.anomalies,
-                    anomalyCount: cached.anomalyCount,
-                    forecast:     cached.forecast,
-                    generatedAt:  cached.generatedAt,
-                    fromCache:    true,
-                }));
-            }
-            // Count mismatch — fall through to regenerate
+        // Cache hit — txCount unchanged, serve immediately
+        if (cached && currentCount === cached.txCountSnapshot) {
+            return res.status(200).json(BaseResponseDTO.success('ML insights (cached)', _serveCache(cached, false)));
         }
 
-        const { aiData, currentMonthTxCount } = await _runMLPipeline(userId, tz);
+        // Cache stale or missing — try AI service
+        try {
+            const { aiData, currentMonthTxCount } = await _runMLPipeline(userId, tz);
 
-        // Upsert cache
-        await MLInsight.findOneAndUpdate(
-            { user: userId, yearMonth },
-            {
-                generatedAt:     new Date(),
-                txCountSnapshot: currentMonthTxCount,
-                anomalies:       aiData.anomalies    ?? [],
-                anomalyCount:    aiData.anomaly_count ?? 0,
-                forecast:        aiData.forecast     ?? null,
-            },
-            { upsert: true, new: true },
-        );
+            await MLInsight.findOneAndUpdate(
+                { user: userId, yearMonth },
+                {
+                    generatedAt:     new Date(),
+                    txCountSnapshot: currentMonthTxCount,
+                    anomalies:       aiData.anomalies    ?? [],
+                    anomalyCount:    aiData.anomaly_count ?? 0,
+                    forecast:        aiData.forecast     ?? null,
+                },
+                { upsert: true, new: true },
+            );
 
-        return res.status(200).json(BaseResponseDTO.success('ML insights', {
-            ...aiData,
-            generatedAt: new Date(),
-            fromCache:   false,
-        }));
+            return res.status(200).json(BaseResponseDTO.success('ML insights', {
+                ...aiData,
+                generatedAt: new Date(),
+                fromCache:   false,
+                stale:       false,
+            }));
+        } catch (aiErr) {
+            logger.error(`ML insights AI error: ${aiErr.message}`);
+            // AI is down — serve stale cache if available rather than showing an error
+            if (cached) {
+                return res.status(200).json(BaseResponseDTO.success('ML insights (stale)', _serveCache(cached, true)));
+            }
+            // No cache at all — return empty shell so UI doesn't break
+            return res.status(200).json(BaseResponseDTO.success('ML insights (unavailable)', {
+                anomalies: [], anomalyCount: 0,
+                forecast:  { available: false },
+                fromCache: false, stale: false, unavailable: true,
+            }));
+        }
     } catch (e) {
         logger.error(`ML insights error: ${e.message}`);
-        return res.status(200).json(BaseResponseDTO.success('ML insights (unavailable)', {
-            anomalies:    [],
-            anomalyCount: 0,
-            forecast:     { available: false, reason: 'AI service unavailable' },
-            fromCache:    false,
-        }));
+        return res.status(500).json(BaseResponseDTO.error('Failed to load ML insights'));
     }
 };
 
-// Force-regenerate regardless of cache (called by the frontend Refresh button)
+// Refresh: serve cache if still fresh; call AI only when txCount changed or ?force=true
 const refreshMLInsights = async (req, res) => {
     const userId = req.user.id;
     const tz     = validTz(req.query.tz);
+    const force  = req.query.force === 'true';
 
     try {
-        const { aiData, yearMonth, currentMonthTxCount } = await _runMLPipeline(userId, tz);
+        const now       = moment.tz(tz);
+        const yearMonth = now.format('YYYY-MM');
 
-        await MLInsight.findOneAndUpdate(
-            { user: userId, yearMonth },
-            {
-                generatedAt:     new Date(),
-                txCountSnapshot: currentMonthTxCount,
-                anomalies:       aiData.anomalies    ?? [],
-                anomalyCount:    aiData.anomaly_count ?? 0,
-                forecast:        aiData.forecast     ?? null,
-            },
-            { upsert: true, new: true },
-        );
+        const [cached, currentCount] = await Promise.all([
+            MLInsight.findOne({ user: userId, yearMonth }).lean(),
+            Transaction.countDocuments({
+                user: userId,
+                type: 'expense',
+                time: {
+                    $gte: moment.tz(yearMonth + '-01', tz).startOf('day').toDate(),
+                    $lte: moment.tz(yearMonth + '-01', tz).endOf('month').toDate(),
+                },
+            }),
+        ]);
 
-        return res.status(200).json(BaseResponseDTO.success('ML insights refreshed', {
-            ...aiData,
-            generatedAt: new Date(),
-            fromCache:   false,
-        }));
+        // Cache still fresh and not forcing — no need to hit AI service
+        if (!force && cached && currentCount === cached.txCountSnapshot) {
+            return res.status(200).json(BaseResponseDTO.success('ML insights (already up to date)', _serveCache(cached, false)));
+        }
+
+        // Call AI service
+        try {
+            const { aiData, currentMonthTxCount } = await _runMLPipeline(userId, tz);
+
+            await MLInsight.findOneAndUpdate(
+                { user: userId, yearMonth },
+                {
+                    generatedAt:     new Date(),
+                    txCountSnapshot: currentMonthTxCount,
+                    anomalies:       aiData.anomalies    ?? [],
+                    anomalyCount:    aiData.anomaly_count ?? 0,
+                    forecast:        aiData.forecast     ?? null,
+                },
+                { upsert: true, new: true },
+            );
+
+            return res.status(200).json(BaseResponseDTO.success('ML insights refreshed', {
+                ...aiData,
+                generatedAt: new Date(),
+                fromCache:   false,
+                stale:       false,
+            }));
+        } catch (aiErr) {
+            logger.error(`Refresh ML insights AI error: ${aiErr.message}`);
+            // Fall back to stale cache rather than returning an error
+            if (cached) {
+                return res.status(200).json(BaseResponseDTO.success('ML insights (stale — AI unavailable)', _serveCache(cached, true)));
+            }
+            return res.status(200).json(BaseResponseDTO.success('ML insights (unavailable)', {
+                anomalies: [], anomalyCount: 0,
+                forecast:  { available: false },
+                fromCache: false, stale: false, unavailable: true,
+            }));
+        }
     } catch (e) {
         logger.error(`Refresh ML insights error: ${e.message}`);
-        return res.status(200).json(BaseResponseDTO.success('ML insights (unavailable)', {
-            anomalies:    [],
-            anomalyCount: 0,
-            forecast:     { available: false, reason: 'AI service unavailable' },
-            fromCache:    false,
-        }));
+        return res.status(500).json(BaseResponseDTO.error('Failed to refresh ML insights'));
     }
 };
 
