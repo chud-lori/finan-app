@@ -21,7 +21,7 @@ export function ThemeProvider({ children }) {
     // Tell browser exactly which scheme is active — never use "light dark" which lets the
     // browser pick based on system preference, overriding our explicit light-mode default
     const meta = document.querySelector('meta[name="color-scheme"]');
-    if (meta) meta.setAttribute('content', dark ? 'dark' : 'light');
+    if (meta) meta.setAttribute('content', dark ? 'dark' : 'only light');
   }, [dark, mounted]);
 
   return (

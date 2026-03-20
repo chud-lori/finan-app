@@ -14,7 +14,7 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Default light — JS below will switch to dark if user saved that preference */}
-        <meta name="color-scheme" content="light" />
+        <meta name="color-scheme" content="only light" />
         {/* Synchronously apply saved theme before first paint to avoid flash */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function(){
