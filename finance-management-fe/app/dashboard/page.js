@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getTransactions, deleteTransaction, getActiveMonths, updatePreferences } from '@/lib/api';
+import { getTransactions, deleteTransaction, getActiveMonths, setBudget } from '@/lib/api';
 import { formatIDR, formatDate, toTitleCase } from '@/lib/format';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -314,7 +314,7 @@ export default function DashboardPage() {
                 tip="Your all-time net balance — total income ever received minus total expenses ever recorded. Not limited to this month." />
               <StatCard label="Income this month" value={formatIDR(income)} icon="📈"
                 tip="Total income transactions recorded in the selected month." />
-              <BudgetCard expense={expense} budget={budget} onSaved={load} />
+              <BudgetCard expense={expense} budget={budget} month={month} onSaved={load} />
             </div>
           )}
 
@@ -488,15 +488,16 @@ function StatCard({ label, value, icon, tip }) {
   );
 }
 
-function BudgetCard({ expense, budget, onSaved }) {
+function BudgetCard({ expense, budget, month, onSaved }) {
   const [editing, setEditing] = useState(false);
   const [input, setInput]     = useState('');
   const [saving, setSaving]   = useState(false);
 
-  const pct    = budget > 0 ? Math.min(Math.round((expense / budget) * 100), 999) : null;
-  const barPct = budget > 0 ? Math.min((expense / budget) * 100, 100) : 0;
-  const barColor  = pct === null ? 'bg-gray-200' : pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500';
-  const pctColor  = pct === null ? '' : pct >= 100 ? 'text-rose-600' : pct >= 80 ? 'text-amber-600' : 'text-emerald-600';
+  const pct      = budget > 0 ? Math.round((expense / budget) * 100) : null;
+  const barPct   = budget > 0 ? Math.min((expense / budget) * 100, 100) : 0;
+  const over     = budget > 0 && expense > budget;
+  const barColor = pct === null ? 'bg-gray-200' : over ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500';
+  const pctColor = pct === null ? '' : over ? 'text-rose-600' : pct >= 80 ? 'text-amber-600' : 'text-emerald-600';
 
   const startEdit = () => { setInput(budget > 0 ? String(budget) : ''); setEditing(true); };
 
@@ -505,7 +506,7 @@ function BudgetCard({ expense, budget, onSaved }) {
     if (isNaN(val) || val < 0) return;
     setSaving(true);
     try {
-      await updatePreferences({ monthlyBudget: Math.round(val) });
+      await setBudget(month, Math.round(val));
       await onSaved();
       setEditing(false);
     } catch (e) {
@@ -515,14 +516,16 @@ function BudgetCard({ expense, budget, onSaved }) {
     }
   };
 
+  const remaining = budget - expense;
+
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           <span className="text-sm text-gray-500">Budget</span>
-          <Tooltip text="Monthly spending budget. Edit it anytime — the bar tracks how much of it you've used this month." />
+          <Tooltip text="Per-month spending budget. Each month is tracked independently. Saving a new amount also updates the default for future months." />
         </div>
-        <button onClick={startEdit} title="Edit budget" className="text-gray-400 hover:text-teal-600 transition-colors">
+        <button onClick={startEdit} title="Edit budget for this month" className="text-gray-400 hover:text-teal-600 transition-colors">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
@@ -538,7 +541,7 @@ function BudgetCard({ expense, budget, onSaved }) {
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
             className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            placeholder="Monthly budget (IDR)"
+            placeholder="Budget for this month (IDR)"
             min={0}
           />
           <button onClick={handleSave} disabled={saving} className="px-2.5 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-50 shrink-0">
@@ -549,7 +552,7 @@ function BudgetCard({ expense, budget, onSaved }) {
       ) : budget === 0 ? (
         <>
           <div className="text-xl font-bold text-gray-900 mb-1">{formatIDR(expense)} <span className="text-sm font-normal text-gray-400">spent</span></div>
-          <button onClick={startEdit} className="text-xs text-teal-600 hover:underline font-medium">+ Set monthly budget</button>
+          <button onClick={startEdit} className="text-xs text-teal-600 hover:underline font-medium">+ Set budget for this month</button>
         </>
       ) : (
         <>
@@ -557,12 +560,19 @@ function BudgetCard({ expense, budget, onSaved }) {
             {formatIDR(expense)}
             <span className="text-sm font-medium text-gray-400 ml-1.5">/ {formatIDR(budget)}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-1.5">
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div className={`h-1.5 rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${barPct}%` }} />
             </div>
             <span className={`text-xs font-semibold tabular-nums shrink-0 ${pctColor}`}>{pct}%</span>
           </div>
+          {over ? (
+            <p className="text-xs font-medium text-rose-600">{formatIDR(expense - budget)} over budget</p>
+          ) : pct >= 80 ? (
+            <p className="text-xs font-medium text-amber-600">{formatIDR(remaining)} remaining — watch it</p>
+          ) : (
+            <p className="text-xs text-gray-400">{formatIDR(remaining)} remaining</p>
+          )}
         </>
       )}
     </div>
