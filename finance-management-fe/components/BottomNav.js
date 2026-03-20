@@ -159,11 +159,11 @@ export default function BottomNav() {
         onClick={() => setSheetOpen(false)}
       />
 
-      {/* Sheet panel */}
+      {/* Sheet panel — slides up over the navbar (z-50 > nav z-30) */}
       <div
         className={`md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 rounded-t-2xl shadow-xl transition-transform duration-300 ease-out
           ${sheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-2">
