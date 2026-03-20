@@ -18,7 +18,7 @@ export default function DonutChart({ data, colors }) {
   return (
     <div className="flex justify-center">
       <PieChart width={260} height={260}>
-        <Pie data={data} cx={130} cy={120} innerRadius={68} outerRadius={116} paddingAngle={2} dataKey="value">
+        <Pie data={data} cx={130} cy={120} innerRadius={68} outerRadius={116} paddingAngle={2} dataKey="value" stroke="none">
           {data.map((_, i) => (
             <Cell key={i} fill={colors[i % colors.length]} />
           ))}
