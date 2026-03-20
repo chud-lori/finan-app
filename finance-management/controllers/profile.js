@@ -219,7 +219,23 @@ const exportTransactions = async (req, res) => {
 
         const txns = await Transaction.find(filter).sort({ time: -1 }).lean();
 
-        const header = ['Title', 'Amount', 'Type', 'Category', 'Timestamp', 'Timezone', 'Currency'];
+        const rangeFrom = start < end ? start : end;
+        const rangeTo   = start < end ? end   : start;
+        const periodLabel = period === 'monthly' ? `Monthly — ${month}`
+            : period === 'yearly'  ? `Yearly — ${year}`
+            : period === 'range'   ? `Range — ${rangeFrom} to ${rangeTo}`
+            : 'All time';
+        const exportedAt = moment().tz(userTz).format('YYYY-MM-DD HH:mm:ss z');
+
+        const titleBlock = [
+            'Finan App — Transaction Export',
+            `Period:,${periodLabel}`,
+            `Exported on:,${exportedAt}`,
+            `Total records:,${txns.length}`,
+            '',  // blank line before column headers
+        ];
+
+        const header = ['Description', 'Amount', 'Type', 'Category', 'Date & Time', 'Timezone', 'Currency'];
         const rows = txns.map(t => {
             const txTz  = t.transaction_timezone || 'UTC';
             const stamp = moment(t.time).tz(txTz).format('M/D/YYYY H:mm:ss');
@@ -227,9 +243,7 @@ const exportTransactions = async (req, res) => {
             return [desc, t.amount, t.type, t.category, stamp, txTz, (t.currency || 'IDR').toUpperCase()].join(',');
         });
 
-        const csv = [header.join(','), ...rows].join('\n');
-        const rangeFrom = start < end ? start : end;
-        const rangeTo   = start < end ? end   : start;
+        const csv = [...titleBlock, header.join(','), ...rows].join('\n');
         const filename = period === 'monthly' ? `transactions-${month}.csv`
             : period === 'yearly'  ? `transactions-${year}.csv`
             : period === 'range'   ? `transactions-${rangeFrom}-to-${rangeTo}.csv`
