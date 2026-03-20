@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import BottomNav from '@/components/BottomNav';
 import AuthGuard from '@/components/AuthGuard';
 import { getAnalytics } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
@@ -336,7 +337,8 @@ export default function AnalyticsPage() {
     <AuthGuard>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <BottomNav />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
 
           {/* Header + tabs */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">

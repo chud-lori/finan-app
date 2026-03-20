@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
+import BottomNav from '@/components/BottomNav';
 import AuthGuard from '@/components/AuthGuard';
 import { getAnomalies, getExplainability, getTimeToZero } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
@@ -351,7 +352,8 @@ export default function InsightsPage() {
     <AuthGuard>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <BottomNav />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
           <h1 className="text-xl font-bold text-gray-900 mb-0.5">Insights</h1>
           <p className="text-sm text-gray-500 mb-6">Your finances, translated into plain language</p>
 
