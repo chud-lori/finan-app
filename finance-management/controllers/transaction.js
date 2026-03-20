@@ -13,6 +13,7 @@ const logger = require("../helpers/logger");
 const cache = require('../helpers/cache');
 const { refreshSnapshot } = require('../helpers/snapshot');
 const Snapshot = require('../models/snapshot.model');
+const Preference = require('../models/preference.model');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -166,7 +167,7 @@ const getUserTransaction = async (req, res, next) => {
         const monthFilter = { user: Transaction.base.Types.ObjectId.createFromHexString(req.user.id) };
         if (month) monthFilter.time = filter.time;
 
-        const [total, transactions, balance, monthTotals] = await Promise.all([
+        const [total, transactions, balance, monthTotals, prefs] = await Promise.all([
             Transaction.countDocuments(filter),
             Transaction.find(filter)
                 .sort({ [sortBy]: order })
@@ -178,6 +179,7 @@ const getUserTransaction = async (req, res, next) => {
                 { $match: monthFilter },
                 { $group: { _id: '$type', total: { $sum: '$amount' } } }
             ]),
+            Preference.findOne({ user: req.user.id }).select('monthlyBudget').lean(),
         ]);
 
         if (!balance) {
@@ -186,11 +188,13 @@ const getUserTransaction = async (req, res, next) => {
 
         const monthlyIncome  = monthTotals.find(r => r._id === 'income')?.total  ?? 0;
         const monthlyExpense = monthTotals.find(r => r._id === 'expense')?.total ?? 0;
+        const monthlyBudget  = prefs?.monthlyBudget ?? 0;
 
         const totalPages = Math.ceil(total / limit) || 1;
         const responseDTO = new GetTransactionsResponseDTO(transactions, balance, { total, page, totalPages, limit });
         responseDTO.monthlyIncome  = monthlyIncome;
         responseDTO.monthlyExpense = monthlyExpense;
+        responseDTO.monthlyBudget  = monthlyBudget;
         logger.info(`Get user transaction Response: ${req.user.id} retrieved`);
         res.status(200).json(BaseResponseDTO.success('User transactions retrieved', responseDTO));
 
