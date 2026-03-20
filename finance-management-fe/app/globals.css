@@ -145,6 +145,16 @@ body {
 .dark ::-webkit-scrollbar-thumb { background: #475569; }
 .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
+/* ── Dropdown animation ── */
+@keyframes dropdownIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-6px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+.dropdown-enter {
+  animation: dropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top right;
+}
+
 /* ── Page transition ── */
 @keyframes pageEnter {
   from { opacity: 0; transform: translateX(16px); }
