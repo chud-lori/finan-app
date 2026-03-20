@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getRecommendation, getProfile, addGoal, getAllGoals, getGamificationSummary } from '@/lib/api';
+import { getRecommendation, getProfile, addGoal, getAllGoals, updateGoal, deleteGoal } from '@/lib/api';
 import { useCurrency } from '@/components/CurrencyContext';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -268,39 +268,117 @@ function BudgetRuleTool() {
 // ─── Tool 3: Savings Goal (DB-backed + Calculator) ────────────────────────────
 function GoalRingSmall({ pct }) {
   const r = 14, circ = 2 * Math.PI * r;
-  const COLORS = pct >= 100 ? '#14b8a6' : pct >= 75 ? '#3b82f6' : pct >= 50 ? '#8b5cf6' : pct >= 25 ? '#f59e0b' : '#d1d5db';
+  const color = pct >= 100 ? '#14b8a6' : pct >= 75 ? '#3b82f6' : pct >= 50 ? '#8b5cf6' : pct >= 25 ? '#f59e0b' : '#d1d5db';
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" className="-rotate-90 shrink-0">
       <circle cx="18" cy="18" r={r} fill="none" stroke="#e5e7eb" strokeWidth="3.5" />
-      <circle cx="18" cy="18" r={r} fill="none" stroke={COLORS} strokeWidth="3.5"
+      <circle cx="18" cy="18" r={r} fill="none" stroke={color} strokeWidth="3.5"
         strokeDasharray={`${circ * Math.min(pct, 100) / 100} ${circ}`} strokeLinecap="round" />
     </svg>
   );
 }
 
-function SavedGoalsList({ goals, savings }) {
-  const { formatAmount } = useCurrency();
-  if (!goals.length) return (
-    <p className="text-xs text-gray-400 text-center py-3">No saved goals yet. Add one below.</p>
-  );
+function GoalRow({ goal, onSaved, onDelete, onToggleAchieve }) {
+  const { formatAmount, currency } = useCurrency();
+  const [addAmt,   setAddAmt]   = useState('');
+  const [saving,   setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const [open,     setOpen]     = useState(false);
+
+  const pct = goal.progress ?? 0;
+  const milestoneLabel =
+    pct >= 100 ? '🎉 Reached!' :
+    pct >= 75  ? '75% milestone!' :
+    pct >= 50  ? 'Halfway there!' :
+    pct >= 25  ? 'First 25%!' : 'Getting started';
+
+  const handleAddSavings = async (e) => {
+    e.preventDefault();
+    const add = parseNum(addAmt);
+    if (!add) return;
+    setSaving(true);
+    try {
+      const newSaved = (goal.savedAmount ?? 0) + add;
+      await updateGoal(goal.id, { savedAmount: newSaved });
+      setAddAmt('');
+      setOpen(false);
+      onSaved();
+    } catch { /* silent */ }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete "${goal.description}"?`)) return;
+    setDeleting(true);
+    try { await deleteGoal(goal.id); onDelete(); }
+    catch { /* silent */ }
+    finally { setDeleting(false); }
+  };
+
+  const handleToggleAchieve = async () => {
+    setToggling(true);
+    try {
+      await updateGoal(goal.id, { achieve: goal.achieve === 1 ? 0 : 1 });
+      onToggleAchieve();
+    } catch { /* silent */ }
+    finally { setToggling(false); }
+  };
+
   return (
-    <div className="space-y-2">
-      {goals.map(g => {
-        const pct = g.price > 0 ? Math.min(100, Math.round((savings / g.price) * 100)) : 0;
-        const milestone = pct >= 100 ? '🎉 Reached!' : pct >= 75 ? '75% milestone!' : pct >= 50 ? 'Halfway there!' : pct >= 25 ? 'First 25%!' : 'Getting started';
-        return (
-          <div key={g.id || g._id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-            <div className="relative shrink-0">
-              <GoalRingSmall pct={pct} />
-              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-gray-700">{pct}%</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-800 truncate">{g.description}</p>
-              <p className="text-xs text-gray-400">{formatAmount(g.price)} target · {milestone}</p>
-            </div>
+    <div className={`rounded-xl border p-3 space-y-2 transition-all ${goal.achieve === 1 ? 'bg-teal-50 border-teal-200' : 'bg-gray-50 border-gray-100'}`}>
+      {/* Header row */}
+      <div className="flex items-center gap-3">
+        <div className="relative shrink-0">
+          <GoalRingSmall pct={pct} />
+          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-gray-700">{pct}%</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm font-semibold truncate ${goal.achieve === 1 ? 'text-teal-700 line-through' : 'text-gray-800'}`}>{goal.description}</p>
+          <p className="text-xs text-gray-400">
+            {formatAmount(goal.savedAmount ?? 0)} / {formatAmount(goal.price)} · {milestoneLabel}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Add savings toggle */}
+          {goal.achieve !== 1 && (
+            <button onClick={() => setOpen(v => !v)} title="Add savings"
+              className="text-xs px-2 py-1 rounded-lg bg-teal-100 hover:bg-teal-200 text-teal-700 font-semibold transition-colors">
+              +
+            </button>
+          )}
+          {/* Mark achieved */}
+          <button onClick={handleToggleAchieve} disabled={toggling} title={goal.achieve === 1 ? 'Mark incomplete' : 'Mark achieved'}
+            className={`text-xs px-2 py-1 rounded-lg font-semibold transition-colors ${
+              goal.achieve === 1
+                ? 'bg-teal-600 text-white hover:bg-teal-700'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
+            }`}>
+            ✓
+          </button>
+          {/* Delete */}
+          <button onClick={handleDelete} disabled={deleting} title="Delete goal"
+            className="text-xs px-2 py-1 rounded-lg bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500 font-semibold transition-colors">
+            {deleting ? '…' : '×'}
+          </button>
+        </div>
+      </div>
+
+      {/* Inline add-savings form */}
+      {open && goal.achieve !== 1 && (
+        <form onSubmit={handleAddSavings} className="flex gap-2 mt-1">
+          <div className="relative flex-1">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">{currency}</span>
+            <input type="text" value={addAmt} onChange={e => setAddAmt(fmtInput(e.target.value))}
+              placeholder="Amount to add"
+              className="w-full pl-8 pr-2 py-1.5 rounded-lg border border-gray-300 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           </div>
-        );
-      })}
+          <button type="submit" disabled={saving}
+            className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold transition-colors disabled:opacity-50">
+            {saving ? '…' : 'Save'}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -308,45 +386,37 @@ function SavedGoalsList({ goals, savings }) {
 function SavingsGoalTool() {
   const { formatAmount, currency } = useCurrency();
 
-  // ── DB-backed goals state ──
-  const [goals,      setGoals]      = useState([]);
-  const [savings,    setSavings]    = useState(0);   // 20% of balance (from gamification API)
+  // ── DB-backed goals ──
+  const [goals,       setGoals]       = useState([]);
   const [goalsLoaded, setGoalsLoaded] = useState(false);
 
   // ── Add goal form ──
-  const [newName,    setNewName]    = useState('');
-  const [newAmount,  setNewAmount]  = useState('');
-  const [adding,     setAdding]     = useState(false);
-  const [addError,   setAddError]   = useState('');
+  const [newName,   setNewName]   = useState('');
+  const [newAmount, setNewAmount] = useState('');
+  const [adding,    setAdding]    = useState(false);
+  const [addError,  setAddError]  = useState('');
 
-  // ── Calculator state ──
-  const [goal,    setGoal]    = useState('');
-  const [saved,   setSaved]   = useState('');
-  const [monthly, setMonthly] = useState('');
-  const [name,    setName]    = useState('');
-  const [result,  setResult]  = useState(null);
+  // ── Calculator ──
+  const [calcName,    setCalcName]    = useState('');
+  const [goal,        setGoal]        = useState('');
+  const [saved,       setSaved]       = useState('');
+  const [monthly,     setMonthly]     = useState('');
+  const [result,      setResult]      = useState(null);
+
+  // Pre-fill add form from calculator result
+  const [prefillBanner, setPrefillBanner] = useState(null);
+
+  const reloadGoals = () =>
+    getAllGoals()
+      .then(res => setGoals(res.data?.goals ?? []))
+      .catch(() => {});
 
   useEffect(() => {
-    Promise.all([
-      getAllGoals().then(res => setGoals(res.data?.goals ?? [])),
-      getGamificationSummary().then(res => {
-        // Use the savings value from gamification (20% of balance)
-        const g = res.data?.goals ?? [];
-        if (g.length > 0) setSavings(Math.round(g[0].price * (g[0].progress / 100)));
-      }),
-    ])
+    getAllGoals()
+      .then(res => setGoals(res.data?.goals ?? []))
       .catch(() => {})
       .finally(() => setGoalsLoaded(true));
   }, []);
-
-  // Reload goals + savings after adding one
-  const reloadGoals = () => {
-    getAllGoals().then(res => setGoals(res.data?.goals ?? [])).catch(() => {});
-    getGamificationSummary().then(res => {
-      const g = res.data?.goals ?? [];
-      if (g.length > 0) setSavings(Math.round(g[0].price * (g[0].progress / 100)));
-    }).catch(() => {});
-  };
 
   const handleAddGoal = async (e) => {
     e.preventDefault();
@@ -355,7 +425,7 @@ function SavingsGoalTool() {
     setAdding(true); setAddError('');
     try {
       await addGoal(newName.trim(), price);
-      setNewName(''); setNewAmount('');
+      setNewName(''); setNewAmount(''); setPrefillBanner(null);
       reloadGoals();
     } catch (err) {
       setAddError(err.message || 'Failed to save goal');
@@ -370,33 +440,64 @@ function SavingsGoalTool() {
     const current  = parseNum(saved);
     const perMonth = parseNum(monthly);
     if (!target || !perMonth) return;
-    const remaining  = Math.max(target - current, 0);
-    const months     = remaining / perMonth;
-    const progress   = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
-    setResult({ target, current, remaining, perMonth, months, completion: monthsFromNow(months), progress, name: name || 'My Goal' });
+    const remaining = Math.max(target - current, 0);
+    const months    = remaining / perMonth;
+    const progress  = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
+    setResult({ target, current, remaining, perMonth, months, completion: monthsFromNow(months), progress, name: calcName || 'My Goal' });
   };
+
+  const handleSaveAsGoal = () => {
+    if (!result) return;
+    setNewName(result.name !== 'My Goal' ? result.name : '');
+    setNewAmount(fmtInput(String(result.target)));
+    setPrefillBanner(result.name);
+    // Scroll up to the My Goals card
+    document.getElementById('my-goals-card')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const activeGoals   = goals.filter(g => g.achieve !== 1);
+  const achievedGoals = goals.filter(g => g.achieve === 1);
 
   return (
     <div className="space-y-4">
 
-      {/* ── My Saved Goals ── */}
+      {/* ── My Goals ── */}
       <ToolCard>
-        <div className="flex items-center justify-between mb-3">
+        <div id="my-goals-card" className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-800">My Goals</h3>
-          {savings > 0 && (
-            <span className="text-xs text-gray-400">
-              ~{formatAmount(savings)} allocated (20% of balance)
-            </span>
+          {goals.length > 0 && (
+            <span className="text-xs text-gray-400">{activeGoals.length} active · {achievedGoals.length} done</span>
           )}
         </div>
-        {goalsLoaded
-          ? <SavedGoalsList goals={goals} savings={savings} />
-          : <p className="text-xs text-gray-400 text-center py-3">Loading…</p>
-        }
+
+        {!goalsLoaded ? (
+          <p className="text-xs text-gray-400 text-center py-3">Loading…</p>
+        ) : goals.length === 0 ? (
+          <p className="text-xs text-gray-400 text-center py-3">No goals yet. Add one below.</p>
+        ) : (
+          <div className="space-y-2">
+            {activeGoals.map(g => (
+              <GoalRow key={g.id} goal={g}
+                onSaved={reloadGoals} onDelete={reloadGoals} onToggleAchieve={reloadGoals} />
+            ))}
+            {achievedGoals.length > 0 && (
+              <>
+                {activeGoals.length > 0 && <div className="border-t border-gray-100 my-1" />}
+                {achievedGoals.map(g => (
+                  <GoalRow key={g.id} goal={g}
+                    onSaved={reloadGoals} onDelete={reloadGoals} onToggleAchieve={reloadGoals} />
+                ))}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Add goal form */}
         <form onSubmit={handleAddGoal} className="mt-4 space-y-2">
-          <p className="text-xs font-medium text-gray-600">Add a goal</p>
+          <p className="text-xs font-medium text-gray-600">
+            Add a goal
+            {prefillBanner && <span className="ml-1 text-teal-600">(pre-filled from calculator)</span>}
+          </p>
           <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
             placeholder="e.g. New laptop, Holiday, Emergency fund"
             className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
@@ -417,7 +518,7 @@ function SavingsGoalTool() {
         <form onSubmit={handleCalc} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Goal name (optional)</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)}
+            <input type="text" value={calcName} onChange={e => setCalcName(e.target.value)}
               placeholder="e.g. New laptop, Holiday, Emergency fund"
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           </div>
@@ -449,9 +550,9 @@ function SavingsGoalTool() {
               <ProgressBar value={result.current} max={result.target} color="teal" />
               <p className="text-right text-xs text-teal-600 font-medium mt-1">{result.progress}%</p>
             </div>
-            <StatRow label="Still needed"      value={formatAmount(result.remaining)} />
-            <StatRow label="Monthly saving"    value={formatAmount(result.perMonth)} />
-            <StatRow label="Daily equivalent"  value={`${formatAmount(Math.round(result.perMonth / 30))} / day`} />
+            <StatRow label="Still needed"     value={formatAmount(result.remaining)} />
+            <StatRow label="Monthly saving"   value={formatAmount(result.perMonth)} />
+            <StatRow label="Daily equivalent" value={`${formatAmount(Math.round(result.perMonth / 30))} / day`} />
             {result.months > 12 && (
               <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
                 <p className="text-xs text-amber-700">
@@ -459,6 +560,11 @@ function SavingsGoalTool() {
                 </p>
               </div>
             )}
+            {/* Save as goal CTA */}
+            <button type="button" onClick={handleSaveAsGoal}
+              className="mt-4 w-full py-2 rounded-xl border border-teal-400 text-teal-700 hover:bg-teal-50 text-sm font-semibold transition-colors">
+              Save as Goal
+            </button>
           </ToolCard>
         </div>
       )}

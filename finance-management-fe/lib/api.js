@@ -249,6 +249,19 @@ export const addGoal = (description, price) =>
 export const getAllGoals = () =>
   fetch(`${BASE_URL}/api/goal/goals`, { headers: authHeaders() }).then(handleResponse);
 
+export const updateGoal = (id, patch) =>
+  fetch(`${BASE_URL}/api/goal/${id}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(patch),
+  }).then(handleResponse);
+
+export const deleteGoal = (id) =>
+  fetch(`${BASE_URL}/api/goal/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 export const getGamificationSummary = () =>
   fetch(`${BASE_URL}/api/gamification/summary?tz=${encodeURIComponent(browserTz())}`, {
     headers: authHeaders(),

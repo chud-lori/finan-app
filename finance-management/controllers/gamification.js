@@ -1,7 +1,6 @@
 const moment = require('moment-timezone');
 const User = require('../models/user.model');
 const Goal = require('../models/goal.model');
-const Balance = require('../models/balance.model');
 const Budget = require('../models/budget.model');
 const Transaction = require('../models/transaction.model');
 const logger = require('../helpers/logger');
@@ -59,22 +58,19 @@ const getGamificationSummary = async (req, res) => {
         }
 
         // ── Goal Milestones ─────────────────────────────────────────────────
-        const [goals, balance] = await Promise.all([
-            Goal.find({ user: userId }).sort({ createdAt: -1 }),
-            Balance.findOne({ user: userId }),
-        ]);
+        const goals = await Goal.find({ user: userId }).sort({ achieve: 1, createdAt: -1 });
 
         const MILESTONES = [25, 50, 75, 100];
-        const savings = (balance?.amount ?? 0) * 0.2; // 20% of balance allocated toward goals
 
         const goalMilestones = goals.map(g => {
-            const pct = g.price > 0 ? Math.min(100, (savings / g.price) * 100) : 0;
-            // Highest milestone crossed
+            const saved = g.savedAmount ?? 0;
+            const pct = g.price > 0 ? Math.min(100, (saved / g.price) * 100) : 0;
             const milestone = [...MILESTONES].reverse().find(m => pct >= m) || 0;
             return {
                 id: g._id,
                 description: g.description,
                 price: g.price,
+                savedAmount: saved,
                 progress: Math.round(pct),
                 milestone,
                 achieved: g.achieve === 1,

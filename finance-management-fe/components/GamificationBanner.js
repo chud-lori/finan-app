@@ -140,6 +140,7 @@ export default function GamificationBanner() {
   const showStreak = data.streak?.current >= 2;
   const showBudgetWin = data.budgetWin?.won && !budgetWinDismissed;
   const showGoals = data.goals?.some(g => g.milestone >= 25 && !g.achieved);
+  // Show goals that have hit a milestone but aren't yet achieved; max 3 rings
   const activeGoals = (data.goals || []).filter(g => g.milestone >= 25 && !g.achieved).slice(0, 3);
 
   if (!showStreak && !showBudgetWin && !showGoals) return null;

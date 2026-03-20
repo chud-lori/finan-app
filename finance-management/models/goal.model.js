@@ -16,8 +16,13 @@ const GoalSchema = new Schema({
         default: 0
     },
     price: {
-        type: Number, 
+        type: Number,
         required: true
+    },
+    savedAmount: {
+        type: Number,
+        default: 0,
+        min: 0,
     }
 }, { 
     timestamps: { 

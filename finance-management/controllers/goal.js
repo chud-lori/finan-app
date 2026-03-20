@@ -1,84 +1,96 @@
-const moment = require('moment-timezone');
-const User = require('../models/user.model');
-const Balance = require('../models/balance.model');
 const Goal = require('../models/goal.model');
 const {
     AddGoalRequestDTO,
+    UpdateGoalRequestDTO,
     AddGoalResponseDTO,
     GoalDetailResponseDTO,
     GetAllGoalsResponseDTO,
     BaseResponseDTO
 } = require('../dtos/goal.dto');
 
-const addGoal = async (req, res, next) => {
+const addGoal = async (req, res) => {
     try {
-        // Validate request data
-        const goalDTO = new AddGoalRequestDTO(req.body);
-        const validationErrors = goalDTO.validate();
-        if (validationErrors.length > 0) {
-            return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
+        const dto = new AddGoalRequestDTO(req.body);
+        const errors = dto.validate();
+        if (errors.length > 0) {
+            return res.status(400).json(BaseResponseDTO.error('Validation failed', errors));
         }
 
-        const newGoal = new Goal({
+        const goal = await Goal.create({
             user: req.user.id,
-            description: goalDTO.description,
-            price: goalDTO.price
+            description: dto.description.trim(),
+            price: dto.price,
         });
 
-        const savedGoal = await newGoal.save();
-
-        // Return DTO response
-        const responseDTO = new AddGoalResponseDTO(savedGoal);
-        res.status(201).json(BaseResponseDTO.success('Goal created successfully', responseDTO));
-
-    } catch (error) {
-        res.status(500).json(BaseResponseDTO.error('Failed to create goal', error.message));
+        return res.status(201).json(BaseResponseDTO.success('Goal created successfully', new AddGoalResponseDTO(goal)));
+    } catch (err) {
+        return res.status(500).json(BaseResponseDTO.error('Failed to create goal', err.message));
     }
-}
+};
 
-const getGoalDetail = async (req, res, next) => {
+const getGoalDetail = async (req, res) => {
     try {
-        const goal = await Goal.findOne({ 
-            _id: req.params.goal, 
-            user: req.user.id 
-        }).exec();
-        
-        if (!goal) {
-            return res.status(404).json(BaseResponseDTO.error('Goal not found'));
+        const goal = await Goal.findOne({ _id: req.params.goal, user: req.user.id });
+        if (!goal) return res.status(404).json(BaseResponseDTO.error('Goal not found'));
+        return res.json(BaseResponseDTO.success('Goal detail retrieved', new GoalDetailResponseDTO(goal)));
+    } catch (err) {
+        return res.status(500).json(BaseResponseDTO.error('Failed to get goal detail', err.message));
+    }
+};
+
+const getAllGoals = async (req, res) => {
+    try {
+        const goals = await Goal.find({ user: req.user.id }).sort({ achieve: 1, createdAt: -1 });
+        return res.json(BaseResponseDTO.success('All goals retrieved', new GetAllGoalsResponseDTO(goals)));
+    } catch (err) {
+        return res.status(500).json(BaseResponseDTO.error('Failed to get goals', err.message));
+    }
+};
+
+const updateGoal = async (req, res) => {
+    try {
+        const dto = new UpdateGoalRequestDTO(req.body);
+        const errors = dto.validate();
+        if (errors.length > 0) {
+            return res.status(400).json(BaseResponseDTO.error('Validation failed', errors));
         }
 
-        const balance = await Balance.findOne({ user: req.user.id }).exec();
-        if (!balance) {
-            return res.status(404).json(BaseResponseDTO.error('User balance not found'));
+        const patch = {};
+        if (dto.savedAmount !== undefined) patch.savedAmount = dto.savedAmount;
+        if (dto.achieve !== undefined)     patch.achieve = dto.achieve;
+        if (dto.description !== undefined) patch.description = dto.description.trim();
+        if (dto.price !== undefined)       patch.price = dto.price;
+
+        // Auto-mark achieved when savedAmount reaches price
+        if (patch.savedAmount !== undefined && patch.achieve === undefined) {
+            // We need the current price to check — fetch it
+            const existing = await Goal.findOne({ _id: req.params.id, user: req.user.id }).select('price');
+            if (!existing) return res.status(404).json(BaseResponseDTO.error('Goal not found'));
+            const targetPrice = patch.price ?? existing.price;
+            if (patch.savedAmount >= targetPrice) patch.achieve = 1;
         }
 
-        const savings = (20 * balance.amount) / 100; // get 20% of balance to goal
-        const need = goal.price - savings;
+        const goal = await Goal.findOneAndUpdate(
+            { _id: req.params.id, user: req.user.id },
+            { $set: patch },
+            { new: true, runValidators: true }
+        );
+        if (!goal) return res.status(404).json(BaseResponseDTO.error('Goal not found'));
 
-        // Return DTO response
-        const responseDTO = new GoalDetailResponseDTO(goal, balance, savings, need);
-        res.status(200).json(BaseResponseDTO.success('Goal detail retrieved', responseDTO));
-
-    } catch (error) {
-        res.status(500).json(BaseResponseDTO.error('Failed to get goal detail', error.message));
+        return res.json(BaseResponseDTO.success('Goal updated', new GoalDetailResponseDTO(goal)));
+    } catch (err) {
+        return res.status(500).json(BaseResponseDTO.error('Failed to update goal', err.message));
     }
-}
+};
 
-const getAllGoals = async (req, res, next) => {
+const deleteGoal = async (req, res) => {
     try {
-        const goals = await Goal.find({ user: req.user.id }).exec();
-
-        // Return DTO response
-        const responseDTO = new GetAllGoalsResponseDTO(goals);
-        res.status(200).json(BaseResponseDTO.success('All goals retrieved', responseDTO));
-
-    } catch (error) {
-        res.status(500).json(BaseResponseDTO.error('Failed to get goals', error.message));
+        const goal = await Goal.findOneAndDelete({ _id: req.params.id, user: req.user.id });
+        if (!goal) return res.status(404).json(BaseResponseDTO.error('Goal not found'));
+        return res.json(BaseResponseDTO.success('Goal deleted'));
+    } catch (err) {
+        return res.status(500).json(BaseResponseDTO.error('Failed to delete goal', err.message));
     }
-}
+};
 
-module.exports = {
-    addGoal,
-    getGoalDetail,
-    getAllGoals
-}
+module.exports = { addGoal, getGoalDetail, getAllGoals, updateGoal, deleteGoal };
