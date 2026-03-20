@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev-be dev-fe build up down restart restart-be restart-fe \
-        logs logs-be logs-fe test seed clean
+.PHONY: help setup dev-be dev-fe dev-ai build up down restart restart-be restart-fe restart-ai \
+        logs logs-be logs-fe logs-ai test seed clean
 
 # ── colours ────────────────────────────────────────────────────────────────────
 BOLD  := \033[1m
@@ -12,6 +12,7 @@ GRAY  := \033[90m
 # ── dirs ───────────────────────────────────────────────────────────────────────
 BE_DIR := finance-management
 FE_DIR := finance-management-fe
+AI_DIR := finance-management-ai
 
 # ── help ───────────────────────────────────────────────────────────────────────
 help:
@@ -24,6 +25,7 @@ help:
 	@echo "  $(CYAN)Local dev (no Docker)$(RESET)"
 	@echo "    $(GREEN)dev-be$(RESET)         Start backend with nodemon  (http://localhost:3000)"
 	@echo "    $(GREEN)dev-fe$(RESET)         Start frontend with next dev (http://localhost:3001)"
+	@echo "    $(GREEN)dev-ai$(RESET)         Start AI service with uvicorn (http://localhost:3002)"
 	@echo "    $(GREEN)install$(RESET)        npm install in both BE and FE"
 	@echo ""
 	@echo "  $(CYAN)Docker$(RESET)"
@@ -33,11 +35,13 @@ help:
 	@echo "    $(GREEN)restart$(RESET)        down + up"
 	@echo "    $(GREEN)restart-be$(RESET)     Restart only the backend container"
 	@echo "    $(GREEN)restart-fe$(RESET)     Restart only the frontend container"
+	@echo "    $(GREEN)restart-ai$(RESET)     Restart only the AI service container"
 	@echo ""
 	@echo "  $(CYAN)Logs$(RESET)"
 	@echo "    $(GREEN)logs$(RESET)           Tail all container logs"
 	@echo "    $(GREEN)logs-be$(RESET)        Tail backend logs"
 	@echo "    $(GREEN)logs-fe$(RESET)        Tail frontend logs"
+	@echo "    $(GREEN)logs-ai$(RESET)        Tail AI service logs"
 	@echo ""
 	@echo "  $(CYAN)Utilities$(RESET)"
 	@echo "    $(GREEN)test$(RESET)           Run backend test suite"
@@ -73,6 +77,10 @@ dev-fe:
 	@echo "$(CYAN)→ Starting frontend (next dev)…$(RESET)"
 	cd $(FE_DIR) && npm run dev
 
+dev-ai:
+	@echo "$(CYAN)→ Starting AI service (uvicorn)…$(RESET)"
+	cd $(AI_DIR) && uvicorn main:app --host 127.0.0.1 --port 3002 --reload
+
 # ── docker ─────────────────────────────────────────────────────────────────────
 build:
 	@echo "$(CYAN)→ Building Docker images…$(RESET)"
@@ -104,6 +112,10 @@ restart-fe:
 	@echo "$(CYAN)→ Restarting frontend…$(RESET)"
 	docker compose restart frontend
 
+restart-ai:
+	@echo "$(CYAN)→ Restarting AI service…$(RESET)"
+	docker compose restart ai
+
 # ── logs ───────────────────────────────────────────────────────────────────────
 logs:
 	docker compose logs -f
@@ -113,6 +125,9 @@ logs-be:
 
 logs-fe:
 	docker compose logs -f frontend
+
+logs-ai:
+	docker compose logs -f ai
 
 # ── utilities ──────────────────────────────────────────────────────────────────
 test:

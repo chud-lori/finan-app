@@ -19,6 +19,7 @@ Technical reference for setting up, developing, testing, and deploying Finan App
 | Frontend | Next.js (App Router), React, Tailwind CSS v4 |
 | Charts | Recharts |
 | Frontend testing | Playwright E2E |
+| AI service | Python 3.12, FastAPI, scikit-learn (Isolation Forest + Linear Regression) |
 | Container | Docker + Docker Compose |
 | CI/CD | GitHub Actions → GHCR → Watchtower (auto-deploy) |
 
@@ -28,11 +29,19 @@ Technical reference for setting up, developing, testing, and deploying Finan App
 
 ```
 finan-app/                          ← monorepo root
-├── docker-compose.yml              ← full-stack deployment
+├── docker-compose.yml              ← full-stack deployment (mongo + ai + backend + frontend + watchtower)
 ├── .env.example                    ← root environment template
 ├── Makefile                        ← dev and ops shortcuts
 ├── README.md                       ← product overview
 ├── DEVELOPER.md                    ← this file
+│
+├── finance-management-ai/          ← AI microservice (Python FastAPI)
+│   ├── main.py                     ← FastAPI app, /health + /analyze endpoints
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── models/
+│       ├── anomaly.py              ← Isolation Forest anomaly detection (z-score fallback)
+│       └── forecast.py             ← Linear Regression month-end spending forecast
 │
 ├── finance-management/             ← Backend (Express.js + MongoDB)
 │   ├── app.js                      ← Express entry point (CORS, helmet, routes)
@@ -40,7 +49,8 @@ finan-app/                          ← monorepo root
 │   ├── controllers/
 │   │   ├── auth.js                 ← register, login, google OAuth, change password,
 │   │   │                             logout-all, delete account, forgot/reset password
-│   │   ├── transaction.js          ← CRUD, analytics, anomalies, insights, import
+│   │   ├── transaction.js          ← CRUD, analytics, anomalies, insights, import,
+│   │   │                             ml-insights (proxies to AI service)
 │   │   ├── goal.js                 ← savings goals
 │   │   └── profile.js              ← get profile, update preferences, export CSV
 │   ├── routers/
@@ -104,7 +114,7 @@ finan-app/                          ← monorepo root
     │   ├── add/page.js             ← Add transaction with smart category suggestions
     │   ├── analytics/page.js       ← Monthly/yearly charts, category details table
     │   ├── range/page.js           ← Custom date range report
-    │   ├── insights/page.js        ← Anomaly detection, explainability, runway
+    │   ├── insights/page.js        ← Month Forecast (ML), Spending Alerts (ML), anomaly detection, explainability, runway
     │   ├── import/page.js          ← CSV bulk import with progress display
     │   ├── recommendation/page.js  ← 10 financial planning calculators
     │   ├── reports/page.js
@@ -114,7 +124,11 @@ finan-app/                          ← monorepo root
     │   ├── terms/page.js           ← Terms of Service
     │   └── auth/callback/page.js   ← Google OAuth callback handler
     ├── components/
-    │   ├── Navbar.js
+    │   ├── Navbar.js               ← Desktop nav (frosted glass, pill active, animated Add button)
+    │   ├── BottomNav.js            ← Mobile bottom nav (5 tabs + FAB Add, env(safe-area-inset-bottom))
+    │   ├── AndroidBackHandler.js   ← PWA back-button handler (sentinel + "press back to exit" toast)
+    │   ├── PageTransition.js       ← Slide-in animation keyed on pathname
+    │   ├── SwipeToDelete.js        ← Touch swipe-to-reveal-delete (axis-locked, iOS/Android)
     │   ├── LandingNav.js           ← Landing page navigation (sticky)
     │   ├── LandingHeroCTA.js       ← Hero section CTA buttons
     │   ├── AuthGuard.js            ← Redirect to /login if not authenticated
@@ -149,6 +163,8 @@ finan-app/                          ← monorepo root
 |------|-------------|-------------|
 | Node.js | 22 | Local dev |
 | npm | 10 | Local dev |
+| Python | 3.12 | Local dev (AI service) |
+| pip | 24 | Local dev (AI service) |
 | MongoDB | 7 | Local dev (backend) |
 | Docker | 24 | Container deployment |
 | Docker Compose | v2 | Container deployment |
@@ -176,6 +192,7 @@ Copy `.env.example` → `.env` and fill in values before running compose:
 | `FROM_EMAIL` | `noreply@lori.my.id` | Sender address (must be on a verified Resend domain) |
 | `SENTRY_DSN` | — | Sentry DSN for the backend (Node.js project). Runtime env var — add to `.env` and recreate the container. |
 | `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry DSN for the frontend (Next.js project). **Build-time** — must be set as a GitHub Actions variable so it is baked into the image during CI/CD. |
+| `AI_SERVICE_URL` | `http://ai:3002` | Internal URL of the AI service as seen by the backend. In Docker Compose the service name `ai` resolves automatically. For bare-metal, set to `http://127.0.0.1:3002`. |
 
 > **Resend:** sign up at resend.com → add your domain → verify the DNS records → create an API key. Free tier is 3,000 emails/month.
 
@@ -234,7 +251,22 @@ curl -X POST http://localhost:3000/api/transaction/category \
   -H "Authorization: Bearer <token>"
 ```
 
-### 3. Frontend
+### 3. AI service
+
+```bash
+cd finance-management-ai
+python3 -m venv venv
+source venv/bin/activate      # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --host 127.0.0.1 --port 3002 --reload
+# or: make dev-ai
+```
+
+Health check: `curl http://localhost:3002/health` → `{"status":"ok"}`
+
+The backend reads `AI_SERVICE_URL` (defaults to `http://127.0.0.1:3002`). If the AI service is unreachable, `GET /api/transaction/ml-insights` returns an empty graceful response — the Insights page falls back to rule-based anomaly detection automatically.
+
+### 4. Frontend
 
 ```bash
 cd finance-management-fe
@@ -257,13 +289,14 @@ make logs         # tail all container logs
 make down         # stop everything
 ```
 
-| Container | Internal port | Host port |
-|-----------|--------------|-----------|
-| `finan-mongo` | 27017 | — (internal only) |
-| `finan-be` | 3000 | **3001** |
-| `finan-fe` | 3000 | **3000** |
+| Container | Internal port | Host port | Notes |
+|-----------|--------------|-----------|-------|
+| `finan-mongo` | 27017 | — (internal only) | |
+| `finan-ai` | 3002 | — (internal only) | Backend calls it via Docker DNS as `http://ai:3002` |
+| `finan-be` | 3000 | **3001** | |
+| `finan-fe` | 3000 | **3000** | |
 
-Start order is enforced by healthchecks: `mongo` → `backend` → `frontend`.
+Start order is enforced by healthchecks: `mongo` → `ai` → `backend` → `frontend`.
 
 ---
 
@@ -348,6 +381,7 @@ Swagger UI is available at `/api-docs` when `NODE_ENV !== production`.
 | GET | `/api/transaction/range/:start/:end` | — | ✓ | Transactions in date range with summary |
 | GET | `/api/transaction/date/:date` | — | ✓ | Transactions on a specific date |
 | GET | `/api/transaction/recommendation/:monthly/:spend` | — | ✓ | Budget affordability check |
+| GET | `/api/transaction/ml-insights` | 20/min | ✓ | ML-powered anomaly detection + month-end forecast (proxies to AI service; degrades gracefully if unavailable) |
 | POST | `/api/transaction/import/csv` | 10/min | ✓ | Bulk CSV import (`multipart/form-data`, field: `files`, up to 10 files, max 5 MB each) |
 | GET | `/api/transaction/category` | — | ✓ | List categories (`?search=X&type=income|expense`) |
 | GET | `/api/transaction/category/suggestions` | — | ✓ | Smart category suggestions by time of day |
@@ -428,12 +462,43 @@ Type values are normalized: anything that is not exactly `"income"` is treated a
 
 `PATCH /api/transaction/:id` accepts `{ description?, category? }`. At least one field is required. Category existence is validated case-insensitively against the user's own categories. Ownership is enforced via `findOneAndUpdate({ _id, user })`. The frontend updates local state optimistically on success.
 
+### AI microservice
+
+The AI service (`finance-management-ai/`) is a Python FastAPI app that exposes a single internal endpoint:
+
+**`POST /analyze`** — called by `GET /api/transaction/ml-insights` on the backend.
+
+Input: 6 months of expense transactions (for model training) + current-month daily totals + optional budget.
+
+Output:
+- **`anomalies`** — list of unusual transactions ranked by anomaly score, each with `severity` (high/medium/low), `multiple` (Nx above average), and a plain-English `label`
+- **`forecast`** — month-end spending prediction with `trend`, `confidence` (based on R²), daily average, and over/under-budget indicator if a budget is set
+
+**Anomaly detection algorithm:**
+- Groups transactions by category
+- For categories with ≥ 10 samples: trains **Isolation Forest** (`contamination=0.1`, 100 estimators) on the amount distribution; scores current-month transactions; flags those predicted as anomalies (`prediction == -1`)
+- For categories with 3–9 samples: falls back to **z-score** (flags if `|z| ≥ 2.0`)
+- Categories with < 3 samples are skipped (insufficient context)
+- Returns top 10 results sorted by anomaly score
+
+**Forecast algorithm:**
+- Builds a cumulative daily spend curve from `daily_totals` (days with no spend default to 0)
+- Fits **Linear Regression** (`day_number → cumulative_spend`)
+- Predicts at `day = days_in_month`; clamps result ≥ amount already spent
+- R² determines confidence: ≥ 0.85 = high, ≥ 0.55 = medium, < 0.55 = low
+- Slope vs. expected pace determines trend: accelerating / steady / decelerating
+- Requires ≥ 4 days of data; returns `available: false` otherwise
+
+**Graceful degradation:** If the AI service is unreachable or times out (8 s timeout), `GET /api/transaction/ml-insights` returns `{ anomalies: [], forecast: { available: false } }` with HTTP 200. The frontend Insights page falls back to the existing rule-based anomaly detection silently.
+
 ### CI/CD pipeline
 
 Two workflows in `.github/workflows/`:
 
 - **`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which monorepo subtree changed. Backend job (`npm test`) only runs when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed.
-- **`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds the image(s) that changed. Backend and frontend build jobs run in parallel. Images are tagged `:latest` and pushed to GHCR. Watchtower on the server polls GHCR every 30s and redeploys automatically.
+- **`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds the image(s) that changed. Backend, frontend, and AI service build jobs run in parallel. Images are tagged `:latest` and pushed to GHCR. Watchtower on the server polls GHCR every 30s and redeploys automatically.
+
+> The AI service image is `ghcr.io/chud-lori/finan-app-ai:latest`. Add a path filter for `finance-management-ai/**` in both workflows to trigger AI image builds only when the AI service code changes.
 
 > Changing `docker-compose.yml` or other root-level files does **not** trigger an image rebuild — those changes require a manual `git pull` on the server followed by `docker compose up -d`.
 
@@ -482,6 +547,29 @@ docker run -d \
   finan-be
 ```
 
+### AI service
+
+```bash
+cd finance-management-ai
+docker build -t finan-ai .
+docker run -d \
+  --name finan-ai \
+  --network finan-net \
+  finan-ai
+```
+
+The container is not exposed externally. The backend container must be on the same Docker network (`finan-net`) and set `AI_SERVICE_URL=http://finan-ai:3002`.
+
+**Bare-metal (PM2):**
+
+```bash
+cd finance-management-ai
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+pm2 start "uvicorn main:app --host 127.0.0.1 --port 3002" --name finan-ai --interpreter none
+# Add AI_SERVICE_URL=http://127.0.0.1:3002 to the backend .env
+```
+
 ### Frontend
 
 `NEXT_PUBLIC_*` vars are baked into the bundle at build time:
@@ -505,6 +593,7 @@ make help          show all targets
 
 make dev-be        start backend locally (nodemon)
 make dev-fe        start frontend locally (next dev)
+make dev-ai        start AI service locally (uvicorn --reload, port 3002)
 
 make build         docker compose build
 make up            docker compose up -d (builds if needed)
@@ -512,10 +601,12 @@ make down          docker compose down
 make restart       down + up
 make restart-be    restart only the backend container
 make restart-fe    restart only the frontend container
+make restart-ai    restart only the AI service container
 
 make logs          tail all container logs
 make logs-be       tail backend logs
 make logs-fe       tail frontend logs
+make logs-ai       tail AI service logs
 
 make test          run backend test suite
 make seed          seed categories (requires TOKEN=<jwt>)

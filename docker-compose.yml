@@ -15,6 +15,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── AI service (FastAPI) ─────────────────────────────────────
+  ai:
+    image: ghcr.io/chud-lori/finan-app-ai:latest
+    build:
+      context: ./finance-management-ai
+      dockerfile: Dockerfile
+    container_name: finan-ai
+    restart: unless-stopped
+    # Not exposed to host — backend reaches it via Docker network as http://ai:3002
+    networks:
+      - finan-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3002/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
   # ── Backend (Express) ───────────────────────────────────────
   backend:
     image: ghcr.io/chud-lori/finan-app-backend:latest
@@ -36,8 +56,11 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY}
       FROM_EMAIL: ${FROM_EMAIL:-noreply@lori.my.id}
       SENTRY_DSN: ${SENTRY_DSN}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:3002}
     depends_on:
       mongo:
+        condition: service_healthy
+      ai:
         condition: service_healthy
     networks:
       - finan-net
