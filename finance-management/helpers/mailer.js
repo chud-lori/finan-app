@@ -2,7 +2,12 @@ const { Resend } = require('resend');
 const { RESEND_API_KEY, FROM_EMAIL } = require('../config/keys');
 const logger = require('./logger');
 
-const resend = new Resend(RESEND_API_KEY);
+let _resend = null;
+const getClient = () => {
+  if (!RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured');
+  if (!_resend) _resend = new Resend(RESEND_API_KEY);
+  return _resend;
+};
 const FROM = `Finan App <${FROM_EMAIL}>`;
 
 const verifyMailer = () => {
@@ -34,7 +39,7 @@ const sendPasswordResetEmail = async (to, resetUrl) => {
   `;
 
   try {
-    await resend.emails.send({ from: FROM, to, subject: 'Reset your Finan App password', html });
+    await getClient().emails.send({ from: FROM, to, subject: 'Reset your Finan App password', html });
     logger.info(`Password reset email sent to ${to}`);
   } catch (err) {
     logger.error(`Failed to send password reset email to ${to}: ${err.message}`);
@@ -63,7 +68,7 @@ const sendVerificationEmail = async (to, verifyUrl) => {
   `;
 
   try {
-    await resend.emails.send({ from: FROM, to, subject: 'Verify your Finan App email', html });
+    await getClient().emails.send({ from: FROM, to, subject: 'Verify your Finan App email', html });
     logger.info(`Verification email sent to ${to}`);
   } catch (err) {
     logger.error(`Failed to send verification email to ${to}: ${err.message}`);

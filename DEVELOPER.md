@@ -48,7 +48,7 @@ finan-app/                          ← monorepo root
 │   │   └── log.js                  ← Morgan request logger
 │   ├── helpers/
 │   │   ├── validator.js            ← express-validator rule sets
-│   │   ├── mailer.js               ← nodemailer Gmail SMTP (password reset emails)
+│   │   ├── mailer.js               ← Resend SDK (password reset + verification emails)
 │   │   ├── snapshot.js             ← refreshSnapshot() helper
 │   │   ├── cache.js                ← in-process request cache
 │   │   └── logger.js               ← Winston logger
@@ -151,12 +151,10 @@ Copy `.env.example` → `.env` and fill in values before running compose:
 | `GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret |
 | `GOOGLE_CALLBACK_URL` | — | Google OAuth redirect URI |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | — | Same as `GOOGLE_CLIENT_ID` (exposed to browser) |
-| `USER_EMAIL` | — | Gmail address used to send password reset emails |
-| `USER_PASS` | — | Gmail **App Password** (16-char, NOT your real password) |
-| `SMTP_HOST` | `smtp.gmail.com` | SMTP server hostname |
-| `SMTP_PORT` | `587` | SMTP port (587 = STARTTLS) |
+| `RESEND_API_KEY` | — **required** | Resend API key — get one at resend.com |
+| `FROM_EMAIL` | `noreply@lori.my.id` | Sender address (must be on a verified Resend domain) |
 
-> **Gmail App Password:** go to myaccount.google.com → Security → 2-Step Verification → App Passwords. Generate one for "Mail". The 16-char value (with or without spaces) goes in `USER_PASS`.
+> **Resend:** sign up at resend.com → add your domain → verify the DNS records → create an API key. Free tier is 3,000 emails/month.
 
 ### Backend local dev (`finance-management/.env`)
 
@@ -166,8 +164,8 @@ PORT=3000
 HOST=0.0.0.0
 DB_URI=mongodb://localhost:27017/finan
 SECRET_TOKEN=your_jwt_secret_here
-USER_EMAIL=your-gmail@gmail.com
-USER_PASS=xxxx xxxx xxxx xxxx
+RESEND_API_KEY=re_your_api_key_here
+FROM_EMAIL=noreply@yourdomain.com
 ```
 
 ### Frontend local dev (`finance-management-fe/.env.local`)
@@ -413,8 +411,8 @@ docker run -d \
   -e DB_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/finan \
   -e SECRET_TOKEN=<secret> \
   -e FE_URL=https://your-frontend.com \
-  -e USER_EMAIL=you@gmail.com \
-  -e USER_PASS="xxxx xxxx xxxx xxxx" \
+  -e RESEND_API_KEY=re_your_api_key_here \
+  -e FROM_EMAIL=noreply@yourdomain.com \
   finan-be
 ```
 
