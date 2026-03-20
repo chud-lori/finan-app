@@ -2,6 +2,25 @@
 
 Technical reference for setting up, developing, testing, and deploying Finan App.
 
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Node.js 22, Express.js |
+| Database | MongoDB 7 (Mongoose ODM) |
+| Auth | JWT (jsonwebtoken) + Google OAuth 2.0 (Passport.js) |
+| Password hashing | bcrypt (salt 10) |
+| Email | Resend SDK |
+| File upload | Multer (`upload.array` for multi-file CSV) |
+| Rate limiting | Custom in-process sliding-window (no Redis dependency) |
+| Logging | Winston + Morgan |
+| Testing | Mocha + Chai + mongodb-memory-server |
+| Frontend | Next.js (App Router), React, Tailwind CSS v4 |
+| Charts | Recharts |
+| Frontend testing | Playwright E2E |
+| Container | Docker + Docker Compose |
+| CI/CD | GitHub Actions → GHCR → Watchtower (auto-deploy) |
+
 ---
 
 ## Repository layout
@@ -29,14 +48,15 @@ finan-app/                          ← monorepo root
 │   │   ├── goal.js                 ← goal routes with rate limits
 │   │   └── profile.js              ← profile routes with rate limits
 │   ├── models/
-│   │   ├── user.model.js
-│   │   ├── balance.model.js
+│   │   ├── user.model.js           ← password (bcrypt), tokenVersion, emailVerified, Google OAuth
+│   │   ├── balance.model.js        ← running balance per user
 │   │   ├── transaction.model.js    ← type enum: income | expense
 │   │   ├── category.model.js       ← scoped per user
 │   │   ├── goal.model.js
-│   │   ├── snapshot.model.js       ← monthly income/expense snapshots
-│   │   ├── preference.model.js     ← user preferences (timezone, currency)
-│   │   └── passwordReset.model.js  ← reset tokens with TTL index (auto-expires)
+│   │   ├── snapshot.model.js       ← monthly income/expense totals (denormalised for speed)
+│   │   ├── budget.model.js         ← per-month budget override { user, yearMonth, amount }
+│   │   ├── preference.model.js     ← timezone, currency, numberFormat, monthlyBudget default
+│   │   └── passwordReset.model.js  ← reset tokens with TTL index (auto-expires after 1h)
 │   ├── dtos/
 │   │   ├── base.dto.js
 │   │   ├── transaction.dto.js      ← includes sanitizeText() for HTML/null-byte stripping
@@ -113,8 +133,8 @@ finan-app/                          ← monorepo root
     │       ├── HBarChart.js
     │       └── VBarChart.js
     ├── lib/
-    │   ├── api.js                  ← Typed fetch wrappers for all endpoints
-    │   └── format.js               ← IDR formatter, date formatter
+    │   ├── api.js                  ← Typed fetch wrappers for all backend endpoints
+    │   └── format.js               ← formatCurrency(amount, currency, numberFormat), date helpers
     └── e2e/
         ├── public-pages.spec.js    ← 30 Playwright tests (desktop + mobile)
         └── auth-flow.spec.js       ← Authenticated flow tests (requires TEST_EMAIL/TEST_PASSWORD)
@@ -313,6 +333,7 @@ Swagger UI is available at `/api-docs` when `NODE_ENV !== production`.
 |--------|------|-----------|------|-------------|
 | POST | `/api/transaction` | 30/min | ✓ | Add transaction |
 | GET | `/api/transaction` | — | ✓ | All transactions (`?month=YYYY-MM&category=X&search=X&page=N&limit=N`) |
+| PATCH | `/api/transaction/:id` | 30/min | ✓ | Update description and/or category of a transaction |
 | DELETE | `/api/transaction/:id` | — | ✓ | Delete transaction, balance updated |
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics (`?year=YYYY&month=M`) |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Transactions flagged as anomalies |
@@ -323,7 +344,7 @@ Swagger UI is available at `/api-docs` when `NODE_ENV !== production`.
 | GET | `/api/transaction/range/:start/:end` | — | ✓ | Transactions in date range with summary |
 | GET | `/api/transaction/date/:date` | — | ✓ | Transactions on a specific date |
 | GET | `/api/transaction/recommendation/:monthly/:spend` | — | ✓ | Budget affordability check |
-| POST | `/api/transaction/import/csv` | 10/min | ✓ | Bulk CSV import (`multipart/form-data`, field: `file`, max 5 MB) |
+| POST | `/api/transaction/import/csv` | 10/min | ✓ | Bulk CSV import (`multipart/form-data`, field: `files`, up to 10 files, max 5 MB each) |
 | GET | `/api/transaction/category` | — | ✓ | List categories (`?search=X&type=income|expense`) |
 | GET | `/api/transaction/category/suggestions` | — | ✓ | Smart category suggestions by time of day |
 | POST | `/api/transaction/category` | — | ✓ | Seed default categories |
@@ -341,8 +362,10 @@ Swagger UI is available at `/api-docs` when `NODE_ENV !== production`.
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
 | GET | `/api/profile` | 60/min | ✓ | Get profile, preferences, and snapshot summary |
-| PATCH | `/api/profile/preferences` | 30/min | ✓ | Update timezone, currency, display preferences |
+| PATCH | `/api/profile/preferences` | 30/min | ✓ | Update timezone, currency, numberFormat, monthlyBudget |
 | GET | `/api/profile/export` | 10/min | ✓ | Export all transactions as CSV |
+| GET | `/api/profile/budget/:yearMonth` | 30/min | ✓ | Get budget for a specific month (falls back to global default) |
+| POST | `/api/profile/budget/:yearMonth` | 30/min | ✓ | Set budget for a month (`{ amount, updateDefault? }`) |
 
 ---
 
@@ -385,7 +408,30 @@ Dark mode is implemented via CSS class overrides in `globals.css` (`.dark .bg-wh
 
 ### CSV import
 
-Type values are normalized: anything that is not exactly `"income"` is treated as `"expense"`. If a category in the CSV does not exist, the importer creates it. Rows that fail validation are skipped and reported in the response `errors` array.
+Accepts up to 10 files in a single request (`multipart/form-data`, field name `files`). Files are processed sequentially (not in parallel) to avoid balance race conditions when multiple files affect the same user's balance. Each file produces its own result block; the response aggregates `totalSuccess` and `totalFailed` across all files.
+
+Type values are normalized: anything that is not exactly `"income"` is treated as `"expense"`. If a category in the CSV does not exist, the importer creates it. Rows that fail validation are skipped and reported in the per-file `errors` array.
+
+### Currency & number formatting
+
+`CurrencyContext` (frontend) stores `currency` and `numberFormat` in `localStorage` for instant paint (no flash), then refreshes from `GET /api/profile` on mount. `formatCurrency(amount, currency, numberFormat)` in `lib/format.js` uses `Intl.NumberFormat` — `numberFormat: 'dot'` uses the currency's natural locale (e.g. `id-ID` → `5.000.000`), `'comma'` forces `en-US` grouping (`5,000,000`). All components consume `useFormatAmount()` or `useCurrency()` — no hardcoded `Rp` or `IDR` strings.
+
+### Per-month budget
+
+`Budget` model stores `{ user, yearMonth, amount }` with a unique index on `(user, yearMonth)`. When reading the budget for a month, the backend first looks for a `Budget` document; if none exists, it falls back to `Preference.monthlyBudget` (the global default). Writing a budget only updates `Preference.monthlyBudget` when the caller explicitly passes `updateDefault: true` — this prevents one-off month overrides (e.g. a holiday month) from silently becoming the new global default.
+
+### Transaction inline editing
+
+`PATCH /api/transaction/:id` accepts `{ description?, category? }`. At least one field is required. Category existence is validated case-insensitively against the user's own categories. Ownership is enforced via `findOneAndUpdate({ _id, user })`. The frontend updates local state optimistically on success.
+
+### CI/CD pipeline
+
+Two workflows in `.github/workflows/`:
+
+- **`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which monorepo subtree changed. Backend job (`npm test`) only runs when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed.
+- **`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds the image(s) that changed. Backend and frontend build jobs run in parallel. Images are tagged `:latest` and pushed to GHCR. Watchtower on the server polls GHCR every 30s and redeploys automatically.
+
+> Changing `docker-compose.yml` or other root-level files does **not** trigger an image rebuild — those changes require a manual `git pull` on the server followed by `docker compose up -d`.
 
 ### SEO (frontend)
 
