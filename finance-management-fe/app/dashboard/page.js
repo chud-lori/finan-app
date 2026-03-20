@@ -493,9 +493,11 @@ function StatCard({ label, value, icon, tip }) {
 function BudgetCard({ expense, budget, month, onSaved }) {
   const formatAmount = useFormatAmount();
   const { numberFormat } = useCurrency();
-  const [editing, setEditing] = useState(false);
-  const [input, setInput]     = useState('');
-  const [saving, setSaving]   = useState(false);
+  const [editing, setEditing]         = useState(false);
+  const [input, setInput]             = useState('');
+  const [updateDefault, setUpdateDefault] = useState(true);
+  const [saved, setSaved]             = useState(false);
+  const [saving, setSaving]           = useState(false);
 
   const pct      = budget > 0 ? Math.round((expense / budget) * 100) : null;
   const barPct   = budget > 0 ? Math.min((expense / budget) * 100, 100) : 0;
@@ -506,16 +508,23 @@ function BudgetCard({ expense, budget, month, onSaved }) {
   const fmtInput  = (n) => new Intl.NumberFormat(numberFormat === 'comma' ? 'en-US' : 'id-ID', { style: 'decimal' }).format(Number(n));
   const parseInput = (s) => Number(String(s).replace(/[^0-9]/g, ''));
 
-  const startEdit = () => { setInput(budget > 0 ? fmtInput(budget) : ''); setEditing(true); };
+  const startEdit = () => {
+    setInput(budget > 0 ? fmtInput(budget) : '');
+    setUpdateDefault(true);
+    setSaved(false);
+    setEditing(true);
+  };
 
   const handleSave = async () => {
     const val = parseInput(input);
     if (isNaN(val) || val < 0) return;
     setSaving(true);
     try {
-      await setBudget(month, Math.round(val));
+      await setBudget(month, Math.round(val), updateDefault);
       await onSaved();
       setEditing(false);
+      setSaved({ amount: Math.round(val), wasDefault: updateDefault });
+      setTimeout(() => setSaved(false), 4000);
     } catch (e) {
       alert(e.message);
     } finally {
@@ -540,24 +549,35 @@ function BudgetCard({ expense, budget, month, onSaved }) {
       </div>
 
       {editing ? (
-        <div className="flex items-center gap-2">
-          <input
-            autoFocus
-            type="text"
-            inputMode="numeric"
-            value={input}
-            onChange={e => {
-              const digits = e.target.value.replace(/[^0-9]/g, '');
-              setInput(digits ? fmtInput(digits) : '');
-            }}
-            onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
-            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            placeholder={fmtInput(5000000)}
-          />
-          <button onClick={handleSave} disabled={saving} className="px-2.5 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-50 shrink-0">
-            {saving ? '…' : 'Save'}
-          </button>
-          <button onClick={() => setEditing(false)} className="px-2.5 py-1.5 rounded-lg text-gray-500 text-xs hover:bg-gray-100 shrink-0">✕</button>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              type="text"
+              inputMode="numeric"
+              value={input}
+              onChange={e => {
+                const digits = e.target.value.replace(/[^0-9]/g, '');
+                setInput(digits ? fmtInput(digits) : '');
+              }}
+              onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
+              className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              placeholder={fmtInput(5000000)}
+            />
+            <button onClick={handleSave} disabled={saving} className="px-2.5 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-50 shrink-0">
+              {saving ? '…' : 'Save'}
+            </button>
+            <button onClick={() => setEditing(false)} className="px-2.5 py-1.5 rounded-lg text-gray-500 text-xs hover:bg-gray-100 shrink-0">✕</button>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={updateDefault}
+              onChange={e => setUpdateDefault(e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-teal-600"
+            />
+            <span className="text-xs text-gray-500">Set as default for future months</span>
+          </label>
         </div>
       ) : budget === 0 ? (
         <>
@@ -584,6 +604,14 @@ function BudgetCard({ expense, budget, month, onSaved }) {
             <p className="text-xs text-gray-400">{formatAmount(remaining)} remaining</p>
           )}
         </>
+      )}
+
+      {saved && (
+        <p className="text-xs text-teal-600 mt-2 font-medium">
+          {saved.wasDefault
+            ? 'Saved. Future months will default to this amount.'
+            : 'Saved for this month only.'}
+        </p>
       )}
     </div>
   );

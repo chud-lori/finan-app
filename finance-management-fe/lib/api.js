@@ -206,11 +206,11 @@ export const updatePreferences = (body) =>
     body: JSON.stringify(body),
   }).then(handleResponse);
 
-export const setBudget = (yearMonth, amount) =>
+export const setBudget = (yearMonth, amount, updateDefault = false) =>
   fetch(`${BASE_URL}/api/transaction/budget/${yearMonth}`, {
     method: 'PUT',
     headers: authHeaders(),
-    body: JSON.stringify({ amount }),
+    body: JSON.stringify({ amount, updateDefault }),
   }).then(handleResponse);
 
 // Returns a raw Response (CSV blob) — do not call .then(handleResponse)

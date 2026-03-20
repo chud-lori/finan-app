@@ -966,22 +966,25 @@ const setBudget = async (req, res) => {
         }
         const rounded = Math.round(amount);
 
-        // Upsert per-month budget AND update global preference default
-        await Promise.all([
-            Budget.findOneAndUpdate(
-                { user: req.user.id, yearMonth },
-                { amount: rounded },
-                { upsert: true, new: true }
-            ),
-            Preference.findOneAndUpdate(
+        // Always upsert the per-month record
+        await Budget.findOneAndUpdate(
+            { user: req.user.id, yearMonth },
+            { amount: rounded },
+            { upsert: true, new: true }
+        );
+
+        // Only update the global default when the caller explicitly requests it
+        const updateDefault = req.body.updateDefault === true || req.body.updateDefault === 'true';
+        if (updateDefault) {
+            await Preference.findOneAndUpdate(
                 { user: req.user.id },
                 { monthlyBudget: rounded },
                 { upsert: true }
-            ),
-        ]);
+            );
+        }
 
-        logger.info(`Budget set: user=${req.user.id} month=${yearMonth} amount=${rounded}`);
-        res.status(200).json(BaseResponseDTO.success('Budget set', { yearMonth, amount: rounded }));
+        logger.info(`Budget set: user=${req.user.id} month=${yearMonth} amount=${rounded} updateDefault=${updateDefault}`);
+        res.status(200).json(BaseResponseDTO.success('Budget set', { yearMonth, amount: rounded, updatedDefault: updateDefault }));
     } catch (e) {
         logger.error(`Set budget error: ${e.message}`);
         res.status(500).json(BaseResponseDTO.error('Failed to set budget'));
