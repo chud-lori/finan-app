@@ -305,7 +305,7 @@ function Toggle({ options, value, onChange }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const formatAmount = useFormatAmount();
-  const { refreshCurrency } = useCurrency();
+  const { refreshCurrency, clearCurrency } = useCurrency();
   const router = useRouter();
 
   const [profile,        setProfile]        = useState(null);
@@ -477,6 +477,7 @@ export default function ProfilePage() {
       setTimeout(() => {
         localStorage.removeItem('token');
         localStorage.removeItem('username');
+        clearCurrency();
         router.replace('/login');
       }, 1500);
     } catch (e) {
@@ -494,6 +495,7 @@ export default function ProfilePage() {
       await logoutAllDevices();
       localStorage.removeItem('token');
       localStorage.removeItem('username');
+      clearCurrency();
       router.replace('/login');
     } catch (e) {
       alert(e.message || 'Failed to logout all devices');
@@ -519,6 +521,7 @@ export default function ProfilePage() {
   const handleDeleteConfirmed = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
+    clearCurrency();
     router.replace('/login');
   };
 
@@ -1002,6 +1005,7 @@ export default function ProfilePage() {
                 onClick={() => {
                   localStorage.removeItem('token');
                   localStorage.removeItem('username');
+                  clearCurrency();
                   router.replace('/login');
                 }}
                 className="md:hidden w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-50 transition-colors"

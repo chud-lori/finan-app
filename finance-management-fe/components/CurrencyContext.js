@@ -8,6 +8,7 @@ const CurrencyContext = createContext({
   numberFormat: 'dot',
   formatAmount: (v) => formatCurrency(v, 'IDR', 'dot'),
   refreshCurrency: () => {},
+  clearCurrency: () => {},
 });
 
 export function CurrencyProvider({ children }) {
@@ -40,13 +41,22 @@ export function CurrencyProvider({ children }) {
     refresh();
   }, [refresh]);
 
+  const clear = useCallback(() => {
+    setCurrency('IDR');
+    setNumberFormat('dot');
+    try {
+      localStorage.removeItem('currency');
+      localStorage.removeItem('numberFormat');
+    } catch {}
+  }, []);
+
   const formatAmount = useCallback(
     (value) => formatCurrency(value, currency, numberFormat),
     [currency, numberFormat],
   );
 
   return (
-    <CurrencyContext.Provider value={{ currency, numberFormat, formatAmount, refreshCurrency: refresh }}>
+    <CurrencyContext.Provider value={{ currency, numberFormat, formatAmount, refreshCurrency: refresh, clearCurrency: clear }}>
       {children}
     </CurrencyContext.Provider>
   );

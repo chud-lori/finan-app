@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@/components/ThemeContext';
+import { useCurrency } from '@/components/CurrencyContext';
 
 const NAV_LINKS = [
   { href: '/dashboard',      label: 'Dashboard' },
@@ -122,6 +123,7 @@ function UserMenu({ username, onLogout }) {
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { clearCurrency } = useCurrency();
   const [username, setUsername] = useState('');
 
   useEffect(() => {
@@ -131,6 +133,7 @@ export default function Navbar() {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
+    clearCurrency();
     router.replace('/login');
   };
 
