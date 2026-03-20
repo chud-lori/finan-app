@@ -239,6 +239,16 @@ export const setBudget = (yearMonth, amount, updateDefault = false) =>
     body: JSON.stringify({ amount, updateDefault }),
   }).then(handleResponse);
 
+export const addGoal = (description, price) =>
+  fetch(`${BASE_URL}/api/goal/add`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ description, price }),
+  }).then(handleResponse);
+
+export const getAllGoals = () =>
+  fetch(`${BASE_URL}/api/goal/goals`, { headers: authHeaders() }).then(handleResponse);
+
 export const getGamificationSummary = () =>
   fetch(`${BASE_URL}/api/gamification/summary?tz=${encodeURIComponent(browserTz())}`, {
     headers: authHeaders(),

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getRecommendation, getProfile } from '@/lib/api';
+import { getRecommendation, getProfile, addGoal, getAllGoals, getGamificationSummary } from '@/lib/api';
 import { useCurrency } from '@/components/CurrencyContext';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -265,35 +265,156 @@ function BudgetRuleTool() {
   );
 }
 
-// ─── Tool 3: Savings Goal Calculator ─────────────────────────────────────────
+// ─── Tool 3: Savings Goal (DB-backed + Calculator) ────────────────────────────
+function GoalRingSmall({ pct }) {
+  const r = 14, circ = 2 * Math.PI * r;
+  const COLORS = pct >= 100 ? '#14b8a6' : pct >= 75 ? '#3b82f6' : pct >= 50 ? '#8b5cf6' : pct >= 25 ? '#f59e0b' : '#d1d5db';
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" className="-rotate-90 shrink-0">
+      <circle cx="18" cy="18" r={r} fill="none" stroke="#e5e7eb" strokeWidth="3.5" />
+      <circle cx="18" cy="18" r={r} fill="none" stroke={COLORS} strokeWidth="3.5"
+        strokeDasharray={`${circ * Math.min(pct, 100) / 100} ${circ}`} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SavedGoalsList({ goals, savings }) {
+  const { formatAmount } = useCurrency();
+  if (!goals.length) return (
+    <p className="text-xs text-gray-400 text-center py-3">No saved goals yet. Add one below.</p>
+  );
+  return (
+    <div className="space-y-2">
+      {goals.map(g => {
+        const pct = g.price > 0 ? Math.min(100, Math.round((savings / g.price) * 100)) : 0;
+        const milestone = pct >= 100 ? '🎉 Reached!' : pct >= 75 ? '75% milestone!' : pct >= 50 ? 'Halfway there!' : pct >= 25 ? 'First 25%!' : 'Getting started';
+        return (
+          <div key={g.id || g._id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+            <div className="relative shrink-0">
+              <GoalRingSmall pct={pct} />
+              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-gray-700">{pct}%</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-800 truncate">{g.description}</p>
+              <p className="text-xs text-gray-400">{formatAmount(g.price)} target · {milestone}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SavingsGoalTool() {
   const { formatAmount, currency } = useCurrency();
+
+  // ── DB-backed goals state ──
+  const [goals,      setGoals]      = useState([]);
+  const [savings,    setSavings]    = useState(0);   // 20% of balance (from gamification API)
+  const [goalsLoaded, setGoalsLoaded] = useState(false);
+
+  // ── Add goal form ──
+  const [newName,    setNewName]    = useState('');
+  const [newAmount,  setNewAmount]  = useState('');
+  const [adding,     setAdding]     = useState(false);
+  const [addError,   setAddError]   = useState('');
+
+  // ── Calculator state ──
   const [goal,    setGoal]    = useState('');
   const [saved,   setSaved]   = useState('');
   const [monthly, setMonthly] = useState('');
   const [name,    setName]    = useState('');
   const [result,  setResult]  = useState(null);
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    Promise.all([
+      getAllGoals().then(res => setGoals(res.data?.goals ?? [])),
+      getGamificationSummary().then(res => {
+        // Use the savings value from gamification (20% of balance)
+        const g = res.data?.goals ?? [];
+        if (g.length > 0) setSavings(Math.round(g[0].price * (g[0].progress / 100)));
+      }),
+    ])
+      .catch(() => {})
+      .finally(() => setGoalsLoaded(true));
+  }, []);
+
+  // Reload goals + savings after adding one
+  const reloadGoals = () => {
+    getAllGoals().then(res => setGoals(res.data?.goals ?? [])).catch(() => {});
+    getGamificationSummary().then(res => {
+      const g = res.data?.goals ?? [];
+      if (g.length > 0) setSavings(Math.round(g[0].price * (g[0].progress / 100)));
+    }).catch(() => {});
+  };
+
+  const handleAddGoal = async (e) => {
     e.preventDefault();
-    const target    = parseNum(goal);
-    const current   = parseNum(saved);
-    const perMonth  = parseNum(monthly);
+    const price = parseNum(newAmount);
+    if (!newName.trim() || !price) { setAddError('Name and amount are required'); return; }
+    setAdding(true); setAddError('');
+    try {
+      await addGoal(newName.trim(), price);
+      setNewName(''); setNewAmount('');
+      reloadGoals();
+    } catch (err) {
+      setAddError(err.message || 'Failed to save goal');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleCalc = (e) => {
+    e.preventDefault();
+    const target   = parseNum(goal);
+    const current  = parseNum(saved);
+    const perMonth = parseNum(monthly);
     if (!target || !perMonth) return;
-    const remaining   = Math.max(target - current, 0);
-    const months      = remaining / perMonth;
-    const completion  = monthsFromNow(months);
-    const progress    = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
-    setResult({ target, current, remaining, perMonth, months, completion, progress, name: name || 'My Goal' });
+    const remaining  = Math.max(target - current, 0);
+    const months     = remaining / perMonth;
+    const progress   = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
+    setResult({ target, current, remaining, perMonth, months, completion: monthsFromNow(months), progress, name: name || 'My Goal' });
   };
 
   return (
     <div className="space-y-4">
+
+      {/* ── My Saved Goals ── */}
+      <ToolCard>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-800">My Goals</h3>
+          {savings > 0 && (
+            <span className="text-xs text-gray-400">
+              ~{formatAmount(savings)} allocated (20% of balance)
+            </span>
+          )}
+        </div>
+        {goalsLoaded
+          ? <SavedGoalsList goals={goals} savings={savings} />
+          : <p className="text-xs text-gray-400 text-center py-3">Loading…</p>
+        }
+
+        {/* Add goal form */}
+        <form onSubmit={handleAddGoal} className="mt-4 space-y-2">
+          <p className="text-xs font-medium text-gray-600">Add a goal</p>
+          <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
+            placeholder="e.g. New laptop, Holiday, Emergency fund"
+            className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+          <AmountInput label="" value={newAmount} onChange={setNewAmount} placeholder="Target amount" />
+          {addError && <p className="text-xs text-red-500">{addError}</p>}
+          <button type="submit" disabled={adding}
+            className="w-full py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+            {adding ? 'Saving…' : 'Save Goal'}
+          </button>
+        </form>
+      </ToolCard>
+
+      {/* ── Calculator ── */}
       <ToolCard>
         <p className="text-xs text-gray-500 mb-4">
-          Enter your savings target and monthly capacity to see when you'll reach your goal.
+          Calculate how long it will take to reach a savings target.
         </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleCalc} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Goal name (optional)</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
