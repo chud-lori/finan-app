@@ -36,29 +36,41 @@ export default function Image() {
           >
             💰
           </div>
-          <span style={{ fontSize: '30px', fontWeight: '800', color: '#0d9488', letterSpacing: '-0.5px' }}>
+          <span style={{ fontSize: '30px', fontWeight: '800', color: '#0d9488' }}>
             Finan App
           </span>
         </div>
 
-        {/* Headline */}
+        {/* Headline — split into two spans inside a flex-wrap container */}
         <div
           style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'baseline',
+            gap: '0 12px',
             fontSize: '62px',
             fontWeight: '900',
-            color: '#111827',
             lineHeight: 1.1,
             marginBottom: '20px',
             letterSpacing: '-2px',
             maxWidth: '820px',
           }}
         >
-          Your finances,{' '}
+          <span style={{ color: '#111827' }}>Your finances,</span>
           <span style={{ color: '#0d9488' }}>finally under control.</span>
         </div>
 
         {/* Subtext */}
-        <div style={{ fontSize: '24px', color: '#6b7280', maxWidth: '660px', lineHeight: 1.45, marginBottom: '44px' }}>
+        <div
+          style={{
+            display: 'flex',
+            fontSize: '24px',
+            color: '#6b7280',
+            maxWidth: '660px',
+            lineHeight: 1.45,
+            marginBottom: '44px',
+          }}
+        >
           Budgets · FIRE calculator · AI insights · Debt payoff · Multi-currency · Free forever
         </div>
 
@@ -66,26 +78,20 @@ export default function Image() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div
             style={{
+              display: 'flex',
               padding: '16px 32px',
               borderRadius: '14px',
               background: '#0d9488',
               fontSize: '22px',
               fontWeight: '700',
               color: '#ffffff',
-              letterSpacing: '-0.3px',
             }}
           >
             Start for free →
           </div>
-          <div
-            style={{
-              fontSize: '20px',
-              color: '#6b7280',
-              fontWeight: '500',
-            }}
-          >
+          <span style={{ fontSize: '20px', color: '#6b7280', fontWeight: '500' }}>
             finance.lori.my.id
-          </div>
+          </span>
         </div>
       </div>
     ),
