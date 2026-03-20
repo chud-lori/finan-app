@@ -244,10 +244,10 @@ const exportTransactions = async (req, res) => {
         });
 
         const csv = [...titleBlock, header.join(','), ...rows].join('\n');
-        const filename = period === 'monthly' ? `transactions-${month}.csv`
-            : period === 'yearly'  ? `transactions-${year}.csv`
-            : period === 'range'   ? `transactions-${rangeFrom}-to-${rangeTo}.csv`
-            : 'transactions-all.csv';
+        const filename = period === 'monthly' ? `finan-app-transactions-${month}.csv`
+            : period === 'yearly'  ? `finan-app-transactions-${year}.csv`
+            : period === 'range'   ? `finan-app-transactions-${rangeFrom}-to-${rangeTo}.csv`
+            : 'finan-app-transactions-all.csv';
 
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
