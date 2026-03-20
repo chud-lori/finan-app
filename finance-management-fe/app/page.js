@@ -9,7 +9,7 @@ const SITE_URL = 'https://finance.lori.my.id';
 const SITE_NAME = 'Finan App';
 const TITLE = 'Finan App — Free Personal Finance Tracker & Planner';
 const DESCRIPTION =
-  'Track income and expenses, analyse spending patterns, plan budgets, calculate debt payoff, FIRE number, and tax estimates — all in one clean dashboard. Free to use. Multi-currency support.';
+  'Free personal finance tracker with budgets, FIRE calculator, AI insights, and 10+ planning tools. Multi-currency support. No ads, free forever.';
 
 export const metadata = {
   title: TITLE,

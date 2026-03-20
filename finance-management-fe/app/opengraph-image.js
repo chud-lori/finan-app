@@ -1,6 +1,5 @@
 import { ImageResponse } from 'next/og';
 
-export const runtime = 'edge';
 export const alt = 'Finan App — Free Personal Finance Tracker & Planner';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
@@ -10,34 +9,34 @@ export default function Image() {
     (
       <div
         style={{
-          background: 'linear-gradient(135deg, #f0fdfa 0%, #e6fffa 40%, #f9fafb 100%)',
+          background: 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 50%, #f9fafb 100%)',
           width: '100%',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-start',
           justifyContent: 'center',
-          padding: '80px',
+          padding: '72px 80px',
           fontFamily: 'system-ui, -apple-system, sans-serif',
         }}
       >
-        {/* Logo / brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '40px' }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '36px' }}>
           <div
             style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '16px',
+              width: '52px',
+              height: '52px',
+              borderRadius: '14px',
               background: '#0d9488',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '28px',
+              fontSize: '26px',
             }}
           >
             💰
           </div>
-          <span style={{ fontSize: '32px', fontWeight: '800', color: '#0d9488', letterSpacing: '-1px' }}>
+          <span style={{ fontSize: '30px', fontWeight: '800', color: '#0d9488', letterSpacing: '-0.5px' }}>
             Finan App
           </span>
         </div>
@@ -45,13 +44,13 @@ export default function Image() {
         {/* Headline */}
         <div
           style={{
-            fontSize: '64px',
+            fontSize: '62px',
             fontWeight: '900',
             color: '#111827',
             lineHeight: 1.1,
-            marginBottom: '24px',
+            marginBottom: '20px',
             letterSpacing: '-2px',
-            maxWidth: '800px',
+            maxWidth: '820px',
           }}
         >
           Your finances,{' '}
@@ -59,28 +58,34 @@ export default function Image() {
         </div>
 
         {/* Subtext */}
-        <div style={{ fontSize: '26px', color: '#6b7280', maxWidth: '680px', lineHeight: 1.4 }}>
-          Track income & expenses · Budget planner · FIRE calculator · AI insights · Multi-currency
+        <div style={{ fontSize: '24px', color: '#6b7280', maxWidth: '660px', lineHeight: 1.45, marginBottom: '44px' }}>
+          Budgets · FIRE calculator · AI insights · Debt payoff · Multi-currency · Free forever
         </div>
 
-        {/* Pills */}
-        <div style={{ display: 'flex', gap: '12px', marginTop: '48px' }}>
-          {['Free forever', 'Google OAuth', 'Dark mode', '10+ currencies'].map(label => (
-            <div
-              key={label}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '100px',
-                background: '#fff',
-                border: '2px solid #d1fae5',
-                fontSize: '18px',
-                fontWeight: '600',
-                color: '#065f46',
-              }}
-            >
-              {label}
-            </div>
-          ))}
+        {/* CTA */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div
+            style={{
+              padding: '16px 32px',
+              borderRadius: '14px',
+              background: '#0d9488',
+              fontSize: '22px',
+              fontWeight: '700',
+              color: '#ffffff',
+              letterSpacing: '-0.3px',
+            }}
+          >
+            Start for free →
+          </div>
+          <div
+            style={{
+              fontSize: '20px',
+              color: '#6b7280',
+              fontWeight: '500',
+            }}
+          >
+            finance.lori.my.id
+          </div>
         </div>
       </div>
     ),

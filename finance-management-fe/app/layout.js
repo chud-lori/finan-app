@@ -7,7 +7,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 
 export const metadata = {
   title: 'Finan App — Personal Finance Tracker & Planner',
-  description: 'Track income and expenses, analyse spending patterns, plan budgets, calculate debt payoff, FIRE number, and tax estimates. Free personal finance dashboard.',
+  description: 'Free personal finance tracker with budgets, FIRE calculator, AI insights, and 10+ planning tools. Multi-currency support. No ads, free forever.',
   metadataBase: new URL('https://finance.lori.my.id'),
   manifest: '/manifest.json',
   icons: {
