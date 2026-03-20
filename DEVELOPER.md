@@ -11,6 +11,7 @@ Technical reference for setting up, developing, testing, and deploying Finan App
 | Auth | JWT (jsonwebtoken) + Google OAuth 2.0 (Passport.js) |
 | Password hashing | bcrypt (salt 10) |
 | Email | Resend SDK |
+| Error monitoring | Sentry (`@sentry/node` + `@sentry/nextjs`) |
 | File upload | Multer (`upload.array` for multi-file CSV) |
 | Rate limiting | Custom in-process sliding-window (no Redis dependency) |
 | Logging | Winston + Morgan |
@@ -173,6 +174,8 @@ Copy `.env.example` → `.env` and fill in values before running compose:
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | — | Same as `GOOGLE_CLIENT_ID` (exposed to browser) |
 | `RESEND_API_KEY` | — **required** | Resend API key — get one at resend.com |
 | `FROM_EMAIL` | `noreply@lori.my.id` | Sender address (must be on a verified Resend domain) |
+| `SENTRY_DSN` | — | Sentry DSN for the backend (Node.js project). Runtime env var — add to `.env` and recreate the container. |
+| `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry DSN for the frontend (Next.js project). **Build-time** — must be set as a GitHub Actions variable so it is baked into the image during CI/CD. |
 
 > **Resend:** sign up at resend.com → add your domain → verify the DNS records → create an API key. Free tier is 3,000 emails/month.
 
@@ -193,6 +196,7 @@ FROM_EMAIL=noreply@yourdomain.com
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=<your-client-id>
+NEXT_PUBLIC_SENTRY_DSN=<your-frontend-sentry-dsn>   # optional for local dev
 ```
 
 > When running via Docker Compose, the backend maps to host port `3001` and the frontend to `3000`.
@@ -433,6 +437,21 @@ Two workflows in `.github/workflows/`:
 
 > Changing `docker-compose.yml` or other root-level files does **not** trigger an image rebuild — those changes require a manual `git pull` on the server followed by `docker compose up -d`.
 
+### Error monitoring (Sentry)
+
+Two separate Sentry projects — one per service:
+
+| Service | SDK | DSN env var | When it's applied |
+|---------|-----|-------------|-------------------|
+| Backend (Express) | `@sentry/node` | `SENTRY_DSN` | Runtime — add to `.env`, recreate container |
+| Frontend (Next.js) | `@sentry/nextjs` | `NEXT_PUBLIC_SENTRY_DSN` | Build time — set as GitHub Actions variable, triggers on next image build |
+
+**Backend** — `Sentry.init()` runs at the top of `app.js` (before all other imports), guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` is registered after all routes to capture unhandled Express errors. `uncaughtException` also calls `Sentry.captureException()` before exiting.
+
+**Frontend** — `sentry.client.config.js` initialises the browser SDK with Session Replay (5% of sessions, 100% on error). `instrumentation.js` initialises the server-side SDK via the Next.js instrumentation hook.
+
+**Important:** `NEXT_PUBLIC_SENTRY_DSN` is a `NEXT_PUBLIC_*` variable — it is inlined into the browser bundle at build time. To activate Sentry on the frontend: add `NEXT_PUBLIC_SENTRY_DSN` to GitHub → Settings → Variables, then push a frontend change to trigger a new image build.
+
 ### SEO (frontend)
 
 - `robots.js` → `/robots.txt`: allows crawling of public pages, blocks auth-required routes
@@ -459,6 +478,7 @@ docker run -d \
   -e FE_URL=https://your-frontend.com \
   -e RESEND_API_KEY=re_your_api_key_here \
   -e FROM_EMAIL=noreply@yourdomain.com \
+  -e SENTRY_DSN=<your-backend-sentry-dsn> \
   finan-be
 ```
 
@@ -471,6 +491,7 @@ cd finance-management-fe
 docker build \
   --build-arg NEXT_PUBLIC_API_URL=https://your-domain.com \
   --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID=<client-id> \
+  --build-arg NEXT_PUBLIC_SENTRY_DSN=<your-frontend-sentry-dsn> \
   -t finan-fe .
 docker run -d -p 3000:3000 finan-fe
 ```
