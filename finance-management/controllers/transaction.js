@@ -14,6 +14,7 @@ const cache = require('../helpers/cache');
 const { refreshSnapshot } = require('../helpers/snapshot');
 const Snapshot = require('../models/snapshot.model');
 const Preference = require('../models/preference.model');
+const Budget = require('../models/budget.model');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -167,7 +168,7 @@ const getUserTransaction = async (req, res, next) => {
         const monthFilter = { user: Transaction.base.Types.ObjectId.createFromHexString(req.user.id) };
         if (month) monthFilter.time = filter.time;
 
-        const [total, transactions, balance, monthTotals, prefs] = await Promise.all([
+        const [total, transactions, balance, monthTotals, prefs, budgetDoc] = await Promise.all([
             Transaction.countDocuments(filter),
             Transaction.find(filter)
                 .sort({ [sortBy]: order })
@@ -180,6 +181,9 @@ const getUserTransaction = async (req, res, next) => {
                 { $group: { _id: '$type', total: { $sum: '$amount' } } }
             ]),
             Preference.findOne({ user: req.user.id }).select('monthlyBudget').lean(),
+            month
+                ? Budget.findOne({ user: req.user.id, yearMonth: month }).select('amount').lean()
+                : Promise.resolve(null),
         ]);
 
         if (!balance) {
@@ -188,7 +192,8 @@ const getUserTransaction = async (req, res, next) => {
 
         const monthlyIncome  = monthTotals.find(r => r._id === 'income')?.total  ?? 0;
         const monthlyExpense = monthTotals.find(r => r._id === 'expense')?.total ?? 0;
-        const monthlyBudget  = prefs?.monthlyBudget ?? 0;
+        // Per-month budget takes priority; fall back to the global preference default
+        const monthlyBudget = budgetDoc?.amount ?? prefs?.monthlyBudget ?? 0;
 
         const totalPages = Math.ceil(total / limit) || 1;
         const responseDTO = new GetTransactionsResponseDTO(transactions, balance, { total, page, totalPages, limit });
@@ -949,6 +954,40 @@ const getActiveMonths = async (req, res) => {
     }
 };
 
+const setBudget = async (req, res) => {
+    try {
+        const { yearMonth } = req.params;
+        if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid yearMonth — expected YYYY-MM'));
+        }
+        const amount = parseFloat(req.body.amount);
+        if (isNaN(amount) || amount < 0) {
+            return res.status(400).json(BaseResponseDTO.error('Amount must be a non-negative number'));
+        }
+        const rounded = Math.round(amount);
+
+        // Upsert per-month budget AND update global preference default
+        await Promise.all([
+            Budget.findOneAndUpdate(
+                { user: req.user.id, yearMonth },
+                { amount: rounded },
+                { upsert: true, new: true }
+            ),
+            Preference.findOneAndUpdate(
+                { user: req.user.id },
+                { monthlyBudget: rounded },
+                { upsert: true }
+            ),
+        ]);
+
+        logger.info(`Budget set: user=${req.user.id} month=${yearMonth} amount=${rounded}`);
+        res.status(200).json(BaseResponseDTO.success('Budget set', { yearMonth, amount: rounded }));
+    } catch (e) {
+        logger.error(`Set budget error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to set budget'));
+    }
+};
+
 module.exports = {
     addTransaction,
     getUserTransaction,
@@ -966,4 +1005,5 @@ module.exports = {
     getExplainability,
     getTimeToZero,
     getActiveMonths,
+    setBudget,
 };
