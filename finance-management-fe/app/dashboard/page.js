@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getTransactions, deleteTransaction, getActiveMonths, setBudget } from '@/lib/api';
+import { getTransactions, deleteTransaction, getActiveMonths, setBudget, updateTransaction, getCategories } from '@/lib/api';
 import { formatDate, toTitleCase } from '@/lib/format';
 import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
@@ -226,6 +226,10 @@ export default function DashboardPage() {
   const [page, setPage]       = useState(1);
 
   const [activeMonths, setActiveMonths] = useState([]);
+  const [categories,   setCategories]   = useState([]);
+  const [editingId,    setEditingId]     = useState(null);
+  const [editValues,   setEditValues]    = useState({ description: '', category: '' });
+  const [editSaving,   setEditSaving]    = useState(false);
 
   // Bootstrap from URL params (e.g. navigated here from Analytics)
   useEffect(() => {
@@ -236,12 +240,40 @@ export default function DashboardPage() {
     if (mo && /^\d{4}-\d{2}$/.test(mo)) setMonth(mo);
   }, []);
 
-  // Fetch active months once on mount
+  // Fetch active months + categories once on mount
   useEffect(() => {
     getActiveMonths()
       .then(res => setActiveMonths(res.data?.months ?? []))
-      .catch(() => {}); // non-critical, falls back to current month only
+      .catch(() => {});
+    getCategories()
+      .then(res => setCategories(res.data?.categories ?? []))
+      .catch(() => {});
   }, []);
+
+  const startEdit = (t) => {
+    setEditingId(t.id || t._id);
+    setEditValues({ description: t.description, category: t.category });
+  };
+
+  const cancelEdit = () => { setEditingId(null); };
+
+  const saveEdit = async (id) => {
+    setEditSaving(true);
+    try {
+      await updateTransaction(id, editValues);
+      setData(prev => ({
+        ...prev,
+        transactions: prev.transactions.map(t =>
+          (t.id || t._id) === id ? { ...t, ...editValues } : t
+        ),
+      }));
+      setEditingId(null);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   // Debounce search input
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -416,46 +448,96 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {txns.map((t, i) => (
-                      <tr key={t.id || t._id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-5 py-3 text-gray-400">{(page - 1) * LIMIT + i + 1}</td>
-                        <td className="px-5 py-3 font-medium text-gray-900 max-w-xs truncate">{t.description}</td>
-                        <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
-                          <button
-                            onClick={() => { setCategoryFilter(t.category); setPage(1); }}
-                            className={`px-2 py-0.5 rounded-md text-xs transition-colors hover:bg-teal-100 hover:text-teal-700 ${
-                              categoryFilter === t.category
-                                ? 'bg-teal-100 text-teal-700 font-medium'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
-                            title="Filter by this category"
-                          >
-                            {toTitleCase(t.category)}
-                          </button>
-                        </td>
-                        <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatAmount(t.amount)}</td>
-                        <td className="px-5 py-3"><TypeBadge type={t.type} /></td>
-                        <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
-                          {formatDate(t.time, t.transaction_timezone)}
-                        </td>
-                        <td className="px-5 py-3 text-center">
-                          <button
-                            onClick={() => handleDelete(t.id || t._id)}
-                            disabled={deleting === (t.id || t._id)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                            title="Delete"
-                          >
-                            {deleting === (t.id || t._id) ? (
-                              <span className="w-4 h-4 bg-gray-200 rounded animate-pulse inline-block" />
+                    {txns.map((t, i) => {
+                      const tid     = t.id || t._id;
+                      const isEditing = editingId === tid;
+                      return (
+                        <tr key={tid} className={`transition-colors ${isEditing ? 'bg-teal-50' : 'hover:bg-gray-50'}`}>
+                          <td className="px-5 py-3 text-gray-400">{(page - 1) * LIMIT + i + 1}</td>
+
+                          {/* Description */}
+                          <td className="px-5 py-3 font-medium text-gray-900 max-w-xs">
+                            {isEditing ? (
+                              <input
+                                autoFocus
+                                value={editValues.description}
+                                onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') saveEdit(tid); if (e.key === 'Escape') cancelEdit(); }}
+                                className="w-full text-sm border border-teal-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                              />
                             ) : (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
+                              <span className="truncate block">{t.description}</span>
                             )}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+
+                          {/* Category */}
+                          <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
+                            {isEditing ? (
+                              <select
+                                value={editValues.category}
+                                onChange={e => setEditValues(v => ({ ...v, category: e.target.value }))}
+                                className="text-xs border border-teal-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                              >
+                                {categories.map(c => (
+                                  <option key={c} value={c.toLowerCase()}>{toTitleCase(c)}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <button
+                                onClick={() => { setCategoryFilter(t.category); setPage(1); }}
+                                className={`px-2 py-0.5 rounded-md text-xs transition-colors hover:bg-teal-100 hover:text-teal-700 ${
+                                  categoryFilter === t.category ? 'bg-teal-100 text-teal-700 font-medium' : 'bg-gray-100 text-gray-600'
+                                }`}
+                                title="Filter by this category"
+                              >
+                                {toTitleCase(t.category)}
+                              </button>
+                            )}
+                          </td>
+
+                          <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatAmount(t.amount)}</td>
+                          <td className="px-5 py-3"><TypeBadge type={t.type} /></td>
+                          <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
+                            {formatDate(t.time, t.transaction_timezone)}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-5 py-3 text-center">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <button onClick={() => saveEdit(tid)} disabled={editSaving}
+                                  className="px-2 py-1 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-50">
+                                  {editSaving ? '…' : 'Save'}
+                                </button>
+                                <button onClick={cancelEdit}
+                                  className="px-2 py-1 rounded-lg text-gray-500 text-xs hover:bg-gray-100">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                <button onClick={() => startEdit(t)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                                  title="Edit">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                                <button onClick={() => handleDelete(tid)} disabled={deleting === tid}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                                  title="Delete">
+                                  {deleting === tid ? (
+                                    <span className="w-3.5 h-3.5 bg-gray-200 rounded animate-pulse inline-block" />
+                                  ) : (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

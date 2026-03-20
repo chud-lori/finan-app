@@ -306,6 +306,48 @@ const deleteTransaction = async (req, res, next) => {
     }
 }
 
+const patchTransaction = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { description, category } = req.body;
+
+        if (!description && !category) {
+            return res.status(400).json(BaseResponseDTO.error('Provide description or category to update'));
+        }
+
+        const update = {};
+        if (description) {
+            if (typeof description !== 'string' || !description.trim()) {
+                return res.status(400).json(BaseResponseDTO.error('description must be a non-empty string'));
+            }
+            update.description = description.trim();
+        }
+        if (category) {
+            const catExists = await Category.findOne({ user: req.user.id, name: { $regex: new RegExp(`^${escapeRegex(category.trim())}$`, 'i') } }).lean();
+            if (!catExists) {
+                return res.status(400).json(BaseResponseDTO.error(`Category "${category}" not found`));
+            }
+            update.category = category.trim().toLowerCase();
+        }
+
+        const txn = await Transaction.findOneAndUpdate(
+            { _id: id, user: req.user.id },
+            { $set: update },
+            { new: true }
+        ).lean();
+
+        if (!txn) {
+            return res.status(404).json(BaseResponseDTO.error('Transaction not found'));
+        }
+
+        logger.info(`Transaction patched: id=${id} user=${req.user.id}`);
+        res.status(200).json(BaseResponseDTO.success('Transaction updated', { transaction: txn }));
+    } catch (e) {
+        logger.error(`Patch transaction error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to update transaction', e.message));
+    }
+};
+
 const getExpense = async (req, res, next) => {
     try {
         const expenses = await Transaction.find({
@@ -529,121 +571,128 @@ const parseAmount = (str) => {
 
 const importCsv = async (req, res, next) => {
     try {
-        if (!req.file) {
-            return res.status(400).json(BaseResponseDTO.error('No CSV file uploaded'));
+        const files = req.files;
+        if (!files || files.length === 0) {
+            return res.status(400).json(BaseResponseDTO.error('No CSV files uploaded'));
         }
 
         const user = req.user;
-        const rows = await parseCsvBuffer(req.file.buffer);
-
-        if (rows.length === 0) {
-            return res.status(400).json(BaseResponseDTO.error('CSV file is empty'));
-        }
-
         const balance = await Balance.findOne({ user: user.id });
         if (!balance) {
             return res.status(404).json(BaseResponseDTO.error('User balance not found'));
         }
 
-        const results = { total: rows.length, success: 0, failed: 0, errors: [] };
         // Fallback timezone: user's current browser timezone (sent with the request),
         // then UTC. Used when a CSV row has no Timezone column.
         const fallbackTz = validTz(req.body.userTimezone);
         // Track which yearMonths were affected so we can refresh their snapshots
         const affectedMonths = new Map(); // 'YYYY-MM' -> tz used for that month
 
-        for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            const rowNum = i + 2; // 1-indexed + header row
-            try {
-                // Flexible column name mapping
-                const description = (row['Title'] || row['Description'] || row['title'] || row['description'] || '').trim();
-                const categoryRaw = (row['Category'] || row['category'] || '').trim();
-                const amountRaw = row['Amount'] || row['amount'] || '0';
-                const typeRaw = (row['Type'] || row['type'] || '').trim().toLowerCase();
-                const timeRaw = (row['Timestamp'] || row['Date'] || row['Time'] || row['time'] || '').trim();
-                const rowTzRaw = (row['Timezone'] || row['timezone'] || '').trim();
-                // Use per-row timezone if valid, otherwise fall back to user's current timezone
-                const timezone = rowTzRaw ? (validTz(rowTzRaw) || fallbackTz) : fallbackTz;
+        const fileResults = [];
+        let totalSuccess = 0;
+        let totalFailed = 0;
 
-                if (!description) {
-                    results.failed++;
-                    results.errors.push(`Row ${rowNum}: description is empty`);
-                    continue;
-                }
+        for (const file of files) {
+            const rows = await parseCsvBuffer(file.buffer);
+            const results = { filename: file.originalname, total: rows.length, success: 0, failed: 0, errors: [] };
 
-                const amount = parseAmount(amountRaw);
-                if (isNaN(amount) || amount <= 0) {
-                    results.failed++;
-                    results.errors.push(`Row ${rowNum}: invalid amount "${amountRaw}"`);
-                    continue;
-                }
-
-                // Treat only 'income' as income; anything else (expense, debit, etc.) → expense
-                const type = typeRaw === 'income' ? 'income' : 'expense';
-
-                const categoryLower = categoryRaw.trim().toLowerCase();
-                let categoryDoc;
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const rowNum = i + 2; // 1-indexed + header row
                 try {
-                    categoryDoc = await Category.findOneAndUpdate(
-                        { user: req.user.id, name: categoryLower },
-                        { $setOnInsert: { user: req.user.id, name: categoryLower, type: type === 'income' ? 'income' : 'expense' } },
-                        { upsert: true, new: true }
-                    );
-                } catch (e) {
-                    if (e.code === 11000) {
-                        // Category already exists (race or stale index) — reuse it
-                        categoryDoc = await Category.findOne({ user: req.user.id, name: categoryLower });
-                    } else {
-                        throw e;
+                    // Flexible column name mapping
+                    const description = (row['Title'] || row['Description'] || row['title'] || row['description'] || '').trim();
+                    const categoryRaw = (row['Category'] || row['category'] || '').trim();
+                    const amountRaw = row['Amount'] || row['amount'] || '0';
+                    const typeRaw = (row['Type'] || row['type'] || '').trim().toLowerCase();
+                    const timeRaw = (row['Timestamp'] || row['Date'] || row['Time'] || row['time'] || '').trim();
+                    const rowTzRaw = (row['Timezone'] || row['timezone'] || '').trim();
+                    // Use per-row timezone if valid, otherwise fall back to user's current timezone
+                    const timezone = rowTzRaw ? (validTz(rowTzRaw) || fallbackTz) : fallbackTz;
+
+                    if (!description) {
+                        results.failed++;
+                        results.errors.push(`Row ${rowNum}: description is empty`);
+                        continue;
                     }
-                }
 
-                let transactionTime = null;
-                for (const fmt of TIME_FORMATS_IMPORT) {
-                    const t = moment.tz(timeRaw, fmt, true, timezone);
-                    if (t.isValid()) { transactionTime = t; break; }
-                }
-                // fallback: lenient parse
-                if (!transactionTime) {
-                    const t = moment.tz(timeRaw, timezone);
-                    if (t.isValid()) transactionTime = t;
-                }
-                if (!transactionTime) {
+                    const amount = parseAmount(amountRaw);
+                    if (isNaN(amount) || amount <= 0) {
+                        results.failed++;
+                        results.errors.push(`Row ${rowNum}: invalid amount "${amountRaw}"`);
+                        continue;
+                    }
+
+                    // Treat only 'income' as income; anything else (expense, debit, etc.) → expense
+                    const type = typeRaw === 'income' ? 'income' : 'expense';
+
+                    const categoryLower = categoryRaw.trim().toLowerCase();
+                    let categoryDoc;
+                    try {
+                        categoryDoc = await Category.findOneAndUpdate(
+                            { user: req.user.id, name: categoryLower },
+                            { $setOnInsert: { user: req.user.id, name: categoryLower, type: type === 'income' ? 'income' : 'expense' } },
+                            { upsert: true, new: true }
+                        );
+                    } catch (e) {
+                        if (e.code === 11000) {
+                            // Category already exists (race or stale index) — reuse it
+                            categoryDoc = await Category.findOne({ user: req.user.id, name: categoryLower });
+                        } else {
+                            throw e;
+                        }
+                    }
+
+                    let transactionTime = null;
+                    for (const fmt of TIME_FORMATS_IMPORT) {
+                        const t = moment.tz(timeRaw, fmt, true, timezone);
+                        if (t.isValid()) { transactionTime = t; break; }
+                    }
+                    // fallback: lenient parse
+                    if (!transactionTime) {
+                        const t = moment.tz(timeRaw, timezone);
+                        if (t.isValid()) transactionTime = t;
+                    }
+                    if (!transactionTime) {
+                        results.failed++;
+                        results.errors.push(`Row ${rowNum}: invalid time "${timeRaw}"`);
+                        continue;
+                    }
+
+                    const newTransaction = new Transaction({
+                        user: user.id,
+                        description,
+                        amount,
+                        category: categoryDoc.name,
+                        type,
+                        currency: 'idr',
+                        time: transactionTime.toDate(),
+                        transaction_timezone: timezone,
+                    });
+
+                    if (type === 'income') {
+                        balance.amount += amount;
+                    } else {
+                        balance.amount -= amount;
+                    }
+
+                    await newTransaction.save();
+                    results.success++;
+                    const ym = moment(transactionTime).tz(timezone).format('YYYY-MM');
+                    if (!affectedMonths.has(ym)) affectedMonths.set(ym, timezone);
+                } catch (rowErr) {
                     results.failed++;
-                    results.errors.push(`Row ${rowNum}: invalid time "${timeRaw}"`);
-                    continue;
+                    results.errors.push(`Row ${rowNum}: ${rowErr.message}`);
                 }
-
-                const newTransaction = new Transaction({
-                    user: user.id,
-                    description,
-                    amount,
-                    category: categoryDoc.name,
-                    type,
-                    currency: 'idr',
-                    time: transactionTime.toDate(),
-                    transaction_timezone: timezone,
-                });
-
-                if (type === 'income') {
-                    balance.amount += amount;
-                } else {
-                    balance.amount -= amount;
-                }
-
-                await newTransaction.save();
-                results.success++;
-                const ym = moment(transactionTime).tz(timezone).format('YYYY-MM');
-                if (!affectedMonths.has(ym)) affectedMonths.set(ym, timezone);
-            } catch (rowErr) {
-                results.failed++;
-                results.errors.push(`Row ${rowNum}: ${rowErr.message}`);
             }
+
+            fileResults.push(results);
+            totalSuccess += results.success;
+            totalFailed += results.failed;
         }
 
         await balance.save();
-        if (results.success > 0) {
+        if (totalSuccess > 0) {
             cache.invalidateUser(user.id);
             // Refresh snapshots for every affected month (fire-and-forget)
             for (const [ym, tz] of affectedMonths) {
@@ -652,8 +701,12 @@ const importCsv = async (req, res, next) => {
             User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Imported CSV' }).catch(() => {});
         }
 
-        logger.info(`Import CSV: user ${user.id} — ${results.success} imported, ${results.failed} failed`);
-        res.status(200).json(BaseResponseDTO.success('CSV import completed', results));
+        logger.info(`Import CSV: user ${user.id} — ${totalSuccess} imported, ${totalFailed} failed across ${files.length} file(s)`);
+        res.status(200).json(BaseResponseDTO.success('CSV import completed', {
+            files: fileResults,
+            totalSuccess,
+            totalFailed,
+        }));
 
     } catch (error) {
         logger.error(`Import CSV error: ${error.message}`);
@@ -1001,6 +1054,7 @@ module.exports = {
     getByTimeRange,
     getExpense,
     deleteTransaction,
+    patchTransaction,
     getRecommendation,
     importCsv,
     getAnalytics,

@@ -12,6 +12,7 @@ const {
     getByTimeRange,
     getExpense,
     deleteTransaction,
+    patchTransaction,
     getRecommendation,
     importCsv,
     getAnalytics,
@@ -142,7 +143,7 @@ router.put('/budget/:yearMonth', authenticateJWT, limiter.byUser(30), setBudget)
  *       500:
  *         description: Server error
  */
-router.post('/import/csv', authenticateJWT, limiter.byUser(10), upload.single('file'), importCsv);
+router.post('/import/csv', authenticateJWT, limiter.byUser(10), upload.array('files', 10), importCsv);
 
 /**
  * @openapi
@@ -625,6 +626,7 @@ router.get('/range/:start/:end', authenticateJWT, getByTimeRange);
  *       500:
  *         description: Server error
  */
+router.patch('/:id', authenticateJWT, limiter.byUser(30), patchTransaction);
 router.delete('/:id', authenticateJWT, deleteTransaction);
 
 /**

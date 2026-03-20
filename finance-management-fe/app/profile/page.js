@@ -199,8 +199,14 @@ function UploadProgress({ filename }) {
 
 // ─── Import success modal ─────────────────────────────────────────────────────
 function ImportSuccessModal({ result, onClose }) {
-  const router = useRouter();
-  const allOk  = result.failed === 0;
+  const router  = useRouter();
+  // Support both multi-file { files, totalSuccess, totalFailed } and legacy single { success, failed, total }
+  const isMulti  = Array.isArray(result.files);
+  const totalSuccess = isMulti ? result.totalSuccess : result.success;
+  const totalFailed  = isMulti ? result.totalFailed  : result.failed;
+  const totalRows    = isMulti ? result.files.reduce((s, f) => s + f.total, 0) : result.total;
+  const allOk        = totalFailed === 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
@@ -209,13 +215,13 @@ function ImportSuccessModal({ result, onClose }) {
           <h2 className="text-base font-bold text-gray-900">
             {allOk ? 'Import complete!' : 'Finished with some errors'}
           </h2>
-          <p className="text-xs text-gray-500 mt-0.5">{result.success} of {result.total} rows imported</p>
+          <p className="text-xs text-gray-500 mt-0.5">{totalSuccess} of {totalRows} rows imported</p>
         </div>
         <div className="px-5 py-3 grid grid-cols-3 gap-2">
           {[
-            { label: 'Total',    val: result.total,   cls: 'bg-gray-50 border-gray-200 text-gray-900' },
-            { label: 'Imported', val: result.success, cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-            { label: 'Failed',   val: result.failed,  cls: result.failed > 0 ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-gray-50 border-gray-200 text-gray-400' },
+            { label: 'Total',    val: totalRows,    cls: 'bg-gray-50 border-gray-200 text-gray-900' },
+            { label: 'Imported', val: totalSuccess, cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+            { label: 'Failed',   val: totalFailed,  cls: totalFailed > 0 ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-gray-50 border-gray-200 text-gray-400' },
           ].map(({ label, val, cls }) => (
             <div key={label} className={`rounded-xl border p-2.5 text-center ${cls}`}>
               <p className="text-lg font-bold">{val}</p>
@@ -223,12 +229,26 @@ function ImportSuccessModal({ result, onClose }) {
             </div>
           ))}
         </div>
-        {result.errors?.length > 0 && (
+        {/* Per-file breakdown for multi-file imports */}
+        {isMulti && result.files.length > 1 && (
+          <div className="px-5 pb-2 space-y-1.5">
+            {result.files.map((f, i) => (
+              <div key={i} className="flex items-center justify-between text-xs rounded-lg bg-gray-50 px-3 py-1.5">
+                <span className="text-gray-600 truncate max-w-[160px]">{f.filename}</span>
+                <span className={f.failed > 0 ? 'text-amber-600 font-semibold' : 'text-emerald-600 font-semibold'}>
+                  {f.success}/{f.total}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Error details */}
+        {(isMulti ? result.files.flatMap(f => f.errors) : result.errors)?.length > 0 && (
           <div className="px-5 pb-3">
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 max-h-28 overflow-y-auto">
               <p className="text-xs font-semibold text-amber-800 mb-1">Skipped rows</p>
               <ul className="space-y-0.5">
-                {result.errors.map((e, i) => (
+                {(isMulti ? result.files.flatMap(f => f.errors) : result.errors).map((e, i) => (
                   <li key={i} className="text-xs text-amber-700 flex gap-1.5">
                     <span className="text-amber-400 shrink-0">•</span>{e}
                   </li>
@@ -304,7 +324,7 @@ export default function ProfilePage() {
   const [exportLoading,    setExportLoading]    = useState(false);
   const [exportError,      setExportError]      = useState('');
 
-  const [importFile,    setImportFile]    = useState(null);
+  const [importFiles,   setImportFiles]   = useState([]);
   const [importDrag,    setImportDrag]    = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult,  setImportResult]  = useState(null);
@@ -398,28 +418,33 @@ export default function ProfilePage() {
   };
 
   // ── Import CSV ────────────────────────────────────────────────────────────
-  const handleImportFile = (f) => {
-    if (!f) return;
-    if (!f.name.endsWith('.csv') && f.type !== 'text/csv') { setImportError('Only CSV files are allowed'); return; }
-    setImportFile(f); setImportResult(null); setImportError(''); setCsvPreview(null);
+  const handleImportFiles = (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    const valid = Array.from(fileList).filter(f => f.name.endsWith('.csv') || f.type === 'text/csv');
+    const invalid = fileList.length - valid.length;
+    if (invalid > 0) setImportError(`${invalid} file(s) skipped — only .csv allowed`);
+    else setImportError('');
+    if (valid.length === 0) return;
+    setImportFiles(valid); setImportResult(null);
+    // Preview first file only
     const reader = new FileReader();
     reader.onload = (e) => setCsvPreview(parseCsvPreview(e.target.result));
-    reader.readAsText(f);
+    reader.readAsText(valid[0]);
   };
 
-  const clearImportFile = () => {
-    setImportFile(null);
+  const clearImportFiles = () => {
+    setImportFiles([]);
     setCsvPreview(null);
     if (importInputRef.current) importInputRef.current.value = '';
   };
 
   const handleImportSubmit = async (e) => {
     e.preventDefault();
-    if (!importFile) { setImportError('Please select a CSV file'); return; }
+    if (!importFiles.length) { setImportError('Please select at least one CSV file'); return; }
     setImportLoading(true); setImportError('');
     try {
-      const res = await importCsv(importFile);
-      clearImportFile();
+      const res = await importCsv(importFiles);
+      clearImportFiles();
       setImportResult(res.data);
     } catch (err) {
       setImportError(err.message);
@@ -487,7 +512,7 @@ export default function ProfilePage() {
 
   return (
     <AuthGuard>
-      {importLoading && <UploadProgress filename={importFile?.name ?? 'file.csv'} />}
+      {importLoading && <UploadProgress filename={importFiles.length === 1 ? importFiles[0].name : `${importFiles.length} files`} />}
       {importResult  && <ImportSuccessModal result={importResult} onClose={() => setImportResult(null)} />}
       {showDeleteModal && (
         <DeleteModal
@@ -828,27 +853,34 @@ export default function ProfilePage() {
                       onClick={() => importInputRef.current?.click()}
                       onDragOver={(e) => { e.preventDefault(); setImportDrag(true); }}
                       onDragLeave={() => setImportDrag(false)}
-                      onDrop={(e) => { e.preventDefault(); setImportDrag(false); handleImportFile(e.dataTransfer.files[0]); }}
+                      onDrop={(e) => { e.preventDefault(); setImportDrag(false); handleImportFiles(e.dataTransfer.files); }}
                       className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl py-8 px-4 cursor-pointer transition-all ${
                         importDrag ? 'border-teal-400 bg-teal-50'
-                        : importFile ? 'border-emerald-400 bg-emerald-50'
+                        : importFiles.length ? 'border-emerald-400 bg-emerald-50'
                         : 'border-gray-300 hover:border-teal-300 hover:bg-gray-50'
                       }`}
                     >
-                      <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden"
-                        onChange={(e) => handleImportFile(e.target.files[0])} />
-                      <div className="text-2xl">{importFile ? '✅' : '📄'}</div>
-                      {importFile ? (
+                      <input ref={importInputRef} type="file" accept=".csv,text/csv" multiple className="hidden"
+                        onChange={(e) => handleImportFiles(e.target.files)} />
+                      <div className="text-2xl">{importFiles.length ? '✅' : '📄'}</div>
+                      {importFiles.length ? (
                         <>
-                          <p className="text-sm font-medium text-emerald-700">{importFile.name}</p>
-                          <p className="text-xs text-gray-400">{(importFile.size / 1024).toFixed(1)} KB · tap to change</p>
+                          {importFiles.length === 1 ? (
+                            <p className="text-sm font-medium text-emerald-700">{importFiles[0].name}</p>
+                          ) : (
+                            <div className="text-center">
+                              <p className="text-sm font-medium text-emerald-700">{importFiles.length} files selected</p>
+                              <p className="text-xs text-emerald-600 mt-0.5">{importFiles.map(f => f.name).join(', ')}</p>
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-400">tap to change</p>
                         </>
                       ) : (
                         <>
                           <p className="text-sm font-medium text-gray-700">
-                            Drop CSV or <span className="text-teal-600 underline">browse</span>
+                            Drop CSV(s) or <span className="text-teal-600 underline">browse</span>
                           </p>
-                          <p className="text-xs text-gray-400">.csv only, max 5 MB</p>
+                          <p className="text-xs text-gray-400">Multiple .csv files supported, max 5 MB each</p>
                         </>
                       )}
                     </div>
@@ -859,7 +891,7 @@ export default function ProfilePage() {
                       <div className="mt-3 rounded-xl border border-gray-200 overflow-hidden">
                         <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
                           <p className="text-xs font-semibold text-gray-600">Preview — first {csvPreview.rows.length} row{csvPreview.rows.length !== 1 ? 's' : ''}</p>
-                          <button type="button" onClick={clearImportFile}
+                          <button type="button" onClick={clearImportFiles}
                             className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
                             Clear
                           </button>
@@ -887,7 +919,7 @@ export default function ProfilePage() {
                       </div>
                     )}
 
-                    <button type="submit" disabled={!importFile || importLoading}
+                    <button type="submit" disabled={!importFiles.length || importLoading}
                       className="mt-3 w-full py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">
                       Import
                     </button>

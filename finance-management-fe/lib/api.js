@@ -166,9 +166,10 @@ export const getTimeToZero = () =>
     headers: authHeaders(),
   }).then(handleResponse);
 
-export const importCsv = (file) => {
+export const importCsv = (files) => {
   const form = new FormData();
-  form.append('file', file);
+  const list = Array.isArray(files) ? files : [files];
+  list.forEach(f => form.append('files', f));
   form.append('userTimezone', browserTz());
   return fetch(`${BASE_URL}/api/transaction/import/csv`, {
     method: 'POST',
@@ -176,6 +177,13 @@ export const importCsv = (file) => {
     body: form,
   }).then(handleResponse);
 };
+
+export const updateTransaction = (id, patch) =>
+  fetch(`${BASE_URL}/api/transaction/${id}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(patch),
+  }).then(handleResponse);
 
 export const forgotPassword = (email) =>
   fetch(`${BASE_URL}/api/auth/forgot-password`, {
