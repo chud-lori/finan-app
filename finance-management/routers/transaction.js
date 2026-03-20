@@ -23,6 +23,7 @@ const {
     getActiveMonths,
     setBudget,
     getMLInsights,
+    refreshMLInsights,
 } = require('../controllers/transaction');
 
 const upload = multer({
@@ -81,6 +82,7 @@ router.get('/time-to-zero',   authenticateJWT, limiter.byUser(60), getTimeToZero
 router.get('/active-months',  authenticateJWT, limiter.byUser(60), getActiveMonths);
 router.put('/budget/:yearMonth', authenticateJWT, limiter.byUser(30), setBudget);
 router.get('/ml-insights',      authenticateJWT, limiter.byUser(20), getMLInsights);
+router.post('/ml-insights/refresh', authenticateJWT, limiter.byUser(10), refreshMLInsights);
 
 /**
  * @openapi

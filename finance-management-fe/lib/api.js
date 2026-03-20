@@ -171,6 +171,12 @@ export const getMLInsights = () =>
     headers: authHeaders(),
   }).then(handleResponse);
 
+export const refreshMLInsights = () =>
+  fetch(`${BASE_URL}/api/transaction/ml-insights/refresh?tz=${encodeURIComponent(browserTz())}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 export const importCsv = (files) => {
   const form = new FormData();
   const list = Array.isArray(files) ? files : [files];

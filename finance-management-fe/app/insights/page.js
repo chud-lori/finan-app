@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnomalies, getExplainability, getTimeToZero, getMLInsights } from '@/lib/api';
+import { getAnomalies, getExplainability, getTimeToZero, getMLInsights, refreshMLInsights } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -10,6 +10,37 @@ import Tooltip from '@/components/Tooltip';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+function timeAgo(date) {
+  if (!date) return null;
+  const secs = Math.floor((Date.now() - new Date(date)) / 1000);
+  if (secs < 60)  return 'just now';
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
+}
+
+function RefreshButton({ generatedAt, onRefresh, loading }) {
+  return (
+    <div className="flex items-center gap-2 shrink-0">
+      {generatedAt && (
+        <span className="text-xs text-gray-400 dark:text-slate-500 hidden sm:block">
+          {generatedAt.fromCache === false && !generatedAt.ts ? '' : `Generated ${timeAgo(generatedAt.ts)}`}
+        </span>
+      )}
+      <button
+        onClick={onRefresh}
+        disabled={loading}
+        className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+      >
+        <svg className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        {loading ? 'Refreshing…' : 'Refresh'}
+      </button>
+    </div>
+  );
+}
 
 // ── Smart Insights Feed ───────────────────────────────────────────────────────
 
@@ -434,18 +465,21 @@ function SectionSkeleton() {
   );
 }
 
-function Section({ title, subtitle, tooltip, tag, children, loading, error }) {
+function Section({ title, subtitle, tooltip, tag, headerRight, children, loading, error }) {
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
       <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800">
-        <div className="flex items-center gap-2">
-          <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">{title}</h2>
-          {tag && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400">
-              {tag}
-            </span>
-          )}
-          {tooltip && <Tooltip text={tooltip} align="left" fixed />}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">{title}</h2>
+            {tag && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 shrink-0">
+                {tag}
+              </span>
+            )}
+            {tooltip && <Tooltip text={tooltip} align="left" fixed />}
+          </div>
+          {headerRight}
         </div>
         {subtitle && <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
       </div>
@@ -459,12 +493,19 @@ function Section({ title, subtitle, tooltip, tag, children, loading, error }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function InsightsPage() {
-  const [ttz,     setTtz]     = useState(null);
-  const [explain, setExplain] = useState(null);
-  const [anomaly, setAnomaly] = useState(null);
-  const [ml,      setMl]      = useState(null);
-  const [loading, setLoading] = useState({ ttz: true, explain: true, anomaly: true, ml: true });
-  const [errors,  setErrors]  = useState({});
+  const [ttz,        setTtz]        = useState(null);
+  const [explain,    setExplain]    = useState(null);
+  const [anomaly,    setAnomaly]    = useState(null);
+  const [ml,         setMl]         = useState(null);
+  const [mlMeta,     setMlMeta]     = useState(null); // { ts, fromCache }
+  const [loading,    setLoading]    = useState({ ttz: true, explain: true, anomaly: true, ml: true });
+  const [refreshing, setRefreshing] = useState(false);
+  const [errors,     setErrors]     = useState({});
+
+  const applyMlResult = (data) => {
+    setMl(data);
+    setMlMeta({ ts: data.generatedAt, fromCache: data.fromCache });
+  };
 
   useEffect(() => {
     const load = async (key, fn, setter) => {
@@ -481,11 +522,42 @@ export default function InsightsPage() {
     load('ttz',     getTimeToZero,     setTtz);
     load('explain', getExplainability, setExplain);
     load('anomaly', getAnomalies,      setAnomaly);
-    load('ml',      getMLInsights,     setMl);
+
+    // ML insights — apply metadata separately
+    (async () => {
+      try {
+        const res = await getMLInsights();
+        applyMlResult(res.data);
+      } catch (e) {
+        setErrors(prev => ({ ...prev, ml: e.message }));
+      } finally {
+        setLoading(prev => ({ ...prev, ml: false }));
+      }
+    })();
   }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await refreshMLInsights();
+      applyMlResult(res.data);
+    } catch (e) {
+      setErrors(prev => ({ ...prev, ml: e.message }));
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const feedLoading = loading.ttz || loading.explain || loading.anomaly || loading.ml;
   const mlAvailable = ml && !errors.ml;
+
+  const mlHeaderRight = (
+    <RefreshButton
+      generatedAt={mlMeta}
+      onRefresh={handleRefresh}
+      loading={refreshing}
+    />
+  );
 
   return (
     <AuthGuard>
@@ -509,6 +581,7 @@ export default function InsightsPage() {
                 subtitle="Predicted spend by end of month based on your current trajectory"
                 tag="Smart"
                 tooltip="Uses linear regression on your daily spending pattern to project your month-end total. The two-layer progress bar shows what you've spent (solid) vs. where you're headed (light)."
+                headerRight={mlHeaderRight}
                 loading={loading.ml}
                 error={!mlAvailable && errors.ml ? null : undefined}
               >
@@ -550,6 +623,7 @@ export default function InsightsPage() {
                 title="🚨 Spending Alerts"
                 subtitle={mlAvailable ? "Transactions that stand out from your normal pattern — ranked by how unusual they are" : "Transactions higher than your usual or brand-new categories"}
                 tag={mlAvailable ? 'Smart' : undefined}
+                headerRight={mlAvailable ? mlHeaderRight : undefined}
                 tooltip={mlAvailable
                   ? "Powered by Isolation Forest — a statistical ML model trained on your own transaction history. It finds transactions that don't fit your typical spending distribution, not just simple thresholds."
                   : "A transaction is flagged if its amount is 2× higher than your category average, or if it's a category you've never used before."}

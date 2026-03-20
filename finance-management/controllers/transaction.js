@@ -15,6 +15,12 @@ const { refreshSnapshot } = require('../helpers/snapshot');
 const Snapshot = require('../models/snapshot.model');
 const Preference = require('../models/preference.model');
 const Budget = require('../models/budget.model');
+const MLInsight = require('../models/mlinsight.model');
+
+// Fire-and-forget: delete cached ML insight for a specific month so next read regenerates
+const invalidateMLInsight = (userId, yearMonth) => {
+    MLInsight.deleteOne({ user: userId, yearMonth }).catch(() => {});
+};
 const path = require('path');
 const fs = require('fs');
 const {
@@ -113,6 +119,7 @@ const addTransaction = async (req, res, next) => {
         cache.invalidateUser(user.id);
         const txYearMonth = moment(transactionTime).tz(transactionDTO.transaction_timezone).format('YYYY-MM');
         refreshSnapshot(user.id, txYearMonth, transactionDTO.transaction_timezone); // fire-and-forget
+        invalidateMLInsight(user.id, txYearMonth); // fire-and-forget
         User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {});
         logger.info(`Add transaction response: ${user.id} success`);
 
@@ -294,6 +301,7 @@ const deleteTransaction = async (req, res, next) => {
         const delTxTz = deletedTransaction.transaction_timezone || 'UTC';
         const delYearMonth = moment(deletedTransaction.time).tz(delTxTz).format('YYYY-MM');
         refreshSnapshot(req.user.id, delYearMonth, delTxTz); // fire-and-forget
+        invalidateMLInsight(req.user.id, delYearMonth); // fire-and-forget
         User.findByIdAndUpdate(req.user.id, { lastActivityAt: new Date(), lastActivityType: 'Deleted transaction' }).catch(() => {});
 
         // Return DTO response
@@ -340,6 +348,8 @@ const patchTransaction = async (req, res) => {
             return res.status(404).json(BaseResponseDTO.error('Transaction not found'));
         }
 
+        const patchYearMonth = moment(txn.time).tz(txn.transaction_timezone || 'UTC').format('YYYY-MM');
+        invalidateMLInsight(req.user.id, patchYearMonth); // fire-and-forget
         logger.info(`Transaction patched: id=${id} user=${req.user.id}`);
         res.status(200).json(BaseResponseDTO.success('Transaction updated', { transaction: txn }));
     } catch (e) {
@@ -694,9 +704,10 @@ const importCsv = async (req, res, next) => {
         await balance.save();
         if (totalSuccess > 0) {
             cache.invalidateUser(user.id);
-            // Refresh snapshots for every affected month (fire-and-forget)
+            // Refresh snapshots and invalidate ML cache for every affected month (fire-and-forget)
             for (const [ym, tz] of affectedMonths) {
                 refreshSnapshot(user.id, ym, tz);
+                invalidateMLInsight(user.id, ym);
             }
             User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Imported CSV' }).catch(() => {});
         }
@@ -1045,76 +1056,157 @@ const setBudget = async (req, res) => {
 };
 
 // ── ML Insights (Isolation Forest + Linear Regression via AI service) ──────────
+
+// Shared: build payload and call AI service. Returns raw aiData or throws.
+const _runMLPipeline = async (userId, tz) => {
+    const now          = moment.tz(tz);
+    const yearMonth    = now.format('YYYY-MM');
+    const startOfMonth = moment.tz(yearMonth + '-01', tz).startOf('day').toDate();
+    const endOfMonth   = moment.tz(yearMonth + '-01', tz).endOf('month').toDate();
+    const sixMonthsAgo = moment.tz(tz).subtract(6, 'months').startOf('month').toDate();
+
+    const [transactions, budgetDoc] = await Promise.all([
+        Transaction.find({ user: userId, type: 'expense', time: { $gte: sixMonthsAgo, $lte: endOfMonth } }).lean(),
+        Budget.findOne({ user: userId, yearMonth }).lean(),
+    ]);
+
+    // Current-month tx count (used for cache staleness check)
+    const currentMonthTxCount = transactions.filter(tx => tx.time >= startOfMonth).length;
+
+    // Daily totals for forecast
+    const dailyMap = {};
+    for (const tx of transactions) {
+        if (tx.time >= startOfMonth) {
+            const day = moment.tz(tx.time, tz).date();
+            dailyMap[day] = (dailyMap[day] || 0) + tx.amount;
+        }
+    }
+
+    const txPayload = transactions.map(tx => ({
+        id:               tx._id.toString(),
+        amount:           tx.amount,
+        category:         tx.category,
+        date:             moment.tz(tx.time, tz).format('YYYY-MM-DD'),
+        description:      tx.description,
+        type:             tx.type,
+        is_current_month: tx.time >= startOfMonth,
+    }));
+
+    const AI_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:3002';
+    const aiRes  = await fetch(`${AI_URL}/analyze`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            transactions:  txPayload,
+            daily_totals:  Object.entries(dailyMap).map(([day, amount]) => ({ day: parseInt(day, 10), amount })),
+            current_day:   now.date(),
+            days_in_month: now.daysInMonth(),
+            budget:        budgetDoc?.amount ?? null,
+        }),
+        signal: AbortSignal.timeout(8000),
+    });
+
+    if (!aiRes.ok) throw new Error(`AI service responded ${aiRes.status}`);
+    const aiData = await aiRes.json();
+    return { aiData, yearMonth, currentMonthTxCount };
+};
+
 const getMLInsights = async (req, res) => {
     const userId = req.user.id;
     const tz     = validTz(req.query.tz);
 
     try {
-        const now          = moment.tz(tz);
-        const yearMonth    = now.format('YYYY-MM');
-        const startOfMonth = moment.tz(yearMonth + '-01', tz).startOf('day').toDate();
-        const endOfMonth   = moment.tz(yearMonth + '-01', tz).endOf('month').toDate();
-        const sixMonthsAgo = moment.tz(tz).subtract(6, 'months').startOf('month').toDate();
+        const now       = moment.tz(tz);
+        const yearMonth = now.format('YYYY-MM');
 
-        // Fetch 6 months of expense transactions for anomaly model training
-        const transactions = await Transaction.find({
-            user: userId,
-            type: 'expense',
-            time: { $gte: sixMonthsAgo, $lte: endOfMonth },
-        }).lean();
+        // Check cache
+        const cached = await MLInsight.findOne({ user: userId, yearMonth }).lean();
+        if (cached) {
+            // Validate freshness: count current-month expense transactions
+            const currentCount = await Transaction.countDocuments({
+                user: userId,
+                type: 'expense',
+                time: {
+                    $gte: moment.tz(yearMonth + '-01', tz).startOf('day').toDate(),
+                    $lte: moment.tz(yearMonth + '-01', tz).endOf('month').toDate(),
+                },
+            });
 
-        // Fetch current month's budget (may be null)
-        const budgetDoc = await Budget.findOne({ user: userId, yearMonth }).lean();
-
-        // Build daily spending totals for forecast
-        const dailyMap = {};
-        for (const tx of transactions) {
-            if (tx.time >= startOfMonth) {
-                const day = moment.tz(tx.time, tz).date();
-                dailyMap[day] = (dailyMap[day] || 0) + tx.amount;
+            if (currentCount === cached.txCountSnapshot) {
+                return res.status(200).json(BaseResponseDTO.success('ML insights (cached)', {
+                    anomalies:    cached.anomalies,
+                    anomalyCount: cached.anomalyCount,
+                    forecast:     cached.forecast,
+                    generatedAt:  cached.generatedAt,
+                    fromCache:    true,
+                }));
             }
+            // Count mismatch — fall through to regenerate
         }
-        const dailyTotals = Object.entries(dailyMap).map(([day, amount]) => ({
-            day: parseInt(day, 10),
-            amount,
+
+        const { aiData, currentMonthTxCount } = await _runMLPipeline(userId, tz);
+
+        // Upsert cache
+        await MLInsight.findOneAndUpdate(
+            { user: userId, yearMonth },
+            {
+                generatedAt:     new Date(),
+                txCountSnapshot: currentMonthTxCount,
+                anomalies:       aiData.anomalies    ?? [],
+                anomalyCount:    aiData.anomaly_count ?? 0,
+                forecast:        aiData.forecast     ?? null,
+            },
+            { upsert: true, new: true },
+        );
+
+        return res.status(200).json(BaseResponseDTO.success('ML insights', {
+            ...aiData,
+            generatedAt: new Date(),
+            fromCache:   false,
         }));
-
-        // Shape transactions for the AI service
-        const txPayload = transactions.map(tx => ({
-            id:               tx._id.toString(),
-            amount:           tx.amount,
-            category:         tx.category,
-            date:             moment.tz(tx.time, tz).format('YYYY-MM-DD'),
-            description:      tx.description,
-            type:             tx.type,
-            is_current_month: tx.time >= startOfMonth,
-        }));
-
-        const AI_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:3002';
-        const aiRes  = await fetch(`${AI_URL}/analyze`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                transactions:  txPayload,
-                daily_totals:  dailyTotals,
-                current_day:   now.date(),
-                days_in_month: now.daysInMonth(),
-                budget:        budgetDoc?.amount ?? null,
-            }),
-            signal: AbortSignal.timeout(8000),
-        });
-
-        if (!aiRes.ok) throw new Error(`AI service responded ${aiRes.status}`);
-        const aiData = await aiRes.json();
-
-        return res.status(200).json(BaseResponseDTO.success('ML insights', aiData));
     } catch (e) {
         logger.error(`ML insights error: ${e.message}`);
-        // Return empty graceful response so the frontend degrades cleanly
         return res.status(200).json(BaseResponseDTO.success('ML insights (unavailable)', {
-            anomalies:     [],
-            anomaly_count: 0,
-            forecast:      { available: false, reason: 'AI service unavailable' },
+            anomalies:    [],
+            anomalyCount: 0,
+            forecast:     { available: false, reason: 'AI service unavailable' },
+            fromCache:    false,
+        }));
+    }
+};
+
+// Force-regenerate regardless of cache (called by the frontend Refresh button)
+const refreshMLInsights = async (req, res) => {
+    const userId = req.user.id;
+    const tz     = validTz(req.query.tz);
+
+    try {
+        const { aiData, yearMonth, currentMonthTxCount } = await _runMLPipeline(userId, tz);
+
+        await MLInsight.findOneAndUpdate(
+            { user: userId, yearMonth },
+            {
+                generatedAt:     new Date(),
+                txCountSnapshot: currentMonthTxCount,
+                anomalies:       aiData.anomalies    ?? [],
+                anomalyCount:    aiData.anomaly_count ?? 0,
+                forecast:        aiData.forecast     ?? null,
+            },
+            { upsert: true, new: true },
+        );
+
+        return res.status(200).json(BaseResponseDTO.success('ML insights refreshed', {
+            ...aiData,
+            generatedAt: new Date(),
+            fromCache:   false,
+        }));
+    } catch (e) {
+        logger.error(`Refresh ML insights error: ${e.message}`);
+        return res.status(200).json(BaseResponseDTO.success('ML insights (unavailable)', {
+            anomalies:    [],
+            anomalyCount: 0,
+            forecast:     { available: false, reason: 'AI service unavailable' },
+            fromCache:    false,
         }));
     }
 };
@@ -1139,4 +1231,5 @@ module.exports = {
     getActiveMonths,
     setBudget,
     getMLInsights,
+    refreshMLInsights,
 };
