@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getTransactions, deleteTransaction, getActiveMonths } from '@/lib/api';
+import { getTransactions, deleteTransaction, getActiveMonths, updatePreferences } from '@/lib/api';
 import { formatIDR, formatDate, toTitleCase } from '@/lib/format';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -299,6 +299,7 @@ export default function DashboardPage() {
   const txns    = data.transactions || [];
   const income  = data.monthlyIncome  ?? 0;
   const expense = data.monthlyExpense ?? 0;
+  const budget  = data.monthlyBudget  ?? 0;
 
   return (
     <AuthGuard>
@@ -311,10 +312,9 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               <StatCard label="Balance" value={formatIDR(data.balance?.amount ?? 0)} icon="💰"
                 tip="Your all-time net balance — total income ever received minus total expenses ever recorded. Not limited to this month." />
-              <StatCard label="Income this month"  value={formatIDR(income)}  icon="📈"
+              <StatCard label="Income this month" value={formatIDR(income)} icon="📈"
                 tip="Total income transactions recorded in the selected month." />
-              <StatCard label="Expense this month" value={formatIDR(expense)} icon="📉"
-                tip="Total expense transactions recorded in the selected month." />
+              <BudgetCard expense={expense} budget={budget} onSaved={load} />
             </div>
           )}
 
@@ -484,6 +484,87 @@ function StatCard({ label, value, icon, tip }) {
         <span className="text-xl">{icon}</span>
       </div>
       <div className="text-xl font-bold text-gray-900">{value}</div>
+    </div>
+  );
+}
+
+function BudgetCard({ expense, budget, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [input, setInput]     = useState('');
+  const [saving, setSaving]   = useState(false);
+
+  const pct    = budget > 0 ? Math.min(Math.round((expense / budget) * 100), 999) : null;
+  const barPct = budget > 0 ? Math.min((expense / budget) * 100, 100) : 0;
+  const barColor  = pct === null ? 'bg-gray-200' : pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500';
+  const pctColor  = pct === null ? '' : pct >= 100 ? 'text-rose-600' : pct >= 80 ? 'text-amber-600' : 'text-emerald-600';
+
+  const startEdit = () => { setInput(budget > 0 ? String(budget) : ''); setEditing(true); };
+
+  const handleSave = async () => {
+    const val = parseFloat(String(input).replace(/[^0-9.]/g, ''));
+    if (isNaN(val) || val < 0) return;
+    setSaving(true);
+    try {
+      await updatePreferences({ monthlyBudget: Math.round(val) });
+      await onSaved();
+      setEditing(false);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm text-gray-500">Budget</span>
+          <Tooltip text="Monthly spending budget. Edit it anytime — the bar tracks how much of it you've used this month." />
+        </div>
+        <button onClick={startEdit} title="Edit budget" className="text-gray-400 hover:text-teal-600 transition-colors">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+      </div>
+
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <input
+            autoFocus
+            type="number"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
+            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            placeholder="Monthly budget (IDR)"
+            min={0}
+          />
+          <button onClick={handleSave} disabled={saving} className="px-2.5 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-50 shrink-0">
+            {saving ? '…' : 'Save'}
+          </button>
+          <button onClick={() => setEditing(false)} className="px-2.5 py-1.5 rounded-lg text-gray-500 text-xs hover:bg-gray-100 shrink-0">✕</button>
+        </div>
+      ) : budget === 0 ? (
+        <>
+          <div className="text-xl font-bold text-gray-900 mb-1">{formatIDR(expense)} <span className="text-sm font-normal text-gray-400">spent</span></div>
+          <button onClick={startEdit} className="text-xs text-teal-600 hover:underline font-medium">+ Set monthly budget</button>
+        </>
+      ) : (
+        <>
+          <div className="text-xl font-bold text-gray-900 mb-2">
+            {formatIDR(expense)}
+            <span className="text-sm font-medium text-gray-400 ml-1.5">/ {formatIDR(budget)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-1.5 rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${barPct}%` }} />
+            </div>
+            <span className={`text-xs font-semibold tabular-nums shrink-0 ${pctColor}`}>{pct}%</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
