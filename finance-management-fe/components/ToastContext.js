@@ -73,7 +73,7 @@ function ToastContainer({ toasts, onDismiss }) {
       {toasts.map(t => (
         <div
           key={t.id}
-          className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-200 ${STYLES[t.type] ?? STYLES.info}`}
+          className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium pointer-events-auto animate-fade-in ${STYLES[t.type] ?? STYLES.info}`}
         >
           {ICONS[t.type] ?? ICONS.info}
           <span className="flex-1">{t.message}</span>
