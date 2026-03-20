@@ -1,8 +1,11 @@
 const moment     = require('moment-timezone');
+const mongoose   = require('mongoose');
 const User       = require('../models/user.model');
 const Snapshot   = require('../models/snapshot.model');
 const Preference = require('../models/preference.model');
 const Transaction = require('../models/transaction.model');
+const Balance    = require('../models/balance.model');
+const cache      = require('../helpers/cache');
 const logger     = require('../helpers/logger');
 const { BaseResponseDTO } = require('../dtos/base.dto');
 
@@ -258,4 +261,46 @@ const exportTransactions = async (req, res) => {
     }
 };
 
-module.exports = { getProfile, updateIdentity, updatePreferences, exportTransactions };
+// ── POST /api/profile/reconcile-balance ───────────────────────────────────────
+//
+// Safety net: recomputes the balance from the raw transaction ledger and writes
+// it back. Use this if the stored balance ever drifts from reality (e.g. a crash
+// between a Transaction save and a Balance update in an older deploy).
+//
+// DDIA Ch.3/12 principle: transactions are the source of truth; balance is a
+// derived value that can always be recomputed from them.
+
+const reconcileBalance = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const oid = new mongoose.Types.ObjectId(userId);
+
+        const [incomeAgg, expenseAgg] = await Promise.all([
+            Transaction.aggregate([
+                { $match: { user: oid, type: 'income' } },
+                { $group: { _id: null, total: { $sum: '$amount' } } },
+            ]),
+            Transaction.aggregate([
+                { $match: { user: oid, type: 'expense' } },
+                { $group: { _id: null, total: { $sum: '$amount' } } },
+            ]),
+        ]);
+
+        const correct = (incomeAgg[0]?.total ?? 0) - (expenseAgg[0]?.total ?? 0);
+
+        await Balance.findOneAndUpdate(
+            { user: userId },
+            { $set: { amount: correct } },
+            { new: true }
+        );
+
+        cache.invalidateUser(userId);
+        logger.info(`Balance reconciled user=${userId} amount=${correct}`);
+        return res.json(BaseResponseDTO.success('Balance reconciled', { amount: correct }));
+    } catch (err) {
+        logger.error(`Reconcile balance error: ${err.message}`);
+        return res.status(500).json(BaseResponseDTO.error('Failed to reconcile balance'));
+    }
+};
+
+module.exports = { getProfile, updateIdentity, updatePreferences, exportTransactions, reconcileBalance };

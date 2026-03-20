@@ -1,4 +1,5 @@
 const moment = require('moment-timezone');
+const mongoose = require('mongoose');
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Returns tz if it's a valid IANA timezone, otherwise 'UTC'
@@ -11,7 +12,7 @@ const Category = require('../models/category.model');
 const User = require('../models/user.model');
 const logger = require("../helpers/logger");
 const cache = require('../helpers/cache');
-const { refreshSnapshot } = require('../helpers/snapshot');
+const { refreshSnapshot, applySnapshotDelta } = require('../helpers/snapshot');
 const Snapshot = require('../models/snapshot.model');
 const Preference = require('../models/preference.model');
 const Budget = require('../models/budget.model');
@@ -38,6 +39,35 @@ const updateStreak = (userId, txMoment, tz) => {
         }).catch(() => {});
     }).catch(() => {});
 };
+/**
+ * Runs `fn(session)` inside a MongoDB multi-document transaction.
+ * If sessions are unavailable (standalone MongoDB — e.g. local dev without a
+ * replica set), falls back to `fn(null)` so the $inc-based balance update
+ * still executes atomically at the document level.
+ *
+ * Error handling: business-logic errors thrown inside fn() should be tagged
+ * with `err.statusCode` so callers can distinguish them from system errors.
+ */
+const withOptionalTransaction = async (fn) => {
+    let session = null;
+    try {
+        session = await mongoose.startSession();
+        let result;
+        await session.withTransaction(async () => { result = await fn(session); });
+        return result;
+    } catch (err) {
+        // Code 20 = "Transaction numbers are only allowed on a replica set member or mongos"
+        // Thrown when MongoDB is running as standalone (common in local dev)
+        if (err.code === 20 || /transaction|session/i.test(err.message || '')) {
+            logger.warn(`MongoDB sessions unavailable — falling back to non-transactional write: ${err.message}`);
+            return fn(null);
+        }
+        throw err;
+    } finally {
+        if (session) await session.endSession().catch(() => {});
+    }
+};
+
 const path = require('path');
 const fs = require('fs');
 const {
@@ -118,31 +148,48 @@ const addTransaction = async (req, res, next) => {
 
         logger.info(`Add transaction: ${user.id}`);
 
-        // Update balance
-        const balance = await Balance.findOne({ user: user.id });
-        if (!balance) {
-            return res.status(404).json(BaseResponseDTO.error('User balance not found'));
-        }
+        // Balance delta: positive for income, negative for expense
+        const balanceDelta = transactionDTO.type === 'income'
+            ? Number(transactionDTO.amount)
+            : -Number(transactionDTO.amount);
 
-        if (transactionDTO.type === 'income') {
-            balance.amount += Number(transactionDTO.amount);
-        } else if (transactionDTO.type === 'expense') {
-            balance.amount -= Number(transactionDTO.amount);
+        // Wrap Transaction save + Balance $inc in a single atomic transaction.
+        // $inc on Balance is atomic at the document level, eliminating the
+        // read-modify-write lost-update race condition that existed previously.
+        // withOptionalTransaction falls back gracefully if no replica set.
+        let savedTransaction, updatedBalance;
+        try {
+            ({ savedTransaction, updatedBalance } = await withOptionalTransaction(async (session) => {
+                const saved = await newTransaction.save(session ? { session } : {});
+                const updated = await Balance.findOneAndUpdate(
+                    { user: user.id },
+                    { $inc: { amount: balanceDelta } },
+                    { ...(session ? { session } : {}), new: true }
+                );
+                if (!updated) throw Object.assign(new Error('User balance not found'), { statusCode: 404 });
+                return { savedTransaction: saved, updatedBalance: updated };
+            }));
+        } catch (err) {
+            if (err.statusCode === 404) return res.status(404).json(BaseResponseDTO.error(err.message));
+            throw err;
         }
-
-        await balance.save();
-        const savedTransaction = await newTransaction.save();
 
         cache.invalidateUser(user.id);
         const txYearMonth = moment(transactionTime).tz(transactionDTO.transaction_timezone).format('YYYY-MM');
-        refreshSnapshot(user.id, txYearMonth, transactionDTO.transaction_timezone); // fire-and-forget
+        // Incremental snapshot delta — faster than full recompute for single adds
+        applySnapshotDelta(user.id, txYearMonth, {
+            incomeDelta:  transactionDTO.type === 'income'  ? Number(transactionDTO.amount) : 0,
+            expenseDelta: transactionDTO.type === 'expense' ? Number(transactionDTO.amount) : 0,
+            category:     transactionDTO.type === 'expense' ? resolvedCategory : null,
+            tz:           transactionDTO.transaction_timezone,
+        }); // fire-and-forget
         invalidateMLInsight(user.id, txYearMonth); // fire-and-forget
         updateStreak(user.id, transactionTime, transactionDTO.transaction_timezone); // fire-and-forget
         User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {});
         logger.info(`Add transaction response: ${user.id} success`);
 
         // Return DTO response
-        const responseDTO = new AddTransactionResponseDTO(savedTransaction, balance);
+        const responseDTO = new AddTransactionResponseDTO(savedTransaction, updatedBalance);
         res.status(201).json(BaseResponseDTO.success('Transaction created successfully', responseDTO));
 
     } catch (error) {
@@ -291,38 +338,42 @@ const getByTimeRange = async (req, res, next) => {
 
 const deleteTransaction = async (req, res, next) => {
     try {
-        const balance = await Balance.findOne({ user: req.user.id });
-        if (!balance) {
-            return res.status(404).json(BaseResponseDTO.error('User balance not found'));
+        let deletedTransaction;
+        try {
+            deletedTransaction = await withOptionalTransaction(async (session) => {
+                const deleted = await Transaction.findOneAndDelete(
+                    { _id: req.params.id, user: req.user.id },
+                    session ? { session } : {}
+                );
+                if (!deleted) throw Object.assign(new Error('Transaction not found'), { statusCode: 404 });
+
+                // Reverse the balance effect: income removal lowers balance, expense removal raises it
+                const balanceDelta = deleted.type === 'income'
+                    ? -Number(deleted.amount)
+                    : Number(deleted.amount);
+
+                const updated = await Balance.findOneAndUpdate(
+                    { user: req.user.id },
+                    { $inc: { amount: balanceDelta } },
+                    { ...(session ? { session } : {}), new: true }
+                );
+                if (!updated) throw Object.assign(new Error('User balance not found'), { statusCode: 404 });
+
+                return deleted;
+            });
+        } catch (err) {
+            if (err.statusCode) return res.status(err.statusCode).json(BaseResponseDTO.error(err.message));
+            throw err;
         }
 
-        const deletedTransaction = await Transaction.findOneAndDelete({
-            _id: req.params.id,
-            user: req.user.id
-        });
-
-        if (!deletedTransaction) {
-            return res.status(404).json(BaseResponseDTO.error('Transaction not found'));
-        }
-
-        // Update balance based on transaction type
-        if (deletedTransaction.type === 'income') {
-            balance.amount -= Number(deletedTransaction.amount);
-        } else if (deletedTransaction.type === 'expense') {
-            balance.amount += Number(deletedTransaction.amount);
-        } else {
-            return res.status(500).json(BaseResponseDTO.error('Unknown transaction type'));
-        }
-
-        await balance.save();
         cache.invalidateUser(req.user.id);
         const delTxTz = deletedTransaction.transaction_timezone || 'UTC';
         const delYearMonth = moment(deletedTransaction.time).tz(delTxTz).format('YYYY-MM');
+        // Full recompute on delete — incremental reversal risks inconsistency if snapshot was already stale
         refreshSnapshot(req.user.id, delYearMonth, delTxTz); // fire-and-forget
         invalidateMLInsight(req.user.id, delYearMonth); // fire-and-forget
         User.findByIdAndUpdate(req.user.id, { lastActivityAt: new Date(), lastActivityType: 'Deleted transaction' }).catch(() => {});
 
-        // Return DTO response
         const responseDTO = new DeleteTransactionResponseDTO(deletedTransaction);
         res.status(200).json(BaseResponseDTO.success('Transaction deleted successfully', responseDTO));
 
@@ -605,8 +656,9 @@ const importCsv = async (req, res, next) => {
         }
 
         const user = req.user;
-        const balance = await Balance.findOne({ user: user.id });
-        if (!balance) {
+        // Verify balance exists — guard only, actual update uses $inc below
+        const balanceExists = await Balance.exists({ user: user.id });
+        if (!balanceExists) {
             return res.status(404).json(BaseResponseDTO.error('User balance not found'));
         }
 
@@ -619,6 +671,7 @@ const importCsv = async (req, res, next) => {
         const fileResults = [];
         let totalSuccess = 0;
         let totalFailed = 0;
+        let balanceDelta = 0; // accumulated delta for a single atomic $inc at the end
 
         for (const file of files) {
             const rows = await parseCsvBuffer(file.buffer);
@@ -698,11 +751,7 @@ const importCsv = async (req, res, next) => {
                         transaction_timezone: timezone,
                     });
 
-                    if (type === 'income') {
-                        balance.amount += amount;
-                    } else {
-                        balance.amount -= amount;
-                    }
+                    balanceDelta += type === 'income' ? amount : -amount;
 
                     await newTransaction.save();
                     results.success++;
@@ -719,7 +768,11 @@ const importCsv = async (req, res, next) => {
             totalFailed += results.failed;
         }
 
-        await balance.save();
+        // Single atomic $inc replaces the in-memory accumulate + save pattern,
+        // eliminating the race condition where concurrent imports could corrupt the balance.
+        if (totalSuccess > 0) {
+            await Balance.findOneAndUpdate({ user: user.id }, { $inc: { amount: balanceDelta } });
+        }
         if (totalSuccess > 0) {
             cache.invalidateUser(user.id);
             // Refresh snapshots and invalidate ML cache for every affected month (fire-and-forget)

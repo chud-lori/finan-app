@@ -59,4 +59,52 @@ async function refreshSnapshot(userId, yearMonth, tz = 'UTC') {
     }
 }
 
-module.exports = { refreshSnapshot };
+/**
+ * Incremental snapshot update for a single transaction addition.
+ *
+ * Faster than a full recompute — updates counters and byCategory in-place
+ * using atomic $inc + arrayFilters instead of scanning all transactions.
+ *
+ * Only handles additions (countDelta >= 1). For deletions or bulk ops,
+ * fall back to refreshSnapshot which is always correct.
+ *
+ * @param {string} userId
+ * @param {string} yearMonth - 'YYYY-MM'
+ * @param {object} opts
+ * @param {number} opts.incomeDelta  - income amount to add (0 for expense)
+ * @param {number} opts.expenseDelta - expense amount to add (0 for income)
+ * @param {string} [opts.category]  - expense category name (required when expenseDelta > 0)
+ * @param {string} [opts.tz]        - IANA timezone (fallback for refreshSnapshot)
+ */
+async function applySnapshotDelta(userId, yearMonth, { incomeDelta = 0, expenseDelta = 0, category = null, tz = 'UTC' }) {
+    try {
+        // Step 1: update top-level counters atomically
+        await Snapshot.findOneAndUpdate(
+            { user: userId, yearMonth },
+            { $inc: { income: incomeDelta, expense: expenseDelta, txCount: 1 } },
+            { upsert: true }
+        );
+
+        // Step 2: update byCategory array for expense additions
+        if (category && expenseDelta > 0) {
+            const catResult = await Snapshot.updateOne(
+                { user: userId, yearMonth },
+                { $inc: { 'byCategory.$[cat].total': expenseDelta, 'byCategory.$[cat].count': 1 } },
+                { arrayFilters: [{ 'cat.category': category }] }
+            );
+            // Category not yet in array for this month — push a new entry
+            if (catResult.modifiedCount === 0) {
+                await Snapshot.updateOne(
+                    { user: userId, yearMonth },
+                    { $push: { byCategory: { category, total: expenseDelta, count: 1 } } }
+                );
+            }
+        }
+    } catch (err) {
+        logger.error(`Snapshot delta failed user=${userId} month=${yearMonth}: ${err.message}`);
+        // Fall back to full recompute so the snapshot stays accurate
+        refreshSnapshot(userId, yearMonth, tz);
+    }
+}
+
+module.exports = { refreshSnapshot, applySnapshotDelta };

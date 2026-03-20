@@ -1,10 +1,13 @@
 services:
 
   # ── MongoDB ────────────────────────────────────────────────
+  # Runs as a single-node replica set (rs0) so multi-document transactions
+  # are available. A standalone MongoDB does not support transactions.
   mongo:
     image: mongo:7
     container_name: finan-mongo
     restart: unless-stopped
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - mongo_data:/data/db
     networks:
@@ -14,6 +17,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Replica-set init (runs once, exits 0) ──────────────────
+  # Initiates the rs0 replica set after mongo is healthy.
+  # Idempotent: rs.status() succeeds if already initiated, skipping rs.initiate().
+  # backend depends on this completing before it starts.
+  mongo-init:
+    image: mongo:7
+    container_name: finan-mongo-init
+    restart: "no"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - finan-net
+    command: >
+      mongosh --host mongo:27017 --eval
+      "try { rs.status(); print('replica set already initiated') }
+       catch(e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }); print('replica set initiated') }"
 
   # ── AI service (FastAPI) ─────────────────────────────────────
   ai:
@@ -47,7 +68,7 @@ services:
       - "3001:3000"
     environment:
       NODE_ENV: production
-      DB_URI: ${DB_URI:-mongodb://mongo:27017/finan}
+      DB_URI: ${DB_URI:-mongodb://mongo:27017/finan?replicaSet=rs0}
       SECRET_TOKEN: ${SECRET_TOKEN}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
@@ -58,8 +79,8 @@ services:
       SENTRY_DSN: ${SENTRY_DSN}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:3002}
     depends_on:
-      mongo:
-        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
       ai:
         condition: service_healthy
     networks:
