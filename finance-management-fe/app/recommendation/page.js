@@ -46,10 +46,10 @@ function AmountInput({ label, value, onChange, placeholder = '0', hint }) {
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
       <div className="relative">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">{currency}</span>
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium pointer-events-none">{currency}</span>
         <input type="text" value={value} onChange={(e) => onChange(fmtInput(e.target.value))}
           placeholder={placeholder}
-          className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+          className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
       </div>
       {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
     </div>
@@ -665,10 +665,10 @@ function DebtTool() {
           </button>
 
           <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{currency}</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">{currency}</span>
             <input type="text" placeholder="Extra monthly payment (optional)" value={extra}
               onChange={e => setExtra(fmtInput(e.target.value))}
-              className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+              className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           </div>
 
           <SubmitBtn label="Calculate Payoff" />
