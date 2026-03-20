@@ -21,6 +21,23 @@ const MLInsight = require('../models/mlinsight.model');
 const invalidateMLInsight = (userId, yearMonth) => {
     MLInsight.deleteOne({ user: userId, yearMonth }).catch(() => {});
 };
+
+// Fire-and-forget: update streak fields on the User document when a transaction is logged
+const updateStreak = (userId, txMoment, tz) => {
+    const today = txMoment.clone().tz(tz).format('YYYY-MM-DD');
+    User.findById(userId).then(u => {
+        if (!u) return;
+        if (u.streakLastDate === today) return; // already credited today
+        const yesterday = moment.tz(today, 'YYYY-MM-DD', tz).subtract(1, 'day').format('YYYY-MM-DD');
+        const newStreak = u.streakLastDate === yesterday ? (u.streakDays || 0) + 1 : 1;
+        const newLongest = Math.max(newStreak, u.longestStreak || 0);
+        User.findByIdAndUpdate(userId, {
+            streakDays: newStreak,
+            streakLastDate: today,
+            longestStreak: newLongest,
+        }).catch(() => {});
+    }).catch(() => {});
+};
 const path = require('path');
 const fs = require('fs');
 const {
@@ -120,6 +137,7 @@ const addTransaction = async (req, res, next) => {
         const txYearMonth = moment(transactionTime).tz(transactionDTO.transaction_timezone).format('YYYY-MM');
         refreshSnapshot(user.id, txYearMonth, transactionDTO.transaction_timezone); // fire-and-forget
         invalidateMLInsight(user.id, txYearMonth); // fire-and-forget
+        updateStreak(user.id, transactionTime, transactionDTO.transaction_timezone); // fire-and-forget
         User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {});
         logger.info(`Add transaction response: ${user.id} success`);
 

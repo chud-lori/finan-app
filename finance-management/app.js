@@ -77,12 +77,14 @@ const authRoutes = require('./routers/auth');
 const transactionRoutes = require('./routers/transaction');
 const goalRoutes = require('./routers/goal');
 const profileRoutes = require('./routers/profile');
+const gamificationRoutes = require('./routers/gamification');
 // Routes
 app.get("/", (req, res) => res.json("HEHHHH"));
 app.use('/api/auth', authRoutes);
 app.use('/api/transaction', transactionRoutes);
 app.use('/api/goal', goalRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/gamification', gamificationRoutes);
 // views
 // app.get('/', (req, res, next) => {
 //     res.render('./public/index');

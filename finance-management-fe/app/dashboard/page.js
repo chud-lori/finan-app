@@ -10,6 +10,7 @@ import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components
 import Tooltip from '@/components/Tooltip';
 import { useToast } from '@/components/ToastContext';
 import SwipeToDelete from '@/components/SwipeToDelete';
+import GamificationBanner from '@/components/GamificationBanner';
 
 const MONTH_LABELS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LIMIT = 20;
@@ -345,6 +346,8 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-gray-50">
         <Navbar />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
+
+          <GamificationBanner />
 
           {/* Stats */}
           {loading && !data.transactions.length ? <SkeletonStatCards /> : (

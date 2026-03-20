@@ -33,6 +33,9 @@ const UserSchema = new Schema({
     lastActivityType: { type: String },
     tokenVersion: { type: Number, default: 0 },
     emailVerified: { type: Boolean, default: true }, // true = backward compat; new password accounts set false explicitly
+    streakDays:    { type: Number, default: 0 },    // current consecutive days with a logged transaction
+    streakLastDate: { type: String, default: null }, // "YYYY-MM-DD" of last day a transaction was logged
+    longestStreak: { type: Number, default: 0 },    // all-time best streak
 }, {
     timestamps: { 
         currentTime: () => {

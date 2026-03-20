@@ -239,6 +239,11 @@ export const setBudget = (yearMonth, amount, updateDefault = false) =>
     body: JSON.stringify({ amount, updateDefault }),
   }).then(handleResponse);
 
+export const getGamificationSummary = () =>
+  fetch(`${BASE_URL}/api/gamification/summary?tz=${encodeURIComponent(browserTz())}`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 // Returns a raw Response (CSV blob) — do not call .then(handleResponse)
 export const exportTransactions = (params = {}) => {
   const qs = new URLSearchParams({ tz: browserTz(), ...params });
