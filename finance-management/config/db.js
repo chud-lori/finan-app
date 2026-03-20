@@ -4,7 +4,10 @@ const { DB_URI: mongoURI } = require('./keys');
 const connectDB = async () => {
     return mongoose
       .connect(mongoURI, {
-        // Fail fast if mongo is unreachable at startup instead of hanging
+        // Keep connection pool small — this is a low-traffic single-server app
+        // Default maxPoolSize is 100 which would waste sockets on a small VPS
+        maxPoolSize: 10,
+        minPoolSize: 2,
         serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
       })

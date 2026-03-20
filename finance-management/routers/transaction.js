@@ -26,16 +26,24 @@ const {
     refreshMLInsights,
 } = require('../controllers/transaction');
 
+const ALLOWED_CSV_MIMES = new Set(['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel']);
 const upload = multer({
     storage: multer.memoryStorage(),
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+    fileFilter: (_req, file, cb) => {
+        // Accept standard CSV MIME types; also require .csv extension as a second check.
+        // text/plain is included because some OS/browsers send CSV as plain text.
+        const validMime = ALLOWED_CSV_MIMES.has(file.mimetype);
+        const validExt  = file.originalname.toLowerCase().endsWith('.csv');
+        if (validMime && validExt) {
             cb(null, true);
         } else {
-            cb(new Error('Only CSV files are allowed'), false);
+            cb(new Error('Only .csv files are allowed'), false);
         }
     },
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5 MB per file
+        files: 5,                   // max 5 files per request
+    },
 });
 
 

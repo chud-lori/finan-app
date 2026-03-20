@@ -60,12 +60,19 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-app.use(helmet());
+app.use(helmet({
+  // API-only server — no HTML is rendered, so CSP is not useful here.
+  // HSTS is handled by the nginx reverse proxy in front of this service.
+  contentSecurityPolicy: false,
+  // Allow cross-origin fetch from the frontend domain (set by CORS above)
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(morgan(morganJSONFormat(), {
     stream: logger.stream
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Cap JSON and URL-encoded body size to prevent memory exhaustion from large payloads
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 
 // swagger docs (only available if NODE_ENV is not 'production')
 if (process.env.NODE_ENV !== 'production') {

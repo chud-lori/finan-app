@@ -22,6 +22,8 @@ class RegisterRequestDTO extends BaseRequestDTO {
         }
         if (!this.email || typeof this.email !== 'string') {
             errors.push('Email is required and must be a string');
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email.trim())) {
+            errors.push('Email must be a valid email address');
         }
         if (!this.password || typeof this.password !== 'string') {
             errors.push('Password is required and must be a string');

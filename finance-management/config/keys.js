@@ -1,5 +1,17 @@
 require("dotenv").config();
 
+// Crash loudly at startup if any secret required for security is missing.
+// Better to fail fast here than to start with a broken/insecure configuration.
+const REQUIRED_IN_PRODUCTION = ['SECRET_TOKEN', 'DB_URI'];
+if (process.env.NODE_ENV === 'production') {
+  for (const key of REQUIRED_IN_PRODUCTION) {
+    if (!process.env[key]) {
+      console.error(`FATAL: missing required environment variable ${key}`);
+      process.exit(1);
+    }
+  }
+}
+
 module.exports = {
   NODE_ENV: process.env.NODE_ENV || "development",
   HOST: process.env.HOST || "0.0.0.0",
@@ -12,9 +24,4 @@ module.exports = {
   FE_URL: process.env.FE_URL || 'http://localhost:3000',
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   FROM_EMAIL:     process.env.FROM_EMAIL || 'noreply@lori.my.id',
-  MYSQL_HOST: process.env.MYSQL_HOST || 'localhost',
-  MYSQL_PORT: process.env.MYSQL_PORT || '3306',
-  MYSQL_USER: process.env.MYSQL_USER || 'root',
-  MYSQL_PASSWORD: process.env.MYSQL_PASSWORD || 'root',
-  MYSQL_DB: process.env.MYSQL_DB || 'trans',
 };

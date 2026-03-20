@@ -144,7 +144,7 @@ const loginUser = async (req, res, next) => {
 
     // Sign token
     const token = jwt.sign(payload, SECRET_TOKEN, {
-      expiresIn: '30d',
+      expiresIn: '7d',
     });
 
     User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
