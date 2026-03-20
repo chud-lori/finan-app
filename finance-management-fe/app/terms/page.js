@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import AuthNavLink from '@/components/AuthNavLink';
 
 export const metadata = {
@@ -18,7 +19,9 @@ export default function TermsPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <Link href="/" className="font-bold text-teal-600 text-lg">Finan App</Link>
+          <Link href="/" className="flex items-center">
+            <Image src="/logo.png" alt="Finan App" width={120} height={64} className="h-7 w-auto" />
+          </Link>
           <AuthNavLink className="text-sm text-gray-500 hover:text-teal-600 transition-colors" />
         </div>
       </header>

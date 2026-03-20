@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useTheme } from '@/components/ThemeContext';
@@ -56,8 +57,8 @@ export default function Navbar() {
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
         {/* Brand */}
-        <Link href="/" className="font-bold text-xl text-teal-600 tracking-tight">
-          Finan App
+        <Link href="/" className="flex items-center">
+          <Image src="/logo.png" alt="Finan App" width={120} height={64} className="h-8 w-auto" priority />
         </Link>
 
         {/* Desktop nav */}

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function LandingNav() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -14,7 +15,9 @@ export default function LandingNav() {
     <>
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <span className="font-bold text-xl text-teal-600 tracking-tight">Finan App</span>
+          <Link href="/" className="flex items-center">
+            <Image src="/logo.png" alt="Finan App" width={120} height={64} className="h-8 w-auto" priority />
+          </Link>
 
           {/* Desktop nav */}
           <nav className="hidden sm:flex items-center gap-6 text-sm text-gray-600 font-medium">
