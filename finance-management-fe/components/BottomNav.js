@@ -37,11 +37,19 @@ const MAIN_TABS = [
       </svg>
     ),
   },
-  // "More" opens a bottom sheet with Planner, Insights, Profile
-  { key: 'more' },
+  {
+    href: '/profile',
+    label: 'Profile',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  },
 ];
 
-// Pages surfaced inside the "More" sheet
+// Pages surfaced inside the "More" sheet (secondary / occasional features)
 const MORE_LINKS = [
   {
     href: '/recommendation',
@@ -54,17 +62,6 @@ const MORE_LINKS = [
     label: 'Insights',
     desc: 'AI spending analysis',
     icon: '🔍',
-  },
-  {
-    href: '/profile',
-    label: 'Profile & Settings',
-    desc: 'Account, preferences, export',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-      </svg>
-    ),
   },
 ];
 
@@ -166,7 +163,7 @@ export default function BottomNav() {
       <div
         className={`md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 rounded-t-2xl shadow-xl transition-transform duration-300 ease-out
           ${sheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 4rem)' }}
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
       >
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-2">
