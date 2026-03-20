@@ -12,8 +12,8 @@ jobs:
       backend:  ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v4.2.2.2.2
+      - uses: dorny/paths-filter@v3.0.2
         id: filter
         with:
           filters: |
@@ -31,10 +31,10 @@ jobs:
       run:
         working-directory: finance-management
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: finance-management/package-lock.json
       - run: npm ci
@@ -49,10 +49,10 @@ jobs:
       run:
         working-directory: finance-management-fe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: finance-management-fe/package-lock.json
       - run: npm ci
