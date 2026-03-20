@@ -207,6 +207,13 @@ export const getActiveMonths = () =>
 export const getProfile = () =>
   fetch(`${BASE_URL}/api/profile`, { headers: authHeaders() }).then(handleResponse);
 
+export const updateIdentity = (body) =>
+  fetch(`${BASE_URL}/api/profile/identity`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  }).then(handleResponse);
+
 export const updatePreferences = (body) =>
   fetch(`${BASE_URL}/api/profile/preferences`, {
     method: 'PATCH',

@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import {
   getProfile,
+  updateIdentity,
   updatePreferences,
   exportTransactions,
   importCsv,
@@ -311,6 +312,11 @@ export default function ProfilePage() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError,   setProfileError]   = useState('');
 
+  const [editingIdentity, setEditingIdentity] = useState(false);
+  const [identityFields,  setIdentityFields]  = useState({ name: '', username: '' });
+  const [identitySaving,  setIdentitySaving]  = useState(false);
+  const [identityError,   setIdentityError]   = useState('');
+
   const [prefs,       setPrefs]       = useState({ currency: 'IDR', timezone: 'Asia/Jakarta', weekStartsOn: 'monday', numberFormat: 'dot', monthlyBudget: 0 });
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsSaved,  setPrefsSaved]  = useState(false);
@@ -350,6 +356,7 @@ export default function ProfilePage() {
       .then(res => {
         setProfile(res.data);
         if (res.data.preferences) setPrefs(res.data.preferences);
+        if (res.data.user) setIdentityFields({ name: res.data.user.name || '', username: res.data.user.username || '' });
       })
       .catch(e => setProfileError(e.message || 'Failed to load profile'))
       .finally(() => setLoadingProfile(false));
@@ -495,6 +502,20 @@ export default function ProfilePage() {
   };
 
   // ── Delete account ────────────────────────────────────────────────────────
+  const handleSaveIdentity = async () => {
+    setIdentityError('');
+    setIdentitySaving(true);
+    try {
+      const res = await updateIdentity(identityFields);
+      setProfile(prev => ({ ...prev, user: { ...prev.user, ...res.data } }));
+      setEditingIdentity(false);
+    } catch (e) {
+      setIdentityError(e.message || 'Failed to update profile');
+    } finally {
+      setIdentitySaving(false);
+    }
+  };
+
   const handleDeleteConfirmed = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
@@ -528,19 +549,83 @@ export default function ProfilePage() {
         <main className="max-w-4xl mx-auto px-4 py-6">
 
           {/* ── Header ── */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 font-black text-xl shrink-0">
-              {initial}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-lg font-bold text-gray-900 truncate">{toTitleCase(user.name || user.username || 'My Profile')}</p>
-              {user.email && <p className="text-xs text-gray-500 truncate">{user.email}</p>}
-              {identity.spendingStyle && (
-                <span className={`inline-block mt-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${styleColor(identity.spendingStyle)}`}>
-                  {identity.spendingStyle}
-                </span>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-4">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 font-black text-xl shrink-0">
+                {initial}
+              </div>
+
+              {editingIdentity ? (
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">Name</label>
+                    <input
+                      autoFocus
+                      value={identityFields.name}
+                      onChange={e => setIdentityFields(f => ({ ...f, name: e.target.value }))}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      placeholder="Your name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">Username</label>
+                    <input
+                      value={identityFields.username}
+                      onChange={e => setIdentityFields(f => ({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                      placeholder="username (letters, numbers, _)"
+                    />
+                    <p className="text-xs text-gray-400 mt-0.5">3–30 chars, letters / numbers / underscores</p>
+                  </div>
+                  {identityError && <p className="text-xs text-red-600">{identityError}</p>}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button onClick={handleSaveIdentity} disabled={identitySaving}
+                      className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-50">
+                      {identitySaving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button onClick={() => { setEditingIdentity(false); setIdentityError(''); setIdentityFields({ name: user.name || '', username: user.username || '' }); }}
+                      className="px-3 py-1.5 rounded-lg text-gray-500 text-xs hover:bg-gray-100">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-bold text-gray-900 truncate">{toTitleCase(user.name || user.username || 'My Profile')}</p>
+                    <button onClick={() => { setIdentityFields({ name: user.name || '', username: user.username || '' }); setEditingIdentity(true); }}
+                      className="p-1 rounded-lg text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors shrink-0"
+                      title="Edit name & username">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                  </div>
+                  {user.username && <p className="text-xs text-gray-400">@{user.username}</p>}
+                  {user.email && <p className="text-xs text-gray-500 truncate">{user.email}</p>}
+                  {identity.spendingStyle && (
+                    <span className={`inline-block mt-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${styleColor(identity.spendingStyle)}`}>
+                      {identity.spendingStyle}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
+
+            {/* Account meta row */}
+            {!editingIdentity && (
+              <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-gray-100">
+                {profile?.account?.memberSince && (
+                  <span className="text-xs text-gray-400">Member since {memberSince(profile.account.memberSince)}</span>
+                )}
+                {profile?.account?.lastLoginAt && (
+                  <span className="text-xs text-gray-400">· Last login {timeAgo(profile.account.lastLoginAt)}</span>
+                )}
+                {profile?.account?.hasPassword === false && (
+                  <span className="text-xs bg-sky-50 text-sky-600 font-medium px-2 py-0.5 rounded-full border border-sky-200">Google account</span>
+                )}
+              </div>
+            )}
           </div>
 
           {profileError && (
@@ -552,35 +637,6 @@ export default function ProfilePage() {
 
             {/* ── LEFT COLUMN ── */}
             <div className="space-y-4">
-
-              {/* Account Info */}
-              <Card title="Account">
-                <div className="space-y-2.5">
-                  {[
-                    {
-                      label: 'Member since',
-                      value: memberSince(profile?.account?.memberSince),
-                    },
-                    {
-                      label: 'Last activity',
-                      value: profile?.account?.lastActivityAt
-                        ? `${profile.account.lastActivityType || 'Activity'} · ${timeAgo(profile.account.lastActivityAt)}`
-                        : 'No activity yet',
-                    },
-                    {
-                      label: 'Last login',
-                      value: profile?.account?.lastLoginAt
-                        ? timeAgo(profile.account.lastLoginAt)
-                        : 'Unknown',
-                    },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex items-center justify-between gap-4">
-                      <span className="text-xs text-gray-500 shrink-0">{label}</span>
-                      <span className="text-xs font-medium text-gray-800 text-right">{loadingProfile ? '…' : value}</span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
 
               {/* Financial Identity */}
               <Card title="Financial Identity" subtitle="Avg across months with activity">

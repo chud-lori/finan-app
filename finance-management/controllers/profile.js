@@ -111,6 +111,46 @@ const getProfile = async (req, res) => {
     }
 };
 
+// ── PATCH /api/profile/identity ──────────────────────────────────────────────
+
+const updateIdentity = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { name, username } = req.body;
+
+        const update = {};
+
+        if (name !== undefined) {
+            const trimmed = String(name).trim();
+            if (!trimmed || trimmed.length > 100)
+                return res.status(400).json(BaseResponseDTO.error('Name must be 1–100 characters'));
+            update.name = trimmed;
+        }
+
+        if (username !== undefined) {
+            const trimmed = String(username).trim().toLowerCase();
+            if (!/^[a-z0-9_]{3,30}$/.test(trimmed))
+                return res.status(400).json(BaseResponseDTO.error('Username must be 3–30 characters: letters, numbers, underscores only'));
+            const conflict = await User.findOne({ username: trimmed, _id: { $ne: userId } }).lean();
+            if (conflict)
+                return res.status(409).json(BaseResponseDTO.error('Username is already taken'));
+            update.username = trimmed;
+        }
+
+        if (!Object.keys(update).length)
+            return res.status(400).json(BaseResponseDTO.error('Nothing to update'));
+
+        const user = await User.findByIdAndUpdate(userId, { $set: update }, { new: true }).select('name username email').lean();
+
+        res.status(200).json(BaseResponseDTO.success('Profile updated', {
+            name: user.name, username: user.username, email: user.email,
+        }));
+    } catch (e) {
+        logger.error(`Update identity error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to update profile', e.message));
+    }
+};
+
 // ── PATCH /api/profile/preferences ───────────────────────────────────────────
 
 const updatePreferences = async (req, res) => {
@@ -204,4 +244,4 @@ const exportTransactions = async (req, res) => {
     }
 };
 
-module.exports = { getProfile, updatePreferences, exportTransactions };
+module.exports = { getProfile, updateIdentity, updatePreferences, exportTransactions };
