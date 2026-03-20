@@ -1,3 +1,13 @@
+const Sentry = require('@sentry/node');
+
+// Sentry must be initialised before any other imports
+if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        tracesSampleRate: 0.1,
+    });
+}
+
 const express = require('express');
 const morgan = require('morgan');
 require('winston-daily-rotate-file');
@@ -69,8 +79,12 @@ app.use('/api/profile', profileRoutes);
 //     res.render('./public/index');
 // });
 
+// Sentry error handler — must come after all routes
+Sentry.setupExpressErrorHandler(app);
+
 process.on('uncaughtException', (e) => {
-    console.error(e); // try console.log if that doesn't work
+    Sentry.captureException(e);
+    console.error(e);
     process.exit(10);
 });
 
