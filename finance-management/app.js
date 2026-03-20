@@ -1,10 +1,19 @@
 const Sentry = require('@sentry/node');
 
-// Sentry must be initialised before any other imports
+// Sentry must be initialised before any other imports.
+// @sentry/node v8+ uses OpenTelemetry internally — Sentry.init() sets up the
+// OTel SDK and registers Sentry as the exporter automatically.
 if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
     Sentry.init({
         dsn: process.env.SENTRY_DSN,
-        tracesSampleRate: 0.1,
+        // Sample 20% of transactions for performance/tracing data
+        tracesSampleRate: 0.2,
+        integrations: [
+            // Instruments Express routes → spans show named routes (e.g. GET /api/transaction/:id)
+            Sentry.expressIntegration(),
+            // Instruments Mongoose queries → spans show collection + operation
+            Sentry.mongooseIntegration(),
+        ],
     });
 }
 
