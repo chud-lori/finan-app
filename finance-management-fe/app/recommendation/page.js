@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getRecommendation, getProfile } from '@/lib/api';
-import { useFormatAmount } from '@/components/CurrencyContext';
+import { useCurrency } from '@/components/CurrencyContext';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 const parseNum = (v) => Number(String(v).replace(/[^0-9]/g, ''));
@@ -41,11 +41,12 @@ function StatRow({ label, value, sub, valueClass = 'text-gray-900' }) {
 }
 
 function AmountInput({ label, value, onChange, placeholder = '0', hint }) {
+  const { currency } = useCurrency();
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
       <div className="relative">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">Rp</span>
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">{currency}</span>
         <input type="text" value={value} onChange={(e) => onChange(fmtInput(e.target.value))}
           placeholder={placeholder}
           className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
@@ -71,7 +72,7 @@ function SubmitBtn({ loading, label = 'Calculate' }) {
 
 // Saved-budget auto-fill button
 function UseSavedBudgetBtn({ savedBudget, onUse }) {
-  const formatAmount = useFormatAmount();
+  const { formatAmount, currency } = useCurrency();
   if (!savedBudget) return null;
   return (
     <button type="button" onClick={onUse}
@@ -89,7 +90,7 @@ const VELOCITY_CONFIG = {
 };
 
 function AffordTool({ savedBudget }) {
-  const formatAmount = useFormatAmount();
+  const { formatAmount, currency } = useCurrency();
   const [monthly, setMonthly] = useState('');
   const [spend,   setSpend]   = useState('');
   const [result,  setResult]  = useState(null);
@@ -131,9 +132,9 @@ function AffordTool({ savedBudget }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <UseSavedBudgetBtn savedBudget={savedBudget} onUse={() => setMonthly(fmtInput(String(savedBudget)))} />
-            <AmountInput label="Monthly budget (IDR)" value={monthly} onChange={setMonthly} placeholder="5,000,000" />
+            <AmountInput label={`Monthly budget (${currency})`} value={monthly} onChange={setMonthly} placeholder="5,000,000" />
           </div>
-          <AmountInput label="Amount you want to spend (IDR)" value={spend} onChange={setSpend} placeholder="500,000" />
+          <AmountInput label={`Amount you want to spend (${currency})`} value={spend} onChange={setSpend} placeholder="500,000" />
           <SubmitBtn loading={loading} label="Analyse" />
         </form>
       </ToolCard>
@@ -209,7 +210,7 @@ function AffordTool({ savedBudget }) {
 
 // ─── Tool 2: 50/30/20 Rule Planner ───────────────────────────────────────────
 function BudgetRuleTool() {
-  const formatAmount = useFormatAmount();
+  const { formatAmount, currency } = useCurrency();
   const [income, setIncome] = useState('');
   const [result, setResult] = useState(null);
 
@@ -233,7 +234,7 @@ function BudgetRuleTool() {
           The 50/30/20 rule splits your income into three categories — a simple and popular starting point for any budget.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label="Monthly take-home income (IDR)" value={income} onChange={setIncome} placeholder="10,000,000" />
+          <AmountInput label={`Monthly take-home income (${currency})`} value={income} onChange={setIncome} placeholder="10,000,000" />
           <SubmitBtn label="Calculate Split" />
         </form>
       </ToolCard>
@@ -266,7 +267,7 @@ function BudgetRuleTool() {
 
 // ─── Tool 3: Savings Goal Calculator ─────────────────────────────────────────
 function SavingsGoalTool() {
-  const formatAmount = useFormatAmount();
+  const { formatAmount, currency } = useCurrency();
   const [goal,    setGoal]    = useState('');
   const [saved,   setSaved]   = useState('');
   const [monthly, setMonthly] = useState('');
@@ -299,9 +300,9 @@ function SavingsGoalTool() {
               placeholder="e.g. New laptop, Holiday, Emergency fund"
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           </div>
-          <AmountInput label="Target amount (IDR)" value={goal} onChange={setGoal} placeholder="50,000,000" />
-          <AmountInput label="Already saved (IDR)" value={saved} onChange={setSaved} placeholder="0" />
-          <AmountInput label="Monthly savings capacity (IDR)" value={monthly} onChange={setMonthly} placeholder="2,000,000" />
+          <AmountInput label={`Target amount (${currency})`} value={goal} onChange={setGoal} placeholder="50,000,000" />
+          <AmountInput label={`Already saved (${currency})`} value={saved} onChange={setSaved} placeholder="0" />
+          <AmountInput label={`Monthly savings capacity (${currency})`} value={monthly} onChange={setMonthly} placeholder="2,000,000" />
           <SubmitBtn label="Calculate Timeline" />
         </form>
       </ToolCard>
@@ -346,7 +347,7 @@ function SavingsGoalTool() {
 
 // ─── Tool 4: Safe Daily Budget ────────────────────────────────────────────────
 function DailyBudgetTool({ savedBudget }) {
-  const formatAmount = useFormatAmount();
+  const { formatAmount, currency } = useCurrency();
   const [monthly, setMonthly] = useState('');
   const [result,  setResult]  = useState(null);
   const [loading, setLoading] = useState(false);
@@ -384,7 +385,7 @@ function DailyBudgetTool({ savedBudget }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <UseSavedBudgetBtn savedBudget={savedBudget} onUse={() => setMonthly(fmtInput(String(savedBudget)))} />
-            <AmountInput label="Monthly budget (IDR)" value={monthly} onChange={setMonthly} placeholder="5,000,000" />
+            <AmountInput label={`Monthly budget (${currency})`} value={monthly} onChange={setMonthly} placeholder="5,000,000" />
           </div>
           <SubmitBtn loading={loading} label="Check Daily Limit" />
         </form>
@@ -397,7 +398,7 @@ function DailyBudgetTool({ savedBudget }) {
               Safe daily spend · {result.daysRemaining} days remaining
             </p>
             <p className={`text-4xl font-black ${result.safeRemaining <= 0 ? 'text-rose-700' : 'text-teal-700'}`}>
-              {result.safeRemaining <= 0 ? 'Rp 0' : formatAmount(result.safeDailyLimit)}
+              {result.safeRemaining <= 0 ? formatAmount(0) : formatAmount(result.safeDailyLimit)}
             </p>
             {result.safeRemaining <= 0 && (
               <p className="text-sm text-rose-600 mt-1">Budget already exhausted for this month</p>
@@ -446,6 +447,7 @@ function DailyBudgetTool({ savedBudget }) {
 
 // ─── Tool 5: Emergency Fund Check ────────────────────────────────────────────
 function EmergencyFundTool() {
+  const { formatAmount, currency } = useCurrency();
   const [expenses, setExpenses] = useState('');
   const [current,  setCurrent]  = useState('');
   const [saving,   setSaving]   = useState('');
@@ -476,9 +478,9 @@ function EmergencyFundTool() {
           A 3–6 month emergency fund protects you against job loss, medical bills, or unexpected costs. See where you stand.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label="Monthly essential expenses (IDR)" value={expenses} onChange={setExpenses} placeholder="4,000,000" />
-          <AmountInput label="Current emergency savings (IDR)" value={current} onChange={setCurrent} placeholder="0" />
-          <AmountInput label="Monthly amount you can save (IDR)" value={saving} onChange={setSaving} placeholder="500,000" />
+          <AmountInput label={`Monthly essential expenses (${currency})`} value={expenses} onChange={setExpenses} placeholder="4,000,000" />
+          <AmountInput label={`Current emergency savings (${currency})`} value={current} onChange={setCurrent} placeholder="0" />
+          <AmountInput label={`Monthly amount you can save (${currency})`} value={saving} onChange={setSaving} placeholder="500,000" />
           <SubmitBtn label="Check My Fund" />
         </form>
       </ToolCard>
@@ -537,6 +539,7 @@ function EmergencyFundTool() {
 
 // ─── Tool 6: Debt Snowball / Avalanche ────────────────────────────────────────
 function DebtTool() {
+  const { formatAmount, currency } = useCurrency();
   const [method, setMethod] = useState('avalanche'); // 'snowball' | 'avalanche'
   const [extra,  setExtra]  = useState('');
   const [debts,  setDebts]  = useState([
@@ -634,7 +637,7 @@ function DebtTool() {
                   className="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Balance (Rp)</label>
+                    <label className="block text-xs text-gray-500 mb-1">Balance</label>
                     <input type="text" placeholder="10,000,000" value={d.balance}
                       onChange={e => updateDebt(d.id, 'balance', fmtInput(e.target.value))}
                       className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
@@ -646,7 +649,7 @@ function DebtTool() {
                       className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Min pay (Rp)</label>
+                    <label className="block text-xs text-gray-500 mb-1">Min pay</label>
                     <input type="text" placeholder="300,000" value={d.minPay}
                       onChange={e => updateDebt(d.id, 'minPay', fmtInput(e.target.value))}
                       className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
@@ -662,7 +665,7 @@ function DebtTool() {
           </button>
 
           <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">Rp</span>
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{currency}</span>
             <input type="text" placeholder="Extra monthly payment (optional)" value={extra}
               onChange={e => setExtra(fmtInput(e.target.value))}
               className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
@@ -713,6 +716,7 @@ function DebtTool() {
 
 // ─── Tool 7: FIRE Calculator ──────────────────────────────────────────────────
 function FireTool() {
+  const { formatAmount, currency } = useCurrency();
   const [annualExpense, setAnnualExpense] = useState('');
   const [currentSaved,  setCurrentSaved]  = useState('');
   const [annualSaving,  setAnnualSaving]  = useState('');
@@ -747,10 +751,10 @@ function FireTool() {
           <strong className="text-gray-700">FIRE</strong> = Financial Independence, Retire Early. Your FIRE number is the portfolio size that funds your lifestyle forever.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label="Annual living expenses (IDR)" value={annualExpense} onChange={setAnnualExpense} placeholder="240,000,000"
+          <AmountInput label={`Annual living expenses (${currency})`} value={annualExpense} onChange={setAnnualExpense} placeholder="240,000,000"
             hint="12× your monthly expenses" />
-          <AmountInput label="Current investments / savings (IDR)" value={currentSaved} onChange={setCurrentSaved} placeholder="0" />
-          <AmountInput label="Annual savings / investments (IDR)" value={annualSaving} onChange={setAnnualSaving} placeholder="60,000,000" />
+          <AmountInput label={`Current investments / savings (${currency})`} value={currentSaved} onChange={setCurrentSaved} placeholder="0" />
+          <AmountInput label={`Annual savings / investments (${currency})`} value={annualSaving} onChange={setAnnualSaving} placeholder="60,000,000" />
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Expected return (%/yr)</label>
@@ -804,6 +808,7 @@ function FireTool() {
 
 // ─── Tool 8: Inflation Impact ─────────────────────────────────────────────────
 function InflationTool() {
+  const { formatAmount, currency } = useCurrency();
   const [amount,    setAmount]    = useState('');
   const [years,     setYears]     = useState('10');
   const [inflation, setInflation] = useState('5');
@@ -838,7 +843,7 @@ function InflationTool() {
           See how inflation erodes purchasing power over time — and what today&apos;s money will actually be worth.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label="Amount today (IDR)" value={amount} onChange={setAmount} placeholder="10,000,000" />
+          <AmountInput label={`Amount today (${currency})`} value={amount} onChange={setAmount} placeholder="10,000,000" />
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Years ahead</label>
@@ -913,6 +918,7 @@ const PPH21_BRACKETS = [
 const PTKP = { tk: 54_000_000, k0: 58_500_000, k1: 63_000_000, k2: 67_500_000, k3: 72_000_000 };
 
 function TaxTool() {
+  const { formatAmount, currency } = useCurrency();
   const [gross,    setGross]    = useState('');
   const [status,   setStatus]   = useState('tk');
   const [result,   setResult]   = useState(null);
@@ -1023,6 +1029,7 @@ function TaxTool() {
 
 // ─── Tool 10: Net Worth Tracker ───────────────────────────────────────────────
 function NetWorthTool() {
+  const { formatAmount, currency } = useCurrency();
   const [assets,      setAssets]      = useState([{ id: 1, name: '', value: '' }]);
   const [liabilities, setLiabilities] = useState([{ id: 1, name: '', value: '' }]);
   const [result,      setResult]      = useState(null);
@@ -1049,7 +1056,7 @@ function NetWorthTool() {
             onChange={e => updateRow(setter, r.id, 'name', e.target.value)}
             className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           <div className="relative w-36">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">Rp</span>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">{currency}</span>
             <input type="text" placeholder="0" value={r.value}
               onChange={e => updateRow(setter, r.id, 'value', fmtInput(e.target.value))}
               className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />

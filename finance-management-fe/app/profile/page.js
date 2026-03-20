@@ -709,20 +709,23 @@ export default function ProfilePage() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Monthly budget (IDR)
+                      Monthly budget ({prefs.currency})
                       <span className="ml-1 text-gray-400 font-normal">— auto-fills Planner tools</span>
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">Rp</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{prefs.currency}</span>
                       <input
                         type="text"
-                        value={prefs.monthlyBudget > 0 ? Number(prefs.monthlyBudget).toLocaleString('id-ID') : ''}
+                        inputMode="numeric"
+                        value={prefs.monthlyBudget > 0
+                          ? new Intl.NumberFormat(prefs.numberFormat === 'comma' ? 'en-US' : 'id-ID', { style: 'decimal' }).format(prefs.monthlyBudget)
+                          : ''}
                         onChange={e => {
                           const raw = Number(String(e.target.value).replace(/[^0-9]/g, ''));
                           setPrefs(p => ({ ...p, monthlyBudget: raw || 0 }));
                         }}
-                        placeholder="e.g. 5,000,000"
-                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                        placeholder={new Intl.NumberFormat(prefs.numberFormat === 'comma' ? 'en-US' : 'id-ID', { style: 'decimal' }).format(5000000)}
+                        className="w-full pl-12 pr-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                       />
                     </div>
                   </div>
