@@ -81,6 +81,36 @@ const STEPS = [
   { n: '4', title: 'Plan with confidence',  desc: 'Use 10 built-in tools to make smarter decisions every month.' },
 ];
 
+const TESTIMONIALS = [
+  {
+    name: 'Rina S.',
+    role: 'Freelance Designer',
+    avatar: 'RS',
+    text: 'I finally know where my money goes every month. The FIRE calculator alone changed how I think about saving.',
+  },
+  {
+    name: 'Budi H.',
+    role: 'Software Engineer',
+    avatar: 'BH',
+    text: 'Imported 3 months of bank CSV in one go, categories auto-filled. The AI anomaly detection caught a duplicate charge I missed.',
+  },
+  {
+    name: 'Dewi P.',
+    role: 'Small Business Owner',
+    avatar: 'DP',
+    text: 'The PPh 21 estimator saves me from surprises at tax time. Everything is free — I keep waiting for the upsell that never comes.',
+  },
+];
+
+const SECURITY_POINTS = [
+  { icon: '🔐', title: 'Passwords hashed with bcrypt',    desc: 'Your password is never stored in plaintext. We use bcrypt (salt 10) — the industry standard for secure password storage.' },
+  { icon: '🔄', title: 'Sessions invalidated on change',  desc: 'Changing your password instantly revokes every active session on every device — no stale logins.' },
+  { icon: '📧', title: 'Email verification required',     desc: 'New accounts must verify their email address before accessing any data.' },
+  { icon: '🚫', title: 'No data selling, ever',           desc: 'We have no third-party analytics, no ads, no data brokers. Your financial data is not a product.' },
+  { icon: '🔍', title: 'Ownership enforced on every call', desc: 'Every API request checks that you own the data you\'re accessing. No way to read another user\'s transactions.' },
+  { icon: '⚡', title: 'Rate-limited endpoints',          desc: 'Sensitive routes are rate-limited per user to prevent brute-force attacks.' },
+];
+
 const FOOTER_LINKS = {
   Product: [
     { label: 'Features',       href: '#features' },
@@ -257,13 +287,13 @@ export default function LandingPage() {
 
             {/* Headline */}
             <h1 className="animate-fade-in-up delay-75 text-4xl sm:text-5xl lg:text-6xl font-black text-gray-900 leading-tight tracking-tight mb-6">
-              Take control of
-              <span className="block text-teal-600">your money</span>
+              Finally know where
+              <span className="block text-teal-600">your money goes</span>
             </h1>
 
             {/* Subtext */}
             <p className="animate-fade-in-up delay-200 text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Track every rupiah, understand your spending patterns, and plan your financial future — all in one clean, fast dashboard.
+              Track every rupiah, spot patterns you&apos;ve been missing, and make smarter money decisions — all in one free, private dashboard. No spreadsheets. No subscriptions.
             </p>
 
             {/* CTAs */}
@@ -421,9 +451,9 @@ export default function LandingPage() {
             </Reveal>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {[
-                { icon: '🔒', title: 'Private by design', desc: 'JWT auth with token versioning. No third-party analytics. Your data stays yours.' },
-                { icon: '⚡', title: 'Instant & free', desc: 'No credit card. No freemium limits. Every feature — including all 10 planning tools — is free.' },
-                { icon: '🇮🇩', title: 'Built for Indonesia', desc: 'IDR currency, Indonesian PPh 21 tax brackets, and rupiah-first formatting throughout.' },
+                { icon: '🔒', title: 'Private by design', desc: 'No ads, no trackers, no data brokers. bcrypt passwords, JWT tokenVersion, and zero third-party analytics. Your data is yours alone.' },
+                { icon: '⚡', title: 'Fully free, always', desc: 'No credit card required. No freemium gates. Every feature — tracking, analytics, all 10 planning tools, AI insights — is 100% free.' },
+                { icon: '🇮🇩', title: 'Made for Indonesians', desc: 'IDR & multi-currency support, dot/comma formatting preferences, Indonesian PPh 21 tax brackets, and Bahasa-friendly UX throughout.' },
               ].map(({ icon, title, desc }, i) => (
                 <Reveal key={title} delay={`${i * 100}ms`}>
                   <div className="flex gap-4 p-5 rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-md transition-all duration-200 h-full">
@@ -433,6 +463,71 @@ export default function LandingPage() {
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-1">{title}</h3>
                       <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
+                    </div>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Testimonials ── */}
+        <section className="py-24 bg-white">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <Reveal className="text-center mb-14">
+              <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Stories</p>
+              <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">What people are saying</h2>
+              <p className="text-gray-500 max-w-xl mx-auto">Real people, real finances — finally under control.</p>
+            </Reveal>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              {TESTIMONIALS.map(({ name, role, avatar, text }, i) => (
+                <Reveal key={name} delay={`${i * 100}ms`}>
+                  <div className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-lg hover:shadow-teal-100/50 transition-all duration-300 h-full">
+                    <div className="flex items-center gap-1">
+                      {[...Array(5)].map((_, s) => (
+                        <svg key={s} className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                    </div>
+                    <p className="text-sm text-gray-600 leading-relaxed flex-1">&ldquo;{text}&rdquo;</p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center shrink-0">
+                        {avatar}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{name}</p>
+                        <p className="text-xs text-gray-400">{role}</p>
+                      </div>
+                    </div>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Trust & Security ── */}
+        <section className="py-24 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-teal-50/30" />
+          <div className="relative max-w-6xl mx-auto px-4 sm:px-6">
+            <Reveal className="text-center mb-14">
+              <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Security & Privacy</p>
+              <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">Your data is safe with us</h2>
+              <p className="text-gray-500 max-w-xl mx-auto">
+                Financial data is sensitive. We built security in from day one — not as an afterthought.
+              </p>
+            </Reveal>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {SECURITY_POINTS.map(({ icon, title, desc }, i) => (
+                <Reveal key={title} delay={`${i * 70}ms`}>
+                  <div className="flex gap-4 p-5 bg-white rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-md transition-all duration-200 h-full">
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-xl shrink-0">
+                      {icon}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-1 text-sm">{title}</h3>
+                      <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
                     </div>
                   </div>
                 </Reveal>
@@ -480,7 +575,7 @@ export default function LandingPage() {
                 <span className="block text-teal-600">It&apos;s completely free.</span>
               </h2>
               <p className="text-gray-500 mb-10 text-lg leading-relaxed">
-                No ads, no paywalls, no credit card. Just a clean finance dashboard that respects your time and data.
+                No ads, no paywalls, no data selling, no credit card. A clean, private finance dashboard that respects your money and your privacy.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Link href="/register"

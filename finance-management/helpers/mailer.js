@@ -1,29 +1,16 @@
-const nodemailer = require('nodemailer');
-const { USER_EMAIL, USER_PASS, SMTP_HOST, SMTP_PORT } = require('../config/keys');
+const { Resend } = require('resend');
+const { RESEND_API_KEY, FROM_EMAIL } = require('../config/keys');
 const logger = require('./logger');
 
-const transporter = nodemailer.createTransport({
-  host:       SMTP_HOST || 'smtp.gmail.com',
-  port:       Number(SMTP_PORT) || 587,
-  secure:     false,   // false = STARTTLS on port 587
-  requireTLS: true,    // force STARTTLS — Gmail rejects plain connections
-  auth:       { user: USER_EMAIL, pass: USER_PASS },
-});
+const resend = new Resend(RESEND_API_KEY);
+const FROM = `Finan App <${FROM_EMAIL}>`;
 
-// Verify SMTP config on startup and log the result clearly.
-// This makes misconfigured credentials visible immediately in container logs.
 const verifyMailer = () => {
-  if (!USER_EMAIL || !USER_PASS) {
-    logger.warn('SMTP not configured — USER_EMAIL or USER_PASS is missing. Password reset emails will not be sent.');
+  if (!RESEND_API_KEY) {
+    logger.warn('RESEND_API_KEY not configured — password reset and verification emails will not be sent.');
     return;
   }
-  transporter.verify((err) => {
-    if (err) {
-      logger.error(`SMTP connection failed: ${err.message}`);
-    } else {
-      logger.info(`SMTP ready — sending from ${USER_EMAIL}`);
-    }
-  });
+  logger.info(`Mailer ready — sending from ${FROM_EMAIL} via Resend`);
 };
 
 const sendPasswordResetEmail = async (to, resetUrl) => {
@@ -47,12 +34,7 @@ const sendPasswordResetEmail = async (to, resetUrl) => {
   `;
 
   try {
-    await transporter.sendMail({
-      from:    `"Finan App" <${USER_EMAIL}>`,
-      to,
-      subject: 'Reset your Finan App password',
-      html,
-    });
+    await resend.emails.send({ from: FROM, to, subject: 'Reset your Finan App password', html });
     logger.info(`Password reset email sent to ${to}`);
   } catch (err) {
     logger.error(`Failed to send password reset email to ${to}: ${err.message}`);
@@ -81,12 +63,7 @@ const sendVerificationEmail = async (to, verifyUrl) => {
   `;
 
   try {
-    await transporter.sendMail({
-      from:    `"Finan App" <${USER_EMAIL}>`,
-      to,
-      subject: 'Verify your Finan App email',
-      html,
-    });
+    await resend.emails.send({ from: FROM, to, subject: 'Verify your Finan App email', html });
     logger.info(`Verification email sent to ${to}`);
   } catch (err) {
     logger.error(`Failed to send verification email to ${to}: ${err.message}`);
