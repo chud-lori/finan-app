@@ -438,13 +438,13 @@ export default function DashboardPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                      <th className="px-5 py-3 text-left font-medium w-8">#</th>
-                      <th className="px-5 py-3 text-left font-medium">Description</th>
-                      <th className="px-5 py-3 text-left font-medium hidden sm:table-cell">Category</th>
-                      <th className="px-5 py-3 text-right font-medium">Amount</th>
-                      <th className="px-5 py-3 text-left font-medium">Type</th>
+                      <th className="hidden sm:table-cell px-5 py-3 text-left font-medium w-8">#</th>
+                      <th className="px-3 sm:px-5 py-3 text-left font-medium">Description</th>
+                      <th className="px-3 sm:px-5 py-3 text-left font-medium hidden sm:table-cell">Category</th>
+                      <th className="px-3 sm:px-5 py-3 text-right font-medium">Amount</th>
+                      <th className="px-3 sm:px-5 py-3 text-left font-medium">Type</th>
                       <th className="px-5 py-3 text-left font-medium hidden md:table-cell">Time</th>
-                      <th className="px-5 py-3 text-center font-medium w-12"></th>
+                      <th className="px-3 sm:px-5 py-3 text-center font-medium w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -453,10 +453,10 @@ export default function DashboardPage() {
                       const isEditing = editingId === tid;
                       return (
                         <tr key={tid} className={`transition-colors ${isEditing ? 'bg-teal-50' : 'hover:bg-gray-50'}`}>
-                          <td className="px-5 py-3 text-gray-400">{(page - 1) * LIMIT + i + 1}</td>
+                          <td className="hidden sm:table-cell px-5 py-3 text-gray-400">{(page - 1) * LIMIT + i + 1}</td>
 
-                          {/* Description */}
-                          <td className="px-5 py-3 font-medium text-gray-900 max-w-xs">
+                          {/* Description + category hint on mobile */}
+                          <td className="px-3 sm:px-5 py-3 font-medium text-gray-900 max-w-[120px] sm:max-w-xs">
                             {isEditing ? (
                               <input
                                 autoFocus
@@ -466,12 +466,15 @@ export default function DashboardPage() {
                                 className="w-full text-sm border border-teal-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500"
                               />
                             ) : (
-                              <span className="truncate block">{t.description}</span>
+                              <>
+                                <span className="truncate block">{t.description}</span>
+                                <span className="block sm:hidden text-xs text-gray-400 font-normal truncate mt-0.5">{toTitleCase(t.category)}</span>
+                              </>
                             )}
                           </td>
 
-                          {/* Category */}
-                          <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
+                          {/* Category — desktop only */}
+                          <td className="px-3 sm:px-5 py-3 text-gray-500 hidden sm:table-cell">
                             {isEditing ? (
                               <select
                                 value={editValues.category}
@@ -495,14 +498,14 @@ export default function DashboardPage() {
                             )}
                           </td>
 
-                          <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatAmount(t.amount)}</td>
-                          <td className="px-5 py-3"><TypeBadge type={t.type} /></td>
+                          <td className="px-3 sm:px-5 py-3 text-right font-semibold text-gray-800 text-xs sm:text-sm tabular-nums whitespace-nowrap">{formatAmount(t.amount)}</td>
+                          <td className="px-3 sm:px-5 py-3"><TypeBadge type={t.type} /></td>
                           <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
                             {formatDate(t.time, t.transaction_timezone)}
                           </td>
 
                           {/* Actions */}
-                          <td className="px-5 py-3 text-center">
+                          <td className="px-2 sm:px-5 py-3 text-center">
                             {isEditing ? (
                               <div className="flex items-center justify-center gap-1">
                                 <button onClick={() => saveEdit(tid)} disabled={editSaving}
@@ -513,7 +516,7 @@ export default function DashboardPage() {
                                   className="px-2 py-1 rounded-lg text-gray-500 text-xs hover:bg-gray-100">✕</button>
                               </div>
                             ) : (
-                              <div className="flex items-center justify-center gap-1">
+                              <div className="flex items-center justify-center gap-0.5">
                                 <button onClick={() => startEdit(t)}
                                   className="p-1.5 rounded-lg text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
                                   title="Edit">
@@ -702,14 +705,14 @@ function BudgetCard({ expense, budget, month, onSaved }) {
 function TypeBadge({ type }) {
   if (type === 'income') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-        ↑ Income
+      <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+        ↑<span className="hidden sm:inline"> Income</span>
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">
-      ↓ Expense
+    <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+      ↓<span className="hidden sm:inline"> Expense</span>
     </span>
   );
 }
