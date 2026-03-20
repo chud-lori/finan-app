@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import Reveal from '@/components/Reveal';
 import LandingNav from '@/components/LandingNav';
 import LandingHeroCTA from '@/components/LandingHeroCTA';
@@ -156,9 +157,10 @@ function LandingFooter() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center text-white text-sm font-black">FA</div>
-              <span className="text-white font-bold text-lg tracking-tight">Finan App</span>
+            <div className="mb-4">
+              <Link href="/">
+                <Image src="/logo.png" alt="Finan App" width={140} height={74} className="h-8 w-auto brightness-0 invert" />
+              </Link>
             </div>
             <p className="text-sm leading-relaxed text-gray-400 max-w-xs mb-3">
               A free personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.
@@ -274,7 +276,7 @@ export default function LandingPage() {
               <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none z-10 rounded-2xl" />
               {/* Fake navbar */}
               <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-4">
-                <span className="font-bold text-sm text-teal-600">Finan App</span>
+                <Image src="/logo.png" alt="Finan App" width={80} height={42} className="h-5 w-auto" />
                 <div className="flex gap-1 flex-1">
                   {['Dashboard', 'Analytics', 'Reports', 'Planner', 'Insights'].map(n => (
                     <span key={n} className="text-xs text-gray-400 px-2.5 py-1 rounded-lg hidden sm:block hover:bg-gray-50">{n}</span>

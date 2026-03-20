@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { verifyEmail } from '@/lib/api';
 import { useTheme } from '@/components/ThemeContext';
 
@@ -26,8 +27,8 @@ export default function VerifyEmailPage() {
     <div className={`min-h-screen flex flex-col items-center justify-center px-4 ${dark ? 'bg-gray-900' : 'bg-gradient-to-br from-teal-50 via-white to-teal-50'}`}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-600 text-white text-2xl font-bold mb-4 shadow-lg hover:bg-teal-700 transition-colors">
-            FA
+          <Link href="/" className="inline-flex mb-6">
+            <Image src="/logo.png" alt="Finan App" width={160} height={85} className="h-10 w-auto" />
           </Link>
         </div>
 

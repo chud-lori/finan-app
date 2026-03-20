@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import { resetPassword } from '@/lib/api';
 
@@ -42,8 +43,8 @@ export default function ResetPasswordPage() {
       <div className="flex-1 flex items-center justify-center">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <Link href="/" className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-600 text-white text-2xl font-bold mb-4 shadow-lg hover:bg-teal-700 transition-colors">
-              FA
+            <Link href="/" className="inline-flex mb-6">
+              <Image src="/logo.png" alt="Finan App" width={160} height={85} className="h-10 w-auto" />
             </Link>
             <h1 className="text-2xl font-bold text-gray-900">Set new password</h1>
             <p className="text-gray-500 text-sm mt-1">Choose a strong password for your account</p>
