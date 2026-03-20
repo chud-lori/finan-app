@@ -8,7 +8,7 @@ const SITE_URL = 'https://finance.lori.my.id';
 const SITE_NAME = 'Finan App';
 const TITLE = 'Finan App — Free Personal Finance Tracker & Planner';
 const DESCRIPTION =
-  'Track income and expenses, analyse spending patterns, plan budgets, calculate debt payoff, FIRE number, and tax estimates — all in one clean dashboard. Free to use.';
+  'Track income and expenses, analyse spending patterns, plan budgets, calculate debt payoff, FIRE number, and tax estimates — all in one clean dashboard. Free to use. Multi-currency support.';
 
 export const metadata = {
   title: TITLE,
@@ -16,12 +16,10 @@ export const metadata = {
   keywords: [
     'personal finance', 'finance tracker', 'expense tracker', 'budget planner',
     'income expense tracker', 'FIRE calculator', 'debt payoff calculator',
-    'tax estimator Indonesia', 'PPh 21', 'savings goal tracker',
-    'net worth tracker', 'financial dashboard', 'free finance app',
+    'tax estimator', 'savings goal tracker', 'net worth tracker',
+    'financial dashboard', 'free finance app', 'multi-currency finance',
   ],
-  alternates: {
-    canonical: SITE_URL,
-  },
+  alternates: { canonical: SITE_URL },
   robots: {
     index: true,
     follow: true,
@@ -34,14 +32,7 @@ export const metadata = {
     siteName: SITE_NAME,
     type: 'website',
     locale: 'en_US',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Finan App — Personal Finance Dashboard',
-      },
-    ],
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Finan App — Personal Finance Dashboard' }],
   },
   twitter: {
     card: 'summary_large_image',
@@ -53,25 +44,25 @@ export const metadata = {
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 const FEATURES = [
-  { icon: '📊', title: 'Smart Dashboard',    desc: 'Balance, income, and expenses at a glance. Filter by month, search, and sort — all in real time.' },
-  { icon: '📈', title: 'Deep Analytics',     desc: 'Monthly & yearly breakdowns, category trends, and savings rate history. Know where money actually goes.' },
-  { icon: '📅', title: 'Custom Reports',     desc: 'Query any date range. Income vs expense summaries, category breakdowns, export everything as CSV.' },
-  { icon: '🔍', title: 'AI Insights',        desc: 'Anomaly detection, spending velocity, explainability scores, and time-to-zero projections.' },
-  { icon: '💡', title: '10 Planning Tools',  desc: 'Debt snowball to FIRE calculator, 50/30/20 splits to PPh 21 tax estimator — all built-in.' },
-  { icon: '🔒', title: 'Secure & Private',   desc: 'JWT with token versioning, Google OAuth, password change invalidates all sessions.' },
+  { icon: '📊', title: 'Smart Dashboard',   desc: 'Balance, income, and expenses at a glance. Filter by month, search, and sort — all in real time.' },
+  { icon: '📈', title: 'Deep Analytics',    desc: 'Monthly & yearly breakdowns, category trends, and savings rate history. Know where money actually goes.' },
+  { icon: '📅', title: 'Custom Reports',    desc: 'Query any date range. Income vs expense summaries, category breakdowns, export everything as CSV.' },
+  { icon: '🔍', title: 'AI Insights',       desc: 'Anomaly detection, spending velocity, explainability scores, and time-to-zero projections.' },
+  { icon: '💡', title: '10 Planning Tools', desc: 'Debt snowball, FIRE calculator, 50/30/20 budgeting, tax estimator, savings goals — all built-in.' },
+  { icon: '🔒', title: 'Secure & Private',  desc: 'bcrypt passwords, JWT token versioning, Google OAuth. Your financial data is never sold or shared.' },
 ];
 
 const TOOLS = [
   { icon: '🛒', name: 'Can I Afford This?', desc: 'Real-time budget check' },
-  { icon: '📊', name: '50/30/20 Rule',       desc: 'Split income into buckets' },
-  { icon: '🎯', name: 'Savings Goal',        desc: 'Timeline to any target' },
-  { icon: '📅', name: 'Daily Budget',        desc: 'Safe spend for rest of month' },
-  { icon: '🛡️', name: 'Emergency Fund',      desc: '3–6 month safety net' },
-  { icon: '💳', name: 'Debt Payoff',         desc: 'Snowball vs avalanche' },
-  { icon: '🔥', name: 'FIRE Calculator',     desc: 'Financial independence number' },
-  { icon: '📉', name: 'Inflation Impact',    desc: 'Purchasing power erosion' },
-  { icon: '🧾', name: 'Tax Estimator',       desc: 'PPh 21 bracket estimate' },
-  { icon: '📋', name: 'Net Worth',           desc: 'Assets vs liabilities' },
+  { icon: '📊', name: '50/30/20 Rule',      desc: 'Split income into buckets' },
+  { icon: '🎯', name: 'Savings Goal',       desc: 'Timeline to any target' },
+  { icon: '📅', name: 'Daily Budget',       desc: 'Safe spend for rest of month' },
+  { icon: '🛡️', name: 'Emergency Fund',     desc: '3–6 month safety net' },
+  { icon: '💳', name: 'Debt Payoff',        desc: 'Snowball vs avalanche' },
+  { icon: '🔥', name: 'FIRE Calculator',    desc: 'Financial independence number' },
+  { icon: '📉', name: 'Inflation Impact',   desc: 'Purchasing power erosion' },
+  { icon: '🧾', name: 'Tax Estimator',      desc: 'Estimate your tax bracket' },
+  { icon: '📋', name: 'Net Worth',          desc: 'Assets vs liabilities' },
 ];
 
 const STEPS = [
@@ -98,17 +89,17 @@ const TESTIMONIALS = [
     name: 'Dewi P.',
     role: 'Small Business Owner',
     avatar: 'DP',
-    text: 'The PPh 21 estimator saves me from surprises at tax time. Everything is free — I keep waiting for the upsell that never comes.',
+    text: 'The tax estimator saves me from surprises every year. Everything is free — I keep waiting for the upsell that never comes.',
   },
 ];
 
 const SECURITY_POINTS = [
-  { icon: '🔐', title: 'Passwords hashed with bcrypt',    desc: 'Your password is never stored in plaintext. We use bcrypt (salt 10) — the industry standard for secure password storage.' },
-  { icon: '🔄', title: 'Sessions invalidated on change',  desc: 'Changing your password instantly revokes every active session on every device — no stale logins.' },
-  { icon: '📧', title: 'Email verification required',     desc: 'New accounts must verify their email address before accessing any data.' },
-  { icon: '🚫', title: 'No data selling, ever',           desc: 'We have no third-party analytics, no ads, no data brokers. Your financial data is not a product.' },
-  { icon: '🔍', title: 'Ownership enforced on every call', desc: 'Every API request checks that you own the data you\'re accessing. No way to read another user\'s transactions.' },
-  { icon: '⚡', title: 'Rate-limited endpoints',          desc: 'Sensitive routes are rate-limited per user to prevent brute-force attacks.' },
+  { icon: '🔐', title: 'Passwords hashed with bcrypt',     desc: 'Your password is never stored in plaintext. We use bcrypt — the industry standard for secure password storage.' },
+  { icon: '🔄', title: 'Sessions invalidated on change',   desc: 'Changing your password instantly revokes every active session on every device — no stale logins anywhere.' },
+  { icon: '📧', title: 'Email verification required',      desc: 'New accounts must verify their email address before accessing any data.' },
+  { icon: '🚫', title: 'No data selling, ever',            desc: 'No third-party analytics, no ads, no data brokers. Your financial data is not a product.' },
+  { icon: '🔍', title: 'Ownership enforced on every call', desc: 'Every API request verifies you own the data you\'re accessing. No cross-user data access possible.' },
+  { icon: '⚡', title: 'Rate-limited endpoints',           desc: 'Sensitive routes are rate-limited per user to prevent brute-force and abuse.' },
 ];
 
 const FOOTER_LINKS = {
@@ -164,41 +155,31 @@ function ToolPill({ icon, name, desc, delay }) {
 function LandingFooter() {
   return (
     <footer className="bg-gray-950">
-      {/* Main link grid */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
-
-          {/* Brand column — 2 cols wide on lg */}
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center text-white text-sm font-black">
-                FA
-              </div>
+              <div className="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center text-white text-sm font-black">FA</div>
               <span className="text-white font-bold text-lg tracking-tight">Finan App</span>
             </div>
             <p className="text-sm leading-relaxed text-gray-400 max-w-xs mb-3">
-              A personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.
+              A free personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.
             </p>
             <p className="text-sm leading-relaxed text-gray-400 max-w-xs">
-              10 built-in tools: FIRE calculator, debt payoff, PPh 21 tax estimator, and more. Free forever.
+              10 planning tools, multi-currency support, AI insights, CSV import/export. Free forever.
             </p>
             <div className="flex items-center gap-2 mt-5">
               <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
               <span className="text-xs text-teal-400 font-medium">Free · No ads · No paywalls</span>
             </div>
           </div>
-
-          {/* Link columns */}
           {Object.entries(FOOTER_LINKS).map(([section, links]) => (
             <div key={section}>
               <p className="text-gray-200 text-sm font-semibold mb-4">{section}</p>
               <ul className="space-y-2.5">
                 {links.map(({ label, href }) => (
                   <li key={label}>
-                    <Link href={href}
-                      className="text-sm text-gray-400 hover:text-teal-400 transition-colors duration-200">
-                      {label}
-                    </Link>
+                    <Link href={href} className="text-sm text-gray-400 hover:text-teal-400 transition-colors duration-200">{label}</Link>
                   </li>
                 ))}
               </ul>
@@ -206,13 +187,7 @@ function LandingFooter() {
           ))}
         </div>
       </div>
-
-      {/* Divider */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="border-t border-gray-800" />
-      </div>
-
-      {/* Bottom bar */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6"><div className="border-t border-gray-800" /></div>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-4 text-xs text-gray-500">
           <span>© {new Date().getFullYear()} Finan App</span>
@@ -220,11 +195,9 @@ function LandingFooter() {
           <Link href="/terms"   className="hover:text-teal-400 transition-colors">Terms</Link>
         </div>
         <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span>Built with Next.js + Tailwind · Built by</span>
+          <span>Built with Next.js + Tailwind · by</span>
           <a href="https://profile.lori.my.id/" target="_blank" rel="noopener noreferrer"
-            className="text-teal-400 font-semibold hover:text-teal-300 transition-colors">
-            Lori
-          </a>
+            className="text-teal-400 font-semibold hover:text-teal-300 transition-colors">Lori</a>
         </div>
       </div>
     </footer>
@@ -241,14 +214,15 @@ const jsonLd = {
   applicationCategory: 'FinanceApplication',
   operatingSystem: 'All',
   browserRequirements: 'Requires JavaScript',
-  offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
   featureList: [
     'Income & expense tracking',
     'Monthly & yearly analytics',
     'Budget planning tools',
+    'Multi-currency support',
     'FIRE calculator',
     'Debt payoff calculator',
-    'PPh 21 tax estimator',
+    'Tax estimator',
     'Anomaly detection',
     'CSV import & export',
     'Google OAuth',
@@ -260,10 +234,7 @@ export default function LandingPage() {
   return (
     <>
       <ForceLightMode />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <div className="bg-white overflow-x-hidden">
 
         {/* ── Sticky nav ── */}
@@ -271,7 +242,6 @@ export default function LandingPage() {
 
         {/* ── Hero ── */}
         <section className="relative overflow-hidden bg-gradient-to-br from-teal-50 via-white to-emerald-50 pt-20 pb-24 sm:pt-28 sm:pb-32">
-          {/* Blobs */}
           <div aria-hidden className="absolute inset-0 pointer-events-none overflow-hidden">
             <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full bg-teal-100/60 blur-3xl" />
             <div className="absolute -bottom-32 -left-32 w-[400px] h-[400px] rounded-full bg-emerald-100/50 blur-3xl" />
@@ -279,35 +249,30 @@ export default function LandingPage() {
           </div>
 
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
-            {/* Badge */}
             <div className="animate-fade-in delay-0 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-100 text-teal-700 text-xs font-semibold mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
-              10 financial tools · Free to use
+              10 financial tools · Free · Multi-currency
             </div>
 
-            {/* Headline */}
             <h1 className="animate-fade-in-up delay-75 text-4xl sm:text-5xl lg:text-6xl font-black text-gray-900 leading-tight tracking-tight mb-6">
               Finally know where
               <span className="block text-teal-600">your money goes</span>
             </h1>
 
-            {/* Subtext */}
             <p className="animate-fade-in-up delay-200 text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Track every rupiah, spot patterns you&apos;ve been missing, and make smarter money decisions — all in one free, private dashboard. No spreadsheets. No subscriptions.
+              Track every transaction, spot patterns you&apos;ve been missing, and make smarter money decisions — all in one free, private dashboard. No spreadsheets. No subscriptions.
             </p>
 
-            {/* CTAs */}
             <LandingHeroCTA />
 
             <p className="animate-fade-in delay-400 text-xs text-gray-400 mt-4">
-              No credit card · Free account · Google OAuth supported
+              No credit card · Free forever · Google OAuth · 10+ currencies
             </p>
           </div>
 
-          {/* Mock dashboard — floats gently */}
+          {/* Mock dashboard */}
           <div className="animate-fade-in-up delay-500 relative max-w-5xl mx-auto px-4 sm:px-6 mt-16">
             <div className="animate-float relative bg-white rounded-2xl border border-gray-200 shadow-2xl shadow-gray-300/40 overflow-hidden">
-              {/* Glare overlay */}
               <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none z-10 rounded-2xl" />
               {/* Fake navbar */}
               <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-4">
@@ -323,9 +288,9 @@ export default function LandingPage() {
               <div className="p-4 sm:p-5 bg-gray-50/80">
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   {[
-                    { label: 'Balance', val: 'Rp 19.200.000', color: 'text-gray-900' },
-                    { label: 'Income',  val: 'Rp 30.000.000', color: 'text-emerald-600', badge: '📈' },
-                    { label: 'Expense', val: 'Rp 10.800.000', color: 'text-rose-600',    badge: '📉' },
+                    { label: 'Balance', val: '$8,400',  color: 'text-gray-900' },
+                    { label: 'Income',  val: '$12,000', color: 'text-emerald-600', badge: '📈' },
+                    { label: 'Expense', val: '$3,600',  color: 'text-rose-600',    badge: '📉' },
                   ].map(({ label, val, color, badge }) => (
                     <div key={label} className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
                       <div className="flex items-center justify-between mb-1">
@@ -340,13 +305,13 @@ export default function LandingPage() {
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
                     <span className="text-xs font-semibold text-gray-700">Transactions</span>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">Mar 2026</span>
+                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">This month</span>
                   </div>
                   {[
-                    { desc: 'Freelance Job',    cat: 'Salary',     amt: '+Rp 30.000.000', type: 'income'  },
-                    { desc: 'Apartment rent',       cat: 'Rent',       amt: '−Rp 3.500.000',  type: 'expense' },
-                    { desc: 'Lunch',     cat: 'Food',       amt: '−Rp 85.000',     type: 'expense' },
-                    { desc: 'Transfer saving', cat: 'Investment', amt: '−Rp 5.000.000',  type: 'expense' },
+                    { desc: 'Freelance project',  cat: 'Income',     amt: '+$12,000', type: 'income'  },
+                    { desc: 'Apartment rent',      cat: 'Housing',    amt: '−$1,200',  type: 'expense' },
+                    { desc: 'Groceries',           cat: 'Food',       amt: '−$340',    type: 'expense' },
+                    { desc: 'Index fund deposit',  cat: 'Investment', amt: '−$2,000',  type: 'expense' },
                   ].map((r, i) => (
                     <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">
                       <span className="text-xs text-gray-300 w-4 font-mono">{i + 1}</span>
@@ -361,7 +326,6 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-            {/* Bottom shadow glow */}
             <div aria-hidden className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-3/4 h-12 bg-teal-200/40 blur-2xl rounded-full" />
           </div>
         </section>
@@ -384,23 +348,19 @@ export default function LandingPage() {
 
         {/* ── Tools ── */}
         <section id="tools" className="py-24 relative overflow-hidden">
-          {/* Background */}
           <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-teal-50/40" />
           <div aria-hidden className="absolute top-0 right-0 w-96 h-96 rounded-full bg-teal-100/30 blur-3xl pointer-events-none" />
-
           <div className="relative max-w-6xl mx-auto px-4 sm:px-6">
             <Reveal className="text-center mb-14">
               <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Planner</p>
               <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">10 financial planning tools</h2>
-              <p className="text-gray-500 max-w-xl mx-auto">From daily spending checks to retirement — each tool gives instant, actionable numbers.</p>
+              <p className="text-gray-500 max-w-xl mx-auto">From daily spending checks to retirement planning — each tool gives instant, actionable numbers.</p>
             </Reveal>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-10">
               {TOOLS.map((t, i) => (
                 <ToolPill key={t.name} {...t} delay={`${i * 60}ms`} />
               ))}
             </div>
-
             <Reveal className="text-center">
               <Link href="/register"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-200 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
@@ -421,11 +381,8 @@ export default function LandingPage() {
               <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">Up and running in minutes</h2>
               <p className="text-gray-500 max-w-xl mx-auto">No complex setup, no tutorials. Sign up and start adding transactions.</p>
             </Reveal>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
-              {/* Connector line (desktop) */}
               <div aria-hidden className="hidden lg:block absolute top-5 left-[calc(12.5%+20px)] right-[calc(12.5%+20px)] h-0.5 border-t-2 border-dashed border-teal-200" />
-
               {STEPS.map(({ n, title, desc }, i) => (
                 <Reveal key={n} delay={`${i * 120}ms`} variant="up">
                   <div className="relative text-center lg:text-left">
@@ -451,15 +408,25 @@ export default function LandingPage() {
             </Reveal>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {[
-                { icon: '🔒', title: 'Private by design', desc: 'No ads, no trackers, no data brokers. bcrypt passwords, JWT tokenVersion, and zero third-party analytics. Your data is yours alone.' },
-                { icon: '⚡', title: 'Fully free, always', desc: 'No credit card required. No freemium gates. Every feature — tracking, analytics, all 10 planning tools, AI insights — is 100% free.' },
-                { icon: '🇮🇩', title: 'Made for Indonesians', desc: 'IDR & multi-currency support, dot/comma formatting preferences, Indonesian PPh 21 tax brackets, and Bahasa-friendly UX throughout.' },
+                {
+                  icon: '🔒',
+                  title: 'Private by design',
+                  desc: 'No ads, no trackers, no data brokers. bcrypt passwords, JWT token versioning, and zero third-party analytics. Your data is yours alone.',
+                },
+                {
+                  icon: '⚡',
+                  title: 'Fully free, always',
+                  desc: 'No credit card required. No freemium gates. Every feature — tracking, analytics, all 10 planning tools, AI insights — is 100% free.',
+                },
+                {
+                  icon: '🌏',
+                  title: 'Multi-currency ready',
+                  desc: 'Supports 10+ currencies with dot or comma formatting preferences. Built-in local tax estimators. Works wherever you are.',
+                },
               ].map(({ icon, title, desc }, i) => (
                 <Reveal key={title} delay={`${i * 100}ms`}>
                   <div className="flex gap-4 p-5 rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-md transition-all duration-200 h-full">
-                    <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-xl shrink-0">
-                      {icon}
-                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-xl shrink-0">{icon}</div>
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-1">{title}</h3>
                       <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
@@ -492,9 +459,7 @@ export default function LandingPage() {
                     </div>
                     <p className="text-sm text-gray-600 leading-relaxed flex-1">&ldquo;{text}&rdquo;</p>
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center shrink-0">
-                        {avatar}
-                      </div>
+                      <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center shrink-0">{avatar}</div>
                       <div>
                         <p className="text-sm font-semibold text-gray-800">{name}</p>
                         <p className="text-xs text-gray-400">{role}</p>
@@ -522,9 +487,7 @@ export default function LandingPage() {
               {SECURITY_POINTS.map(({ icon, title, desc }, i) => (
                 <Reveal key={title} delay={`${i * 70}ms`}>
                   <div className="flex gap-4 p-5 bg-white rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-md transition-all duration-200 h-full">
-                    <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-xl shrink-0">
-                      {icon}
-                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-xl shrink-0">{icon}</div>
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-1 text-sm">{title}</h3>
                       <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
@@ -546,7 +509,7 @@ export default function LandingPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 text-center text-white">
               {[
                 { val: '10',  label: 'Planning tools' },
-                { val: '∞',   label: 'Transaction history' },
+                { val: '10+', label: 'Currencies supported' },
                 { val: 'CSV', label: 'Import & export' },
                 { val: '$0',  label: 'Forever free' },
               ].map(({ val, label }, i) => (
@@ -563,7 +526,6 @@ export default function LandingPage() {
         <section className="py-28 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-gray-50 via-white to-teal-50" />
           <div aria-hidden className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-teal-200 to-transparent" />
-
           <div className="relative max-w-2xl mx-auto px-4 sm:px-6 text-center">
             <Reveal>
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-100 text-teal-700 text-xs font-semibold mb-6">
