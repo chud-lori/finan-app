@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Make dark: utilities class-based (requires .dark on <html>), not media-query-based.
+   Without this, Tailwind v4 uses prefers-color-scheme: dark, which lets the iOS/Android
+   system dark mode override our explicit toggle. */
+@variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f9fafb;
   --foreground: #111827;
