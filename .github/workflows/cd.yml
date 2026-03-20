@@ -5,33 +5,45 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/chud-lori/finan-app-backend
-  FRONTEND_IMAGE: ghcr.io/chud-lori/finan-app-frontend
+  REGISTRY:        ghcr.io
+  BACKEND_IMAGE:   ghcr.io/chud-lori/finan-app-backend
+  FRONTEND_IMAGE:  ghcr.io/chud-lori/finan-app-frontend
 
 jobs:
-  build-and-push:
-    name: Build & push
+  # Detect which parts of the monorepo actually changed
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend:  ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'finance-management/**'
+            frontend:
+              - 'finance-management-fe/**'
+
+  build-backend:
+    name: Build & push backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push backend
-        uses: docker/build-push-action@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
         with:
           context: ./finance-management
           push: true
@@ -39,8 +51,23 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push frontend
-        uses: docker/build-push-action@v5
+  build-frontend:
+    name: Build & push frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
         with:
           context: ./finance-management-fe
           push: true

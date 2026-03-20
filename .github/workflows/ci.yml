@@ -3,12 +3,29 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
 
 jobs:
+  # Detect which parts of the monorepo actually changed
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend:  ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'finance-management/**'
+            frontend:
+              - 'finance-management-fe/**'
+
   lint-backend:
     name: Backend — install & test
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,6 +42,8 @@ jobs:
 
   build-frontend:
     name: Frontend — build check
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,7 +56,14 @@ jobs:
           cache: npm
           cache-dependency-path: finance-management-fe/package-lock.json
       - run: npm ci
-      - name: Build (with placeholder env vars)
+      # Cache Next.js compiled output — skips recompiling unchanged pages/routes
+      - uses: actions/cache@v4
+        with:
+          path: finance-management-fe/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('finance-management-fe/package-lock.json') }}-${{ hashFiles('finance-management-fe/app/**', 'finance-management-fe/components/**', 'finance-management-fe/lib/**') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('finance-management-fe/package-lock.json') }}-
+      - name: Build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: placeholder
