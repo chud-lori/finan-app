@@ -32,13 +32,11 @@ export const metadata = {
     siteName: SITE_NAME,
     type: 'website',
     locale: 'en_US',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Finan App — Personal Finance Dashboard' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: TITLE,
     description: DESCRIPTION,
-    images: ['/og-image.png'],
   },
 };
 

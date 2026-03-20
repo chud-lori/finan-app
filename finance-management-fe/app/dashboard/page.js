@@ -8,6 +8,7 @@ import { formatDate, toTitleCase } from '@/lib/format';
 import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
+import { useToast } from '@/components/ToastContext';
 
 const MONTH_LABELS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LIMIT = 20;
@@ -268,8 +269,9 @@ export default function DashboardPage() {
         ),
       }));
       setEditingId(null);
+      toast('Transaction updated', 'success');
     } catch (err) {
-      alert(err.message);
+      toast(err.message || 'Failed to update transaction', 'error');
     } finally {
       setEditSaving(false);
     }
@@ -317,18 +319,20 @@ export default function DashboardPage() {
   const handleMonthChange = (val) => { setMonth(val); setPage(1); };
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this transaction?')) return;
+    if (!window.confirm('Delete this transaction?')) return;
     setDeleting(id);
     try {
       await deleteTransaction(id);
+      toast('Transaction deleted', 'info');
       await load();
     } catch (err) {
-      alert(err.message);
+      toast(err.message || 'Failed to delete transaction', 'error');
     } finally {
       setDeleting(null);
     }
   };
 
+  const toast = useToast();
   const formatAmount = useFormatAmount();
   const txns    = data.transactions || [];
   const income  = data.monthlyIncome  ?? 0;
@@ -429,9 +433,35 @@ export default function DashboardPage() {
             {loading ? (
               <SkeletonTableRows rows={LIMIT} />
             ) : txns.length === 0 ? (
-              <div className="text-center py-16 text-gray-400">
-                <div className="text-4xl mb-3">{search ? '🔍' : '📭'}</div>
-                <p className="text-sm">{search ? `No results for "${search}"` : 'No transactions for this month'}</p>
+              <div className="text-center py-16 px-4 text-gray-400">
+                {search ? (
+                  <>
+                    <div className="text-4xl mb-3">🔍</div>
+                    <p className="text-sm">No results for &ldquo;{search}&rdquo;</p>
+                  </>
+                ) : activeMonths.length === 0 ? (
+                  <>
+                    <div className="text-5xl mb-4">👋</div>
+                    <p className="font-semibold text-gray-700 text-base mb-1">Welcome to Finan App!</p>
+                    <p className="text-sm text-gray-400 mb-6 max-w-xs mx-auto">
+                      Start by adding your first transaction — income or expense. Your dashboard will come to life from there.
+                    </p>
+                    <Link
+                      href="/add"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add your first transaction
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-4xl mb-3">📭</div>
+                    <p className="text-sm">No transactions for this month</p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
