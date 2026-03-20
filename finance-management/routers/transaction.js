@@ -22,6 +22,7 @@ const {
     getSuggestedCategories,
     getActiveMonths,
     setBudget,
+    getMLInsights,
 } = require('../controllers/transaction');
 
 const upload = multer({
@@ -79,6 +80,7 @@ router.get('/explain',        authenticateJWT, limiter.byUser(60), getExplainabi
 router.get('/time-to-zero',   authenticateJWT, limiter.byUser(60), getTimeToZero);
 router.get('/active-months',  authenticateJWT, limiter.byUser(60), getActiveMonths);
 router.put('/budget/:yearMonth', authenticateJWT, limiter.byUser(30), setBudget);
+router.get('/ml-insights',      authenticateJWT, limiter.byUser(20), getMLInsights);
 
 /**
  * @openapi

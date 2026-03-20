@@ -1044,6 +1044,81 @@ const setBudget = async (req, res) => {
     }
 };
 
+// ── ML Insights (Isolation Forest + Linear Regression via AI service) ──────────
+const getMLInsights = async (req, res) => {
+    const userId = req.user.id;
+    const tz     = validTz(req.query.tz);
+
+    try {
+        const now          = moment.tz(tz);
+        const yearMonth    = now.format('YYYY-MM');
+        const startOfMonth = moment.tz(yearMonth + '-01', tz).startOf('day').toDate();
+        const endOfMonth   = moment.tz(yearMonth + '-01', tz).endOf('month').toDate();
+        const sixMonthsAgo = moment.tz(tz).subtract(6, 'months').startOf('month').toDate();
+
+        // Fetch 6 months of expense transactions for anomaly model training
+        const transactions = await Transaction.find({
+            user: userId,
+            type: 'expense',
+            time: { $gte: sixMonthsAgo, $lte: endOfMonth },
+        }).lean();
+
+        // Fetch current month's budget (may be null)
+        const budgetDoc = await Budget.findOne({ user: userId, yearMonth }).lean();
+
+        // Build daily spending totals for forecast
+        const dailyMap = {};
+        for (const tx of transactions) {
+            if (tx.time >= startOfMonth) {
+                const day = moment.tz(tx.time, tz).date();
+                dailyMap[day] = (dailyMap[day] || 0) + tx.amount;
+            }
+        }
+        const dailyTotals = Object.entries(dailyMap).map(([day, amount]) => ({
+            day: parseInt(day, 10),
+            amount,
+        }));
+
+        // Shape transactions for the AI service
+        const txPayload = transactions.map(tx => ({
+            id:               tx._id.toString(),
+            amount:           tx.amount,
+            category:         tx.category,
+            date:             moment.tz(tx.time, tz).format('YYYY-MM-DD'),
+            description:      tx.description,
+            type:             tx.type,
+            is_current_month: tx.time >= startOfMonth,
+        }));
+
+        const AI_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:3002';
+        const aiRes  = await fetch(`${AI_URL}/analyze`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                transactions:  txPayload,
+                daily_totals:  dailyTotals,
+                current_day:   now.date(),
+                days_in_month: now.daysInMonth(),
+                budget:        budgetDoc?.amount ?? null,
+            }),
+            signal: AbortSignal.timeout(8000),
+        });
+
+        if (!aiRes.ok) throw new Error(`AI service responded ${aiRes.status}`);
+        const aiData = await aiRes.json();
+
+        return res.status(200).json(BaseResponseDTO.success('ML insights', aiData));
+    } catch (e) {
+        logger.error(`ML insights error: ${e.message}`);
+        // Return empty graceful response so the frontend degrades cleanly
+        return res.status(200).json(BaseResponseDTO.success('ML insights (unavailable)', {
+            anomalies:     [],
+            anomaly_count: 0,
+            forecast:      { available: false, reason: 'AI service unavailable' },
+        }));
+    }
+};
+
 module.exports = {
     addTransaction,
     getUserTransaction,
@@ -1063,4 +1138,5 @@ module.exports = {
     getTimeToZero,
     getActiveMonths,
     setBudget,
+    getMLInsights,
 };

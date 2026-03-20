@@ -166,6 +166,11 @@ export const getTimeToZero = () =>
     headers: authHeaders(),
   }).then(handleResponse);
 
+export const getMLInsights = () =>
+  fetch(`${BASE_URL}/api/transaction/ml-insights?tz=${encodeURIComponent(browserTz())}`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 export const importCsv = (files) => {
   const form = new FormData();
   const list = Array.isArray(files) ? files : [files];
