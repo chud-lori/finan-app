@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/ThemeContext";
 import { CurrencyProvider } from "@/components/CurrencyContext";
 import { ToastProvider } from "@/components/ToastContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import PageTransition from "@/components/PageTransition";
 
 export const metadata = {
   title: 'Finan App — Personal Finance Tracker & Planner',
@@ -59,7 +60,7 @@ export default function RootLayout({ children }) {
               <ToastProvider>
                 <ErrorBoundary>
                   <div className="flex flex-col min-h-screen">
-                    {children}
+                    <PageTransition>{children}</PageTransition>
                   </div>
                 </ErrorBoundary>
               </ToastProvider>
