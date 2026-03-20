@@ -6,8 +6,11 @@ const CURRENCY_LOCALE = {
   VND: 'vi-VN', KRW: 'ko-KR', INR: 'en-IN', BRL: 'pt-BR',
 };
 
-export const formatCurrency = (amount, currency = 'IDR') => {
-  const locale = CURRENCY_LOCALE[currency] ?? 'en-US';
+// numberFormat: 'dot' uses the currency's natural locale (e.g. id-ID → 5.000.000)
+//               'comma' forces en-US grouping style (5,000,000)
+export const formatCurrency = (amount, currency = 'IDR', numberFormat = 'dot') => {
+  const naturalLocale = CURRENCY_LOCALE[currency] ?? 'en-US';
+  const locale = numberFormat === 'comma' ? 'en-US' : naturalLocale;
   return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
 };
 

@@ -5,7 +5,7 @@ import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getTransactions, deleteTransaction, getActiveMonths, setBudget } from '@/lib/api';
 import { formatDate, toTitleCase } from '@/lib/format';
-import { useFormatAmount } from '@/components/CurrencyContext';
+import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 
@@ -492,6 +492,7 @@ function StatCard({ label, value, icon, tip }) {
 
 function BudgetCard({ expense, budget, month, onSaved }) {
   const formatAmount = useFormatAmount();
+  const { numberFormat } = useCurrency();
   const [editing, setEditing] = useState(false);
   const [input, setInput]     = useState('');
   const [saving, setSaving]   = useState(false);
@@ -502,10 +503,13 @@ function BudgetCard({ expense, budget, month, onSaved }) {
   const barColor = pct === null ? 'bg-gray-200' : over ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500';
   const pctColor = pct === null ? '' : over ? 'text-rose-600' : pct >= 80 ? 'text-amber-600' : 'text-emerald-600';
 
-  const startEdit = () => { setInput(budget > 0 ? String(budget) : ''); setEditing(true); };
+  const fmtInput  = (n) => new Intl.NumberFormat(numberFormat === 'comma' ? 'en-US' : 'id-ID', { style: 'decimal' }).format(Number(n));
+  const parseInput = (s) => Number(String(s).replace(/[^0-9]/g, ''));
+
+  const startEdit = () => { setInput(budget > 0 ? fmtInput(budget) : ''); setEditing(true); };
 
   const handleSave = async () => {
-    const val = parseFloat(String(input).replace(/[^0-9.]/g, ''));
+    const val = parseInput(input);
     if (isNaN(val) || val < 0) return;
     setSaving(true);
     try {
@@ -539,13 +543,16 @@ function BudgetCard({ expense, budget, month, onSaved }) {
         <div className="flex items-center gap-2">
           <input
             autoFocus
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {
+              const digits = e.target.value.replace(/[^0-9]/g, '');
+              setInput(digits ? fmtInput(digits) : '');
+            }}
             onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
             className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            placeholder="Budget for this month (IDR)"
-            min={0}
+            placeholder={fmtInput(5000000)}
           />
           <button onClick={handleSave} disabled={saving} className="px-2.5 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-50 shrink-0">
             {saving ? '…' : 'Save'}

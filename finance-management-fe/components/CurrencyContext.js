@@ -5,13 +5,14 @@ import { getProfile } from '@/lib/api';
 
 const CurrencyContext = createContext({
   currency: 'IDR',
-  formatAmount: (v) => formatCurrency(v, 'IDR'),
+  numberFormat: 'dot',
+  formatAmount: (v) => formatCurrency(v, 'IDR', 'dot'),
   refreshCurrency: () => {},
 });
 
 export function CurrencyProvider({ children }) {
-  // Start with localStorage value (or IDR) — avoids hydration mismatch and flash
-  const [currency, setCurrency] = useState('IDR');
+  const [currency,     setCurrency]     = useState('IDR');
+  const [numberFormat, setNumberFormat] = useState('dot');
 
   const refresh = useCallback(async () => {
     // Only fetch if a token exists — getProfile on 401 auto-redirects to /login
@@ -19,28 +20,33 @@ export function CurrencyProvider({ children }) {
     if (!token) return;
     try {
       const res = await getProfile();
-      const cur = res.data?.preferences?.currency;
-      if (cur) {
-        setCurrency(cur);
-        localStorage.setItem('currency', cur);
-      }
+      const prefs = res.data?.preferences;
+      const cur = prefs?.currency;
+      const fmt = prefs?.numberFormat;
+      if (cur) { setCurrency(cur); localStorage.setItem('currency', cur); }
+      if (fmt) { setNumberFormat(fmt); localStorage.setItem('numberFormat', fmt); }
     } catch {}
   }, []);
 
   useEffect(() => {
     // Read localStorage first (instant, no network)
     try {
-      const saved = localStorage.getItem('currency');
-      if (saved) setCurrency(saved);
+      const savedCur = localStorage.getItem('currency');
+      if (savedCur) setCurrency(savedCur);
+      const savedFmt = localStorage.getItem('numberFormat');
+      if (savedFmt) setNumberFormat(savedFmt);
     } catch {}
     // Then validate/refresh from API
     refresh();
   }, [refresh]);
 
-  const formatAmount = useCallback((value) => formatCurrency(value, currency), [currency]);
+  const formatAmount = useCallback(
+    (value) => formatCurrency(value, currency, numberFormat),
+    [currency, numberFormat],
+  );
 
   return (
-    <CurrencyContext.Provider value={{ currency, formatAmount, refreshCurrency: refresh }}>
+    <CurrencyContext.Provider value={{ currency, numberFormat, formatAmount, refreshCurrency: refresh }}>
       {children}
     </CurrencyContext.Provider>
   );
