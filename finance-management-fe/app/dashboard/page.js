@@ -10,6 +10,7 @@ import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 import { useToast } from '@/components/ToastContext';
+import SwipeToDelete from '@/components/SwipeToDelete';
 
 const MONTH_LABELS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LIMIT = 20;
@@ -466,7 +467,88 @@ export default function DashboardPage() {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* ── Mobile card list (hidden on sm+) ── */}
+              <div className="sm:hidden divide-y divide-gray-100">
+                {txns.map((t) => {
+                  const tid = t.id || t._id;
+                  const isEditing = editingId === tid;
+                  if (isEditing) {
+                    return (
+                      <div key={tid} className="px-4 py-3 bg-teal-50 space-y-2">
+                        <input
+                          autoFocus
+                          value={editValues.description}
+                          onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
+                          placeholder="Description"
+                          className="w-full text-sm border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            value={editValues.amount}
+                            onChange={e => setEditValues(v => ({ ...v, amount: e.target.value }))}
+                            placeholder="Amount"
+                            className="flex-1 text-sm border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          />
+                          <select
+                            value={editValues.category}
+                            onChange={e => setEditValues(v => ({ ...v, category: e.target.value }))}
+                            className="flex-1 text-sm border border-teal-300 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                          >
+                            {categories.map(c => (
+                              <option key={c} value={c.toLowerCase()}>{toTitleCase(c)}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => saveEdit(tid)} disabled={editSaving}
+                            className="flex-1 py-2 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 disabled:opacity-50">
+                            {editSaving ? 'Saving…' : 'Save'}
+                          </button>
+                          <button onClick={cancelEdit}
+                            className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-100">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <SwipeToDelete key={tid} onDelete={() => handleDelete(tid)} disabled={deleting === tid}>
+                      <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 active:bg-gray-50">
+                        {/* Type stripe */}
+                        <div className={`w-1 self-stretch rounded-full shrink-0 ${t.type === 'income' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                        {/* Text */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-medium text-gray-900 dark:text-slate-100 truncate text-sm">{t.description}</span>
+                            <span className={`font-semibold text-sm tabular-nums shrink-0 ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {t.type === 'income' ? '+' : '−'}{formatAmount(t.amount)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-xs text-gray-400 dark:text-slate-500">{toTitleCase(t.category)}</span>
+                            <span className="text-gray-200 dark:text-slate-600">·</span>
+                            <span className="text-xs text-gray-400 dark:text-slate-500">{formatDate(t.time, t.transaction_timezone)}</span>
+                          </div>
+                        </div>
+                        {/* Edit */}
+                        <button onClick={() => startEdit(t)}
+                          className="p-2 shrink-0 text-gray-300 hover:text-teal-500 active:text-teal-600 transition-colors">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </SwipeToDelete>
+                  );
+                })}
+              </div>
+
+              {/* ── Desktop table (hidden on mobile) ── */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
@@ -576,6 +658,7 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
 
             <Pagination
