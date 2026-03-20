@@ -101,6 +101,15 @@ const SECURITY_POINTS = [
   { icon: '⚡', title: 'Rate-limited endpoints',           desc: 'Sensitive routes are rate-limited per user to prevent brute-force and abuse.' },
 ];
 
+const MOBILE_FEATURES = [
+  { icon: '📲', title: 'Install as an app', desc: 'Add to your iPhone or Android home screen — no App Store needed. Opens instantly, full-screen.' },
+  { icon: '🧭', title: 'Bottom navigation', desc: 'Thumb-friendly tab bar: Home, Analytics, Add, Reports, Profile. Everything reachable in one tap.' },
+  { icon: '👆', title: 'Swipe to delete', desc: 'Swipe any transaction left to reveal the delete button. No dropdowns, no confirmation dialogs.' },
+  { icon: '✨', title: 'Smooth transitions', desc: 'Native-feel page animations make every tap feel instant and fluid — not like a website.' },
+  { icon: '🌙', title: 'Dark mode', desc: 'System-aware dark mode with a manual toggle. Your eyes will thank you at midnight.' },
+  { icon: '🔒', title: 'Secure on any device', desc: 'JWT auth, bcrypt passwords. Log out from any device instantly by changing your password.' },
+];
+
 const FOOTER_LINKS = {
   Product: [
     { label: 'Features',       href: '#features' },
@@ -342,6 +351,138 @@ export default function LandingPage() {
               {FEATURES.map((f, i) => (
                 <FeatureCard key={f.title} {...f} delay={`${i * 80}ms`} />
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Mobile ── */}
+        <section id="mobile" className="py-24 bg-white overflow-hidden">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="flex flex-col lg:flex-row items-center gap-16">
+
+              {/* Phone mockup */}
+              <Reveal variant="left" className="shrink-0 mx-auto lg:mx-0">
+                <div className="relative" style={{ width: 240 }}>
+                  {/* Outer frame */}
+                  <div className="relative bg-gray-900 rounded-[3rem] p-2.5 shadow-2xl shadow-gray-900/30">
+                    {/* Dynamic island */}
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 w-24 h-6 bg-gray-950 rounded-full z-20" />
+                    {/* Screen */}
+                    <div className="bg-gray-50 rounded-[2.4rem] overflow-hidden" style={{ height: 480 }}>
+                      {/* App top bar */}
+                      <div className="bg-white border-b border-gray-100 px-4 pt-9 pb-2.5 flex items-center justify-between">
+                        <span className="text-[11px] font-black text-teal-600 tracking-tight">Finan App</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-md bg-teal-600 flex items-center justify-center">
+                            <span className="text-white text-[8px] font-bold">+</span>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Content */}
+                      <div className="px-3 py-3 space-y-2 flex-1">
+                        {/* Balance card */}
+                        <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                          <p className="text-[8px] text-gray-400 mb-0.5">Balance</p>
+                          <p className="text-[15px] font-bold text-gray-900 tabular-nums">Rp 8.400.000</p>
+                        </div>
+                        {/* Income/Expense row */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-white rounded-xl border border-gray-200 p-2.5">
+                            <p className="text-[7px] text-gray-400">Income</p>
+                            <p className="text-[11px] font-bold text-emerald-600">Rp 12jt</p>
+                          </div>
+                          <div className="bg-white rounded-xl border border-gray-200 p-2.5">
+                            <p className="text-[7px] text-gray-400">Expense</p>
+                            <p className="text-[11px] font-bold text-rose-500">Rp 3.6jt</p>
+                          </div>
+                        </div>
+                        {/* Transaction list */}
+                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                          {[
+                            { desc: 'Freelance project', amt: '+12.000.000', type: 'income' },
+                            { desc: 'Apartment rent',    amt: '−1.200.000',  type: 'expense' },
+                            { desc: 'Groceries',         amt: '−340.000',    type: 'expense' },
+                          ].map((r, i) => (
+                            <div key={i} className="flex items-center gap-2 px-2.5 py-2 border-b border-gray-50 last:border-0">
+                              <div className={`w-1 self-stretch rounded-full shrink-0 ${r.type === 'income' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                              <span className="text-[8px] text-gray-700 flex-1 truncate font-medium">{r.desc}</span>
+                              <span className={`text-[8px] font-semibold tabular-nums ${r.type === 'income' ? 'text-emerald-600' : 'text-rose-500'}`}>{r.amt}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Bottom nav */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 py-2 flex items-center justify-around rounded-b-[2.4rem]">
+                        {[
+                          { label: 'Home',      active: true,  icon: 'M3 9l9-7 9 7v11a1 1 0 01-1 1H5a1 1 0 01-1-1z' },
+                          { label: 'Analytics', active: false, icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2z' },
+                          { label: 'Add',       active: false, fab: true },
+                          { label: 'Reports',   active: false, icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586l5.414 5.414V19a2 2 0 01-2 2z' },
+                          { label: 'Profile',   active: false, icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+                        ].map((tab) => (
+                          <div key={tab.label} className="flex flex-col items-center gap-0.5">
+                            {tab.fab ? (
+                              <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center -mt-3 shadow-md">
+                                <span className="text-white text-sm font-bold">+</span>
+                              </div>
+                            ) : (
+                              <svg className={`w-4 h-4 ${tab.active ? 'text-teal-600' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tab.icon} />
+                              </svg>
+                            )}
+                            <span className={`text-[6px] font-medium ${tab.active ? 'text-teal-600' : 'text-gray-300'}`}>{tab.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Side buttons */}
+                    <div className="absolute right-0 top-24 w-1 h-10 bg-gray-700 rounded-l-full" />
+                    <div className="absolute left-0 top-20 w-1 h-8 bg-gray-700 rounded-r-full" />
+                    <div className="absolute left-0 top-32 w-1 h-8 bg-gray-700 rounded-r-full" />
+                  </div>
+                  {/* Glow */}
+                  <div aria-hidden className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-40 h-10 bg-teal-300/40 blur-2xl rounded-full" />
+                </div>
+              </Reveal>
+
+              {/* Text content */}
+              <div className="flex-1">
+                <Reveal>
+                  <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Mobile</p>
+                  <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4 leading-tight">
+                    Feels like a native app.<br />
+                    <span className="text-teal-600">Because it is.</span>
+                  </h2>
+                  <p className="text-gray-500 mb-8 leading-relaxed">
+                    Finan App is built mobile-first. Install it to your home screen and it opens full-screen, no browser bar — just your finances.
+                  </p>
+                </Reveal>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {MOBILE_FEATURES.map(({ icon, title, desc }, i) => (
+                    <Reveal key={title} delay={`${i * 70}ms`}>
+                      <div className="flex gap-3 p-4 rounded-xl border border-gray-200 hover:border-teal-200 hover:shadow-sm transition-all duration-200 h-full">
+                        <span className="text-xl shrink-0">{icon}</span>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800 mb-0.5">{title}</p>
+                          <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
+                        </div>
+                      </div>
+                    </Reveal>
+                  ))}
+                </div>
+                <Reveal>
+                  <div className="mt-8 flex items-center gap-3">
+                    <Link href="/register"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-200 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
+                      Try it on your phone
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                    </Link>
+                    <span className="text-xs text-gray-400">No install required · Just open in browser</span>
+                  </div>
+                </Reveal>
+              </div>
             </div>
           </div>
         </section>

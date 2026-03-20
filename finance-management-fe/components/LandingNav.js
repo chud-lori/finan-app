@@ -21,7 +21,7 @@ export default function LandingNav() {
 
           {/* Desktop nav */}
           <nav className="hidden sm:flex items-center gap-6 text-sm text-gray-600 font-medium">
-            {[['#features','Features'],['#tools','Tools'],['#how','How it works']].map(([href, label]) => (
+            {[['#features','Features'],['#tools','Tools'],['#how','How it works'],['#mobile','Mobile']].map(([href, label]) => (
               <a key={href} href={href}
                 className="relative py-1 hover:text-teal-600 transition-colors after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-teal-500 after:transition-all hover:after:w-full">
                 {label}
@@ -71,7 +71,7 @@ export default function LandingNav() {
         {/* Mobile dropdown */}
         <div className={`sm:hidden overflow-hidden transition-all duration-250 ease-in-out bg-white border-t border-gray-100 ${open ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0 border-t-0'}`}>
           <nav className="px-4 py-3 flex flex-col gap-1">
-            {[['#features','Features'],['#tools','Tools'],['#how','How it works']].map(([href, label]) => (
+            {[['#features','Features'],['#tools','Tools'],['#how','How it works'],['#mobile','Mobile']].map(([href, label]) => (
               <a key={href} href={href} onClick={() => setOpen(false)}
                 className="px-3 py-2.5 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
                 {label}
