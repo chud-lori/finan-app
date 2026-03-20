@@ -1,6 +1,7 @@
 import "./globals.css";
 import GoogleProvider from "@/components/GoogleProvider";
 import { ThemeProvider } from "@/components/ThemeContext";
+import { CurrencyProvider } from "@/components/CurrencyContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 export const metadata = {
@@ -31,13 +32,15 @@ export default function RootLayout({ children }) {
       </head>
       <body className="bg-gray-50 min-h-screen antialiased flex flex-col">
         <ThemeProvider>
-          <GoogleProvider>
-            <ErrorBoundary>
-              <div className="flex flex-col min-h-screen">
-                {children}
-              </div>
-            </ErrorBoundary>
-          </GoogleProvider>
+          <CurrencyProvider>
+            <GoogleProvider>
+              <ErrorBoundary>
+                <div className="flex flex-col min-h-screen">
+                  {children}
+                </div>
+              </ErrorBoundary>
+            </GoogleProvider>
+          </CurrencyProvider>
         </ThemeProvider>
       </body>
     </html>

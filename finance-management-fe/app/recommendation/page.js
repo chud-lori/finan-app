@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getRecommendation, getProfile } from '@/lib/api';
-import { formatIDR } from '@/lib/format';
+import { useFormatAmount } from '@/components/CurrencyContext';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 const parseNum = (v) => Number(String(v).replace(/[^0-9]/g, ''));
@@ -71,11 +71,12 @@ function SubmitBtn({ loading, label = 'Calculate' }) {
 
 // Saved-budget auto-fill button
 function UseSavedBudgetBtn({ savedBudget, onUse }) {
+  const formatAmount = useFormatAmount();
   if (!savedBudget) return null;
   return (
     <button type="button" onClick={onUse}
       className="text-xs text-teal-600 hover:text-teal-700 font-medium underline underline-offset-2 mb-2 block">
-      Use my saved budget ({formatIDR(savedBudget)})
+      Use my saved budget ({formatAmount(savedBudget)})
     </button>
   );
 }
@@ -88,6 +89,7 @@ const VELOCITY_CONFIG = {
 };
 
 function AffordTool({ savedBudget }) {
+  const formatAmount = useFormatAmount();
   const [monthly, setMonthly] = useState('');
   const [spend,   setSpend]   = useState('');
   const [result,  setResult]  = useState(null);
@@ -112,13 +114,13 @@ function AffordTool({ savedBudget }) {
   let verdictSub = '';
   if (result) {
     if (canAfford) {
-      verdictSub = `You'll have ${formatIDR(result.budgetRemaining - result.desiredSpend)} projected remaining after this`;
+      verdictSub = `You'll have ${formatAmount(result.budgetRemaining - result.desiredSpend)} projected remaining after this`;
     } else if (alreadyOver) {
-      verdictSub = `You've already spent ${formatIDR(result.actualSpend - budget)} over budget — adding this makes it worse`;
+      verdictSub = `You've already spent ${formatAmount(result.actualSpend - budget)} over budget — adding this makes it worse`;
     } else if (projectedOver) {
-      verdictSub = `Projected ${formatIDR(Math.abs(result.budgetRemaining))} over budget — plus ${formatIDR(result.desiredSpend)} for this purchase`;
+      verdictSub = `Projected ${formatAmount(Math.abs(result.budgetRemaining))} over budget — plus ${formatAmount(result.desiredSpend)} for this purchase`;
     } else {
-      verdictSub = `This purchase would put you ${formatIDR(Math.abs(result.budgetRemaining - result.desiredSpend))} over budget`;
+      verdictSub = `This purchase would put you ${formatAmount(Math.abs(result.budgetRemaining - result.desiredSpend))} over budget`;
     }
   }
 
@@ -151,18 +153,18 @@ function AffordTool({ savedBudget }) {
             <div className="mb-3">
               <div className="flex justify-between text-xs text-gray-500 mb-1.5">
                 <span>Spent so far</span>
-                <span>{formatIDR(result.actualSpend)} / {formatIDR(budget)}</span>
+                <span>{formatAmount(result.actualSpend)} / {formatAmount(budget)}</span>
               </div>
               <ProgressBar value={result.actualSpend} max={budget}
                 color={result.actualSpend > budget ? 'rose' : result.actualSpend / budget > 0.8 ? 'amber' : 'teal'} />
             </div>
-            <StatRow label="Actual spend this month" value={formatIDR(result.actualSpend)}
+            <StatRow label="Actual spend this month" value={formatAmount(result.actualSpend)}
               sub={`${result.daysElapsed} day${result.daysElapsed !== 1 ? 's' : ''} elapsed`} />
-            <StatRow label="Daily burn rate" value={`${formatIDR(result.dailyBurnRate)} / day`} />
-            <StatRow label="Projected month total" value={formatIDR(result.projectedTotal)}
+            <StatRow label="Daily burn rate" value={`${formatAmount(result.dailyBurnRate)} / day`} />
+            <StatRow label="Projected month total" value={formatAmount(result.projectedTotal)}
               sub={`${result.daysRemaining} days remaining`}
               valueClass={result.projectedTotal > budget ? 'text-rose-600' : 'text-gray-900'} />
-            <StatRow label="Projected budget left" value={formatIDR(result.budgetRemaining)}
+            <StatRow label="Projected budget left" value={formatAmount(result.budgetRemaining)}
               valueClass={result.budgetRemaining < 0 ? 'text-rose-600' : 'text-emerald-600'} />
           </ToolCard>
 
@@ -195,7 +197,7 @@ function AffordTool({ savedBudget }) {
             <div>
               <p className={`text-sm font-semibold ${velocity.color}`}>Spending velocity: {velocity.label}</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                {formatIDR(result.dailyBurnRate)}/day actual vs {formatIDR(Math.round(budget / 30))}/day expected
+                {formatAmount(result.dailyBurnRate)}/day actual vs {formatAmount(Math.round(budget / 30))}/day expected
               </p>
             </div>
           </div>
@@ -207,6 +209,7 @@ function AffordTool({ savedBudget }) {
 
 // ─── Tool 2: 50/30/20 Rule Planner ───────────────────────────────────────────
 function BudgetRuleTool() {
+  const formatAmount = useFormatAmount();
   const [income, setIncome] = useState('');
   const [result, setResult] = useState(null);
 
@@ -244,7 +247,7 @@ function BudgetRuleTool() {
                   <span className={`text-sm font-bold ${text}`}>{pct}% — {label}</span>
                   <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
                 </div>
-                <span className={`text-lg font-black ${text}`}>{formatIDR(amount)}</span>
+                <span className={`text-lg font-black ${text}`}>{formatAmount(amount)}</span>
               </div>
               <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
                 <div className={`h-1.5 rounded-full ${bar}`} style={{ width: `${pct}%` }} />
@@ -253,7 +256,7 @@ function BudgetRuleTool() {
           ))}
           <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
             <p className="text-xs text-gray-400">Based on monthly income of</p>
-            <p className="text-base font-bold text-gray-800 mt-0.5">{formatIDR(result.income)}</p>
+            <p className="text-base font-bold text-gray-800 mt-0.5">{formatAmount(result.income)}</p>
           </div>
         </div>
       )}
@@ -263,6 +266,7 @@ function BudgetRuleTool() {
 
 // ─── Tool 3: Savings Goal Calculator ─────────────────────────────────────────
 function SavingsGoalTool() {
+  const formatAmount = useFormatAmount();
   const [goal,    setGoal]    = useState('');
   const [saved,   setSaved]   = useState('');
   const [monthly, setMonthly] = useState('');
@@ -318,18 +322,18 @@ function SavingsGoalTool() {
             <div className="mb-4">
               <div className="flex justify-between text-xs text-gray-500 mb-1.5">
                 <span>Progress</span>
-                <span>{formatIDR(result.current)} / {formatIDR(result.target)}</span>
+                <span>{formatAmount(result.current)} / {formatAmount(result.target)}</span>
               </div>
               <ProgressBar value={result.current} max={result.target} color="teal" />
               <p className="text-right text-xs text-teal-600 font-medium mt-1">{result.progress}%</p>
             </div>
-            <StatRow label="Still needed"      value={formatIDR(result.remaining)} />
-            <StatRow label="Monthly saving"    value={formatIDR(result.perMonth)} />
-            <StatRow label="Daily equivalent"  value={`${formatIDR(Math.round(result.perMonth / 30))} / day`} />
+            <StatRow label="Still needed"      value={formatAmount(result.remaining)} />
+            <StatRow label="Monthly saving"    value={formatAmount(result.perMonth)} />
+            <StatRow label="Daily equivalent"  value={`${formatAmount(Math.round(result.perMonth / 30))} / day`} />
             {result.months > 12 && (
               <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
                 <p className="text-xs text-amber-700">
-                  <strong>Tip:</strong> Saving {formatIDR(Math.round(result.perMonth * 1.2))}/mo instead (+20%) would cut the timeline to ~{Math.ceil(result.months / 1.2)} months.
+                  <strong>Tip:</strong> Saving {formatAmount(Math.round(result.perMonth * 1.2))}/mo instead (+20%) would cut the timeline to ~{Math.ceil(result.months / 1.2)} months.
                 </p>
               </div>
             )}
@@ -342,6 +346,7 @@ function SavingsGoalTool() {
 
 // ─── Tool 4: Safe Daily Budget ────────────────────────────────────────────────
 function DailyBudgetTool({ savedBudget }) {
+  const formatAmount = useFormatAmount();
   const [monthly, setMonthly] = useState('');
   const [result,  setResult]  = useState(null);
   const [loading, setLoading] = useState(false);
@@ -392,7 +397,7 @@ function DailyBudgetTool({ savedBudget }) {
               Safe daily spend · {result.daysRemaining} days remaining
             </p>
             <p className={`text-4xl font-black ${result.safeRemaining <= 0 ? 'text-rose-700' : 'text-teal-700'}`}>
-              {result.safeRemaining <= 0 ? 'Rp 0' : formatIDR(result.safeDailyLimit)}
+              {result.safeRemaining <= 0 ? 'Rp 0' : formatAmount(result.safeDailyLimit)}
             </p>
             {result.safeRemaining <= 0 && (
               <p className="text-sm text-rose-600 mt-1">Budget already exhausted for this month</p>
@@ -403,18 +408,18 @@ function DailyBudgetTool({ savedBudget }) {
             <div className="mb-4">
               <div className="flex justify-between text-xs text-gray-500 mb-1.5">
                 <span>Budget used</span>
-                <span>{formatIDR(result.actualSpend)} / {formatIDR(result.budget)}</span>
+                <span>{formatAmount(result.actualSpend)} / {formatAmount(result.budget)}</span>
               </div>
               <ProgressBar value={result.actualSpend} max={result.budget}
                 color={result.actualSpend > result.budget ? 'rose' : result.actualSpend / result.budget > 0.8 ? 'amber' : 'teal'} />
             </div>
-            <StatRow label="Actual spend" value={formatIDR(result.actualSpend)}
+            <StatRow label="Actual spend" value={formatAmount(result.actualSpend)}
               sub={`${result.daysElapsed} days elapsed`} />
-            <StatRow label="Remaining budget" value={formatIDR(result.safeRemaining)}
+            <StatRow label="Remaining budget" value={formatAmount(result.safeRemaining)}
               valueClass={result.safeRemaining <= 0 ? 'text-rose-600' : 'text-emerald-600'} />
-            <StatRow label="Your burn rate" value={`${formatIDR(result.dailyBurnRate)} / day`}
+            <StatRow label="Your burn rate" value={`${formatAmount(result.dailyBurnRate)} / day`}
               valueClass={result.status === 'good' ? 'text-emerald-600' : result.status === 'warn' ? 'text-amber-600' : 'text-rose-600'} />
-            <StatRow label="Ideal burn rate" value={`${formatIDR(result.idealDaily)} / day`} />
+            <StatRow label="Ideal burn rate" value={`${formatAmount(result.idealDaily)} / day`} />
           </ToolCard>
 
           {(() => {
@@ -427,7 +432,7 @@ function DailyBudgetTool({ savedBudget }) {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {result.status === 'good'
                       ? 'Your spending pace is healthy. Keep it up!'
-                      : `Cut by ${formatIDR(result.dailyBurnRate - result.idealDaily)}/day to stay on track.`}
+                      : `Cut by ${formatAmount(result.dailyBurnRate - result.idealDaily)}/day to stay on track.`}
                   </p>
                 </div>
               </div>
@@ -494,12 +499,12 @@ function EmergencyFundTool() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400">Target</p>
-                    <p className="text-sm font-bold text-gray-800">{formatIDR(target)}</p>
+                    <p className="text-sm font-bold text-gray-800">{formatAmount(target)}</p>
                   </div>
                 </div>
                 <div className="mb-2">
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>{formatIDR(result.currentSaved)} saved</span>
+                    <span>{formatAmount(result.currentSaved)} saved</span>
                     <span>{pct}%</span>
                   </div>
                   <ProgressBar value={result.currentSaved} max={target} color={reached ? 'emerald' : color} />
@@ -508,10 +513,10 @@ function EmergencyFundTool() {
                   <p className="text-xs text-emerald-600 font-semibold mt-2">✓ Goal reached!</p>
                 ) : (
                   <div className="mt-2 space-y-1">
-                    <p className="text-xs text-gray-500">Gap: <strong className="text-gray-700">{formatIDR(gap)}</strong></p>
+                    <p className="text-xs text-gray-500">Gap: <strong className="text-gray-700">{formatAmount(gap)}</strong></p>
                     {months !== null ? (
                       <p className="text-xs text-gray-500">
-                        At {formatIDR(result.monthlySaving)}/mo → <strong className="text-teal-700">{Math.ceil(months)} months</strong> ({monthsFromNow(months)})
+                        At {formatAmount(result.monthlySaving)}/mo → <strong className="text-teal-700">{Math.ceil(months)} months</strong> ({monthsFromNow(months)})
                       </p>
                     ) : (
                       <p className="text-xs text-gray-400 italic">Enter a monthly saving amount to see the timeline.</p>
@@ -522,7 +527,7 @@ function EmergencyFundTool() {
             );
           })}
           <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
-            <p className="text-xs text-gray-500">Based on {formatIDR(result.monthlyExp)}/month in essential expenses</p>
+            <p className="text-xs text-gray-500">Based on {formatAmount(result.monthlyExp)}/month in essential expenses</p>
           </div>
         </div>
       )}
@@ -684,19 +689,19 @@ function DebtTool() {
                 <span className="w-5 h-5 rounded-full bg-teal-600 text-white text-xs font-bold flex items-center justify-center shrink-0">{i+1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800 truncate">{d.name}</p>
-                  <p className="text-xs text-gray-400">{formatIDR(d.balance)} · {d.rate}% p.a.</p>
+                  <p className="text-xs text-gray-400">{formatAmount(d.balance)} · {d.rate}% p.a.</p>
                 </div>
-                <p className="text-xs text-gray-500 shrink-0">{formatIDR(d.minPay)}/mo</p>
+                <p className="text-xs text-gray-500 shrink-0">{formatAmount(d.minPay)}/mo</p>
               </div>
             ))}
             <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
               <span className="text-gray-600">Total debt</span>
-              <span className="font-bold text-gray-900">{formatIDR(result.totalDebt)}</span>
+              <span className="font-bold text-gray-900">{formatAmount(result.totalDebt)}</span>
             </div>
             {result.extraAmt > 0 && (
               <div className="flex justify-between text-sm mt-1">
                 <span className="text-gray-600">Extra/month</span>
-                <span className="font-bold text-teal-700">+{formatIDR(result.extraAmt)}</span>
+                <span className="font-bold text-teal-700">+{formatAmount(result.extraAmt)}</span>
               </div>
             )}
           </ToolCard>
@@ -768,16 +773,16 @@ function FireTool() {
         <div className="space-y-4">
           <div className="rounded-2xl border-2 border-teal-300 bg-teal-50 p-5 text-center">
             <p className="text-xs text-teal-500 font-medium mb-1">Your FIRE number</p>
-            <p className="text-3xl font-black text-teal-700">{formatIDR(result.fireNumber)}</p>
+            <p className="text-3xl font-black text-teal-700">{formatAmount(result.fireNumber)}</p>
             <p className="text-sm text-teal-600 mt-1">
               {result.years >= 100 ? 'Increase savings to reach FIRE' : `Reach in ~${result.years} year${result.years !== 1 ? 's' : ''}`}
             </p>
           </div>
 
           <ToolCard>
-            <StatRow label="Annual expenses" value={formatIDR(result.expense)} />
-            <StatRow label="Monthly expenses" value={formatIDR(result.monthly)} />
-            <StatRow label="Annual savings" value={formatIDR(result.saving)} />
+            <StatRow label="Annual expenses" value={formatAmount(result.expense)} />
+            <StatRow label="Monthly expenses" value={formatAmount(result.monthly)} />
+            <StatRow label="Annual savings" value={formatAmount(result.saving)} />
             <StatRow label="Expected return" value={`${(result.r * 100).toFixed(1)}% / yr`} />
             <StatRow label="Withdrawal rate" value={`${(result.wr * 100).toFixed(1)}%`}
               sub="% of portfolio withdrawn per year" />
@@ -786,8 +791,8 @@ function FireTool() {
           {result.years < 100 && (
             <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3">
               <p className="text-xs text-emerald-700">
-                <strong>Rule of 25:</strong> You need 25× your annual expenses ({formatIDR(result.expense)} × 25 = {formatIDR(result.expense * 25)}).
-                At {(result.wr * 100).toFixed(1)}% withdrawal that&apos;s {formatIDR(result.monthly)}/month for life.
+                <strong>Rule of 25:</strong> You need 25× your annual expenses ({formatAmount(result.expense)} × 25 = {formatAmount(result.expense * 25)}).
+                At {(result.wr * 100).toFixed(1)}% withdrawal that&apos;s {formatAmount(result.monthly)}/month for life.
               </p>
             </div>
           )}
@@ -857,11 +862,11 @@ function InflationTool() {
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl border-2 border-gray-200 bg-white p-4 text-center">
               <p className="text-xs text-gray-400 mb-1">Today&apos;s value</p>
-              <p className="text-xl font-black text-gray-800">{formatIDR(result.amt)}</p>
+              <p className="text-xl font-black text-gray-800">{formatAmount(result.amt)}</p>
             </div>
             <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 text-center">
               <p className="text-xs text-rose-500 mb-1">Costs in {result.yrs} years</p>
-              <p className="text-xl font-black text-rose-700">{formatIDR(result.futureValue)}</p>
+              <p className="text-xl font-black text-rose-700">{formatAmount(result.futureValue)}</p>
             </div>
           </div>
 
@@ -874,7 +879,7 @@ function InflationTool() {
               </div>
               <ProgressBar value={result.amt} max={result.futureValue} color="rose" />
             </div>
-            <StatRow label="Price increase" value={`+${formatIDR(result.loss)} (+${result.lossPct}%)`}
+            <StatRow label="Price increase" value={`+${formatAmount(result.loss)} (+${result.lossPct}%)`}
               valueClass="text-rose-600" />
             <StatRow label="Inflation rate" value={`${(result.rate * 100).toFixed(1)}% / yr`} />
             <StatRow label="Years" value={result.yrs} />
@@ -886,7 +891,7 @@ function InflationTool() {
               {result.milestones.map(({ year, value }) => (
                 <div key={year} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                   <span className="text-sm text-gray-600">Year {year}</span>
-                  <span className="text-sm font-semibold text-rose-600">{formatIDR(value)}</span>
+                  <span className="text-sm font-semibold text-rose-600">{formatAmount(value)}</span>
                 </div>
               ))}
             </ToolCard>
@@ -925,7 +930,7 @@ function TaxTool() {
       if (pkp <= prev) break;
       const taxable = Math.min(pkp - prev, max - prev);
       const t = Math.round(taxable * rate);
-      details.push({ range: `Up to ${formatIDR(max === Infinity ? pkp : max)}`, rate: `${rate * 100}%`, taxable, tax: t });
+      details.push({ range: `Up to ${formatAmount(max === Infinity ? pkp : max)}`, rate: `${rate * 100}%`, taxable, tax: t });
       tax += t;
       prev = max;
     }
@@ -969,25 +974,25 @@ function TaxTool() {
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center">
               <p className="text-xs text-gray-400 mb-1">Gross/yr</p>
-              <p className="text-sm font-black text-gray-800">{formatIDR(result.annualGross)}</p>
+              <p className="text-sm font-black text-gray-800">{formatAmount(result.annualGross)}</p>
             </div>
             <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-3 text-center">
               <p className="text-xs text-rose-500 mb-1">Annual tax</p>
-              <p className="text-sm font-black text-rose-700">{formatIDR(result.tax)}</p>
+              <p className="text-sm font-black text-rose-700">{formatAmount(result.tax)}</p>
             </div>
             <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-3 text-center">
               <p className="text-xs text-emerald-500 mb-1">Monthly tax</p>
-              <p className="text-sm font-black text-emerald-700">{formatIDR(result.monthlyTax)}</p>
+              <p className="text-sm font-black text-emerald-700">{formatAmount(result.monthlyTax)}</p>
             </div>
           </div>
 
           <ToolCard>
-            <StatRow label="Annual gross" value={formatIDR(result.annualGross)} />
-            <StatRow label="PTKP deduction" value={`−${formatIDR(result.ptkp)}`} />
-            <StatRow label="Taxable income (PKP)" value={formatIDR(result.pkp)} />
-            <StatRow label="Annual tax" value={formatIDR(result.tax)} valueClass="text-rose-600" />
+            <StatRow label="Annual gross" value={formatAmount(result.annualGross)} />
+            <StatRow label="PTKP deduction" value={`−${formatAmount(result.ptkp)}`} />
+            <StatRow label="Taxable income (PKP)" value={formatAmount(result.pkp)} />
+            <StatRow label="Annual tax" value={formatAmount(result.tax)} valueClass="text-rose-600" />
             <StatRow label="Effective rate" value={`${result.effectiveRate}%`} />
-            <StatRow label="Take-home / yr" value={formatIDR(result.takeHome)} valueClass="text-emerald-600" />
+            <StatRow label="Take-home / yr" value={formatAmount(result.takeHome)} valueClass="text-emerald-600" />
           </ToolCard>
 
           {result.details.filter(d => d.taxable > 0).length > 0 && (
@@ -996,8 +1001,8 @@ function TaxTool() {
               {result.details.filter(d => d.taxable > 0).map((d, i) => (
                 <div key={i} className="py-2 border-b border-gray-100 last:border-0">
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-600">{d.rate} on {formatIDR(d.taxable)}</span>
-                    <span className="font-semibold text-gray-800">{formatIDR(d.tax)}</span>
+                    <span className="text-gray-600">{d.rate} on {formatAmount(d.taxable)}</span>
+                    <span className="font-semibold text-gray-800">{formatAmount(d.tax)}</span>
                   </div>
                 </div>
               ))}
@@ -1084,7 +1089,7 @@ function NetWorthTool() {
           <div className={`rounded-2xl border-2 p-5 text-center ${result.netWorth >= 0 ? 'border-teal-300 bg-teal-50' : 'border-rose-300 bg-rose-50'}`}>
             <p className="text-xs font-medium text-gray-500 mb-1">Net Worth</p>
             <p className={`text-3xl font-black ${result.netWorth >= 0 ? 'text-teal-700' : 'text-rose-700'}`}>
-              {result.netWorth >= 0 ? '' : '−'}{formatIDR(Math.abs(result.netWorth))}
+              {result.netWorth >= 0 ? '' : '−'}{formatAmount(Math.abs(result.netWorth))}
             </p>
           </div>
 
@@ -1094,12 +1099,12 @@ function NetWorthTool() {
               {result.assets.map((a, i) => (
                 <div key={i} className="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
                   <span className="text-gray-600 truncate mr-2">{a.name}</span>
-                  <span className="font-medium text-emerald-700 shrink-0">{formatIDR(a.value)}</span>
+                  <span className="font-medium text-emerald-700 shrink-0">{formatAmount(a.value)}</span>
                 </div>
               ))}
               <div className="flex justify-between text-sm font-bold pt-2 mt-1 border-t border-gray-200">
                 <span>Total</span>
-                <span className="text-emerald-700">{formatIDR(result.totalAssets)}</span>
+                <span className="text-emerald-700">{formatAmount(result.totalAssets)}</span>
               </div>
             </ToolCard>
             <ToolCard>
@@ -1107,12 +1112,12 @@ function NetWorthTool() {
               {result.liabilities.length > 0 ? result.liabilities.map((l, i) => (
                 <div key={i} className="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
                   <span className="text-gray-600 truncate mr-2">{l.name}</span>
-                  <span className="font-medium text-rose-600 shrink-0">{formatIDR(l.value)}</span>
+                  <span className="font-medium text-rose-600 shrink-0">{formatAmount(l.value)}</span>
                 </div>
               )) : <p className="text-xs text-gray-400 italic">None</p>}
               <div className="flex justify-between text-sm font-bold pt-2 mt-1 border-t border-gray-200">
                 <span>Total</span>
-                <span className="text-rose-600">{formatIDR(result.totalLiabilities)}</span>
+                <span className="text-rose-600">{formatAmount(result.totalLiabilities)}</span>
               </div>
             </ToolCard>
           </div>

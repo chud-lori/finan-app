@@ -1,5 +1,18 @@
-export const formatIDR = (amount) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
+// Currency code → natural display locale
+const CURRENCY_LOCALE = {
+  IDR: 'id-ID', USD: 'en-US', EUR: 'de-DE', GBP: 'en-GB',
+  SGD: 'en-SG', MYR: 'ms-MY', JPY: 'ja-JP', CNY: 'zh-CN',
+  AUD: 'en-AU', CAD: 'en-CA', THB: 'th-TH', PHP: 'en-PH',
+  VND: 'vi-VN', KRW: 'ko-KR', INR: 'en-IN', BRL: 'pt-BR',
+};
+
+export const formatCurrency = (amount, currency = 'IDR') => {
+  const locale = CURRENCY_LOCALE[currency] ?? 'en-US';
+  return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
+};
+
+// Kept for internal use — prefer formatCurrency via the CurrencyContext hook
+export const formatIDR = (amount) => formatCurrency(amount, 'IDR');
 
 export const formatDate = (dateStr, timezone) => {
   const opts = {

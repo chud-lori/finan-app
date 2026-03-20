@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getAnalytics } from '@/lib/api';
-import { formatIDR } from '@/lib/format';
+import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 
@@ -23,6 +23,7 @@ const PIE_COLORS    = [
 
 // ─── "So What?" insight ───────────────────────────────────────────────────────
 function SoWhatInsight({ categories, onCategoryClick }) {
+  const formatAmount = useFormatAmount();
   if (!categories?.length) return null;
   const grandTotal = categories.reduce((s, c) => s + c.total, 0);
   if (!grandTotal) return null;
@@ -70,7 +71,7 @@ function SoWhatInsight({ categories, onCategoryClick }) {
               className="font-semibold capitalize underline decoration-dotted hover:text-teal-700 transition-colors"
             >{topProblem.category}</button>{' '}by 20%
             {' → '}
-            save <span className="font-semibold text-emerald-700">{formatIDR(savingIfReduce20)}</span>/month
+            save <span className="font-semibold text-emerald-700">{formatAmount(savingIfReduce20)}</span>/month
           </p>
         </div>
       </div>
@@ -102,6 +103,7 @@ function DeltaBadge({ delta }) {
 
 // ─── Category section ─────────────────────────────────────────────────────────
 function CategorySection({ categories, showAvg, compareMode, compCategories, onCategoryClick }) {
+  const formatAmount = useFormatAmount();
   if (!categories?.length) {
     return (
       <div className="text-center py-10 text-gray-400 text-sm">
@@ -222,8 +224,8 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                         </button>
                       </div>
                     </td>
-                    <td className="py-2 text-right text-rose-600">{formatIDR(c.total)}</td>
-                    {showAvg  && <td className="py-2 text-right text-gray-600">{formatIDR(c.avgMonthly)}</td>}
+                    <td className="py-2 text-right text-rose-600">{formatAmount(c.total)}</td>
+                    {showAvg  && <td className="py-2 text-right text-gray-600">{formatAmount(c.avgMonthly)}</td>}
                     {showAvg  && <td className="py-2 text-right text-gray-500 hidden sm:table-cell">{c.activeMonths}</td>}
                     {!showAvg && <td className="py-2 text-right text-gray-500">{c.count}</td>}
                     {showCompare && (
@@ -250,6 +252,7 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
+  const formatAmount = useFormatAmount();
   const router = useRouter();
   const now = new Date();
   const [tab,   setTab]   = useState('Monthly');
@@ -429,11 +432,11 @@ export default function AnalyticsPage() {
                 <div className="space-y-5">
                   {/* Summary cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <SummaryCard label="Income"  value={formatIDR(ms?.income  ?? 0)} color="emerald" />
-                    <SummaryCard label="Expense" value={formatIDR(ms?.expense ?? 0)} color="rose" />
+                    <SummaryCard label="Income"  value={formatAmount(ms?.income  ?? 0)} color="emerald" />
+                    <SummaryCard label="Expense" value={formatAmount(ms?.expense ?? 0)} color="rose" />
                     <SummaryCard
                       label="Net"
-                      value={formatIDR((ms?.income ?? 0) - (ms?.expense ?? 0))}
+                      value={formatAmount((ms?.income ?? 0) - (ms?.expense ?? 0))}
                       color={(ms?.income ?? 0) >= (ms?.expense ?? 0) ? 'emerald' : 'rose'}
                     />
                     <SummaryCard
@@ -501,16 +504,16 @@ export default function AnalyticsPage() {
               {tab === 'Yearly' && (
                 <div className="space-y-5">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <SummaryCard label="Total Income"  value={formatIDR(yearTotals.income)}  color="emerald" />
-                    <SummaryCard label="Total Expense" value={formatIDR(yearTotals.expense)} color="rose" />
+                    <SummaryCard label="Total Income"  value={formatAmount(yearTotals.income)}  color="emerald" />
+                    <SummaryCard label="Total Expense" value={formatAmount(yearTotals.expense)} color="rose" />
                     <SummaryCard
                       label="Net"
-                      value={formatIDR(yearTotals.income - yearTotals.expense)}
+                      value={formatAmount(yearTotals.income - yearTotals.expense)}
                       color={yearTotals.income >= yearTotals.expense ? 'emerald' : 'rose'}
                     />
                     <SummaryCard
                       label="Avg monthly expense"
-                      value={formatIDR(Math.round(yearTotals.expense / 12))}
+                      value={formatAmount(Math.round(yearTotals.expense / 12))}
                       color="teal"
                     />
                   </div>
@@ -544,10 +547,10 @@ export default function AnalyticsPage() {
                             return (
                               <tr key={m.name} className="hover:bg-gray-50">
                                 <td className="py-2 font-medium text-gray-700">{m.name}</td>
-                                <td className="py-2 text-right text-emerald-700">{m.Income  ? formatIDR(m.Income)  : '—'}</td>
-                                <td className="py-2 text-right text-rose-600">{m.Expense ? formatIDR(m.Expense) : '—'}</td>
+                                <td className="py-2 text-right text-emerald-700">{m.Income  ? formatAmount(m.Income)  : '—'}</td>
+                                <td className="py-2 text-right text-rose-600">{m.Expense ? formatAmount(m.Expense) : '—'}</td>
                                 <td className={`py-2 text-right font-semibold ${!hasData ? 'text-gray-300' : net >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
-                                  {hasData ? formatIDR(net) : '—'}
+                                  {hasData ? formatAmount(net) : '—'}
                                 </td>
                               </tr>
                             );

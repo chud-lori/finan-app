@@ -12,7 +12,8 @@ import {
   changePassword,
   logoutAllDevices,
 } from '@/lib/api';
-import { formatIDR, toTitleCase } from '@/lib/format';
+import { toTitleCase } from '@/lib/format';
+import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
 import MonthCalendarPicker from '@/components/MonthCalendarPicker';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -282,6 +283,8 @@ function Toggle({ options, value, onChange }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
+  const formatAmount = useFormatAmount();
+  const { refreshCurrency } = useCurrency();
   const router = useRouter();
 
   const [profile,        setProfile]        = useState(null);
@@ -337,6 +340,7 @@ export default function ProfilePage() {
     setPrefsSaving(true); setPrefsError(''); setPrefsSaved(false);
     try {
       await updatePreferences(prefs);
+      refreshCurrency();
       setPrefsSaved(true);
       setTimeout(() => setPrefsSaved(false), 2500);
     } catch (e) {
@@ -565,8 +569,8 @@ export default function ProfilePage() {
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { label: 'Avg Monthly Income',  value: formatIDR(identity.avgMonthlyIncome  || 0), accent: 'emerald' },
-                        { label: 'Avg Monthly Expense',  value: formatIDR(identity.avgMonthlyExpense || 0), accent: 'rose'    },
+                        { label: 'Avg Monthly Income',  value: formatAmount(identity.avgMonthlyIncome  || 0), accent: 'emerald' },
+                        { label: 'Avg Monthly Expense',  value: formatAmount(identity.avgMonthlyExpense || 0), accent: 'rose'    },
                         { label: 'Avg Savings Rate',     value: `${identity.avgSavingsRate ?? 0}%`,         accent: identity.avgSavingsRate > 20 ? 'emerald' : identity.avgSavingsRate > 0 ? 'teal' : 'rose' },
                         { label: 'Months Tracked',       value: `${identity.monthsTracked || 0} mo`,        accent: 'gray'    },
                       ].map(({ label, value, accent }) => {

@@ -1,6 +1,6 @@
 'use client';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { formatIDR } from '@/lib/format';
+import { useFormatAmount } from '@/components/CurrencyContext';
 
 const formatK = (v) => {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -9,12 +9,13 @@ const formatK = (v) => {
 };
 
 const HBarTooltip = ({ active, payload, label }) => {
+  const formatAmount = useFormatAmount();
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-sm min-w-[160px]">
       <p className="font-semibold text-gray-700 mb-1">{label}</p>
       {payload.map(p => (
-        <p key={p.name} style={{ color: p.color }}>{p.name}: {formatIDR(p.value)}</p>
+        <p key={p.name} style={{ color: p.color }}>{p.name}: {formatAmount(p.value)}</p>
       ))}
     </div>
   );

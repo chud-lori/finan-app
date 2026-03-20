@@ -4,7 +4,8 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getTransactions, deleteTransaction, getActiveMonths, setBudget } from '@/lib/api';
-import { formatIDR, formatDate, toTitleCase } from '@/lib/format';
+import { formatDate, toTitleCase } from '@/lib/format';
+import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonStatCards, SkeletonTableRows, SkeletonLine } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 
@@ -296,6 +297,7 @@ export default function DashboardPage() {
     }
   };
 
+  const formatAmount = useFormatAmount();
   const txns    = data.transactions || [];
   const income  = data.monthlyIncome  ?? 0;
   const expense = data.monthlyExpense ?? 0;
@@ -310,9 +312,9 @@ export default function DashboardPage() {
           {/* Stats */}
           {loading && !data.transactions.length ? <SkeletonStatCards /> : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <StatCard label="Balance" value={formatIDR(data.balance?.amount ?? 0)} icon="💰"
+              <StatCard label="Balance" value={formatAmount(data.balance?.amount ?? 0)} icon="💰"
                 tip="Your all-time net balance — total income ever received minus total expenses ever recorded. Not limited to this month." />
-              <StatCard label="Income this month" value={formatIDR(income)} icon="📈"
+              <StatCard label="Income this month" value={formatAmount(income)} icon="📈"
                 tip="Total income transactions recorded in the selected month." />
               <BudgetCard expense={expense} budget={budget} month={month} onSaved={load} />
             </div>
@@ -431,7 +433,7 @@ export default function DashboardPage() {
                             {toTitleCase(t.category)}
                           </button>
                         </td>
-                        <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatIDR(t.amount)}</td>
+                        <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatAmount(t.amount)}</td>
                         <td className="px-5 py-3"><TypeBadge type={t.type} /></td>
                         <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
                           {formatDate(t.time, t.transaction_timezone)}
@@ -489,6 +491,7 @@ function StatCard({ label, value, icon, tip }) {
 }
 
 function BudgetCard({ expense, budget, month, onSaved }) {
+  const formatAmount = useFormatAmount();
   const [editing, setEditing] = useState(false);
   const [input, setInput]     = useState('');
   const [saving, setSaving]   = useState(false);
@@ -551,14 +554,14 @@ function BudgetCard({ expense, budget, month, onSaved }) {
         </div>
       ) : budget === 0 ? (
         <>
-          <div className="text-xl font-bold text-gray-900 mb-1">{formatIDR(expense)} <span className="text-sm font-normal text-gray-400">spent</span></div>
+          <div className="text-xl font-bold text-gray-900 mb-1">{formatAmount(expense)} <span className="text-sm font-normal text-gray-400">spent</span></div>
           <button onClick={startEdit} className="text-xs text-teal-600 hover:underline font-medium">+ Set budget for this month</button>
         </>
       ) : (
         <>
           <div className="text-xl font-bold text-gray-900 mb-2">
-            {formatIDR(expense)}
-            <span className="text-sm font-medium text-gray-400 ml-1.5">/ {formatIDR(budget)}</span>
+            {formatAmount(expense)}
+            <span className="text-sm font-medium text-gray-400 ml-1.5">/ {formatAmount(budget)}</span>
           </div>
           <div className="flex items-center gap-2 mb-1.5">
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -567,11 +570,11 @@ function BudgetCard({ expense, budget, month, onSaved }) {
             <span className={`text-xs font-semibold tabular-nums shrink-0 ${pctColor}`}>{pct}%</span>
           </div>
           {over ? (
-            <p className="text-xs font-medium text-rose-600">{formatIDR(expense - budget)} over budget</p>
+            <p className="text-xs font-medium text-rose-600">{formatAmount(expense - budget)} over budget</p>
           ) : pct >= 80 ? (
-            <p className="text-xs font-medium text-amber-600">{formatIDR(remaining)} remaining — watch it</p>
+            <p className="text-xs font-medium text-amber-600">{formatAmount(remaining)} remaining — watch it</p>
           ) : (
-            <p className="text-xs text-gray-400">{formatIDR(remaining)} remaining</p>
+            <p className="text-xs text-gray-400">{formatAmount(remaining)} remaining</p>
           )}
         </>
       )}

@@ -3,7 +3,8 @@ import { useState, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getRangeTransactions, deleteTransaction } from '@/lib/api';
-import { formatIDR, formatDate, toTitleCase } from '@/lib/format';
+import { formatDate, toTitleCase } from '@/lib/format';
+import { useFormatAmount } from '@/components/CurrencyContext';
 
 // ─── Quick presets ────────────────────────────────────────────────────────────
 function fmt(d) { return d.toISOString().slice(0, 10); }
@@ -42,6 +43,7 @@ function TypeBadge({ type }) {
 
 // ─── Category breakdown ───────────────────────────────────────────────────────
 function CategoryBreakdown({ transactions }) {
+  const formatAmount = useFormatAmount();
   const expenses = transactions.filter(t => t.type === 'expense');
   const total = expenses.reduce((s, t) => s + t.amount, 0);
   if (!total) return null;
@@ -64,7 +66,7 @@ function CategoryBreakdown({ transactions }) {
             <div key={cat}>
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="text-gray-700 font-medium capitalize">{toTitleCase(cat)}</span>
-                <span className="text-gray-500">{formatIDR(amt)} <span className="text-gray-400">({pct}%)</span></span>
+                <span className="text-gray-500">{formatAmount(amt)} <span className="text-gray-400">({pct}%)</span></span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                 <div className={`h-1.5 rounded-full ${COLORS[i % COLORS.length]}`} style={{ width: `${pct}%` }} />
@@ -79,6 +81,7 @@ function CategoryBreakdown({ transactions }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ReportsPage() {
+  const formatAmount = useFormatAmount();
   const today = fmt(new Date());
   const [start,    setStart]    = useState(today);
   const [end,      setEnd]      = useState(today);
@@ -184,16 +187,16 @@ export default function ReportsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
                   <p className="text-xs text-gray-500 mb-1">Income</p>
-                  <p className="text-base sm:text-lg font-bold text-emerald-600 tabular-nums">{formatIDR(result.income)}</p>
+                  <p className="text-base sm:text-lg font-bold text-emerald-600 tabular-nums">{formatAmount(result.income)}</p>
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
                   <p className="text-xs text-gray-500 mb-1">Expense</p>
-                  <p className="text-base sm:text-lg font-bold text-rose-600 tabular-nums">{formatIDR(result.expense)}</p>
+                  <p className="text-base sm:text-lg font-bold text-rose-600 tabular-nums">{formatAmount(result.expense)}</p>
                 </div>
                 <div className={`col-span-2 sm:col-span-1 rounded-2xl border shadow-sm p-4 ${net >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
                   <p className="text-xs text-gray-500 mb-1">Net</p>
                   <p className={`text-base sm:text-lg font-bold tabular-nums ${net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                    {net >= 0 ? '+' : ''}{formatIDR(net)}
+                    {net >= 0 ? '+' : ''}{formatAmount(net)}
                   </p>
                 </div>
               </div>
@@ -256,7 +259,7 @@ export default function ReportsPage() {
                                   {toTitleCase(t.category)}
                                 </span>
                               </td>
-                              <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatIDR(t.amount)}</td>
+                              <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatAmount(t.amount)}</td>
                               <td className="px-5 py-3"><TypeBadge type={t.type} /></td>
                               <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
                                 {formatDate(t.time, t.transaction_timezone)}

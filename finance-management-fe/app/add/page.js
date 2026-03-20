@@ -5,7 +5,8 @@ import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import DateTimePicker from '@/components/DateTimePicker';
 import { addTransaction, getCategories, getCategorySuggestions, getTransactions } from '@/lib/api';
-import { toTitleCase, formatIDR, formatDate } from '@/lib/format';
+import { toTitleCase, formatDate } from '@/lib/format';
+import { useFormatAmount } from '@/components/CurrencyContext';
 
 // ─── Category picker — click-to-open dropdown ─────────────────────────────────
 function CategoryCombobox({ value, onChange, categories }) {
@@ -142,6 +143,7 @@ function CategoryCombobox({ value, onChange, categories }) {
 
 // ─── Side panel ───────────────────────────────────────────────────────────────
 function SidePanel() {
+  const formatAmount = useFormatAmount();
   const [recent, setRecent]   = useState([]);
   const [todayIncome, setTodayIncome]   = useState(0);
   const [todayExpense, setTodayExpense] = useState(0);
@@ -186,19 +188,19 @@ function SidePanel() {
                 <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
                 Income
               </span>
-              <span className="text-sm font-semibold text-emerald-600">{formatIDR(todayIncome)}</span>
+              <span className="text-sm font-semibold text-emerald-600">{formatAmount(todayIncome)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs text-gray-500">
                 <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
                 Expense
               </span>
-              <span className="text-sm font-semibold text-rose-600">{formatIDR(todayExpense)}</span>
+              <span className="text-sm font-semibold text-rose-600">{formatAmount(todayExpense)}</span>
             </div>
             <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
               <span className="text-xs text-gray-400">Net</span>
               <span className={`text-sm font-bold ${todayIncome - todayExpense >= 0 ? 'text-gray-800' : 'text-rose-600'}`}>
-                {formatIDR(todayIncome - todayExpense)}
+                {formatAmount(todayIncome - todayExpense)}
               </span>
             </div>
           </div>
@@ -238,7 +240,7 @@ function SidePanel() {
                 <span className={`text-xs font-semibold shrink-0 ${
                   t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'
                 }`}>
-                  {formatIDR(t.amount)}
+                  {formatAmount(t.amount)}
                 </span>
               </li>
             ))}

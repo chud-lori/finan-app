@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getAnomalies, getExplainability, getTimeToZero } from '@/lib/api';
-import { formatIDR } from '@/lib/format';
+import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 
@@ -131,6 +131,7 @@ const TTZ_CONFIG = {
 };
 
 function TimeToZeroCard({ data }) {
+  const formatAmount = useFormatAmount();
   const cfg = TTZ_CONFIG[data.status] ?? TTZ_CONFIG.safe;
   return (
     <div className="p-4">
@@ -166,14 +167,14 @@ function TimeToZeroCard({ data }) {
             <p className="text-xs text-gray-400">Current balance</p>
             <Tooltip text="Your total income minus total expenses across all time — the net balance in your account." align="left" />
           </div>
-          <p className="text-sm font-bold text-gray-800">{formatIDR(data.balance)}</p>
+          <p className="text-sm font-bold text-gray-800">{formatAmount(data.balance)}</p>
         </div>
         <div>
           <div className="flex items-center gap-1 mb-0.5">
             <p className="text-xs text-gray-400">Daily burn</p>
             <Tooltip text="Your average daily spending over the last 30 days. Used to calculate how long your balance will last." align="right" />
           </div>
-          <p className="text-sm font-bold text-gray-800">{formatIDR(data.dailyBurnRate)}/day</p>
+          <p className="text-sm font-bold text-gray-800">{formatAmount(data.dailyBurnRate)}/day</p>
         </div>
       </div>
     </div>
@@ -184,6 +185,7 @@ function TimeToZeroCard({ data }) {
 // ── Explainability card ──────────────────────────────────────────────────────
 
 function ExplainCard({ data }) {
+  const formatAmount = useFormatAmount();
   const maxPct = Math.max(...data.topCategories.map(c => c.pct), 1);
 
   return (
@@ -210,7 +212,7 @@ function ExplainCard({ data }) {
                 )}
               </div>
               <div className="text-right flex-shrink-0 tabular-nums leading-tight">
-                <p className="text-sm font-bold text-gray-900 whitespace-nowrap">{formatIDR(c.total)}</p>
+                <p className="text-sm font-bold text-gray-900 whitespace-nowrap">{formatAmount(c.total)}</p>
                 <p className="text-xs text-gray-400">({c.pct}%)</p>
               </div>
             </div>
@@ -226,7 +228,7 @@ function ExplainCard({ data }) {
 
       <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between">
         <p className="text-xs text-gray-400">Total this month</p>
-        <p className="text-sm font-bold text-gray-700">{formatIDR(data.totalOutcome)}</p>
+        <p className="text-sm font-bold text-gray-700">{formatAmount(data.totalOutcome)}</p>
       </div>
     </div>
   );
@@ -252,6 +254,7 @@ function AnomalyBadge({ flag }) {
 }
 
 function AnomalyList({ data }) {
+  const formatAmount = useFormatAmount();
   if (data.count === 0) {
     return (
       <div className="p-8 text-center">
@@ -268,7 +271,7 @@ function AnomalyList({ data }) {
         <div key={String(a.id)} className="p-4 sm:p-5 hover:bg-gray-50 transition-colors">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-semibold text-gray-900 leading-snug min-w-0 flex-1 break-words pr-2">{a.description}</p>
-            <p className="text-sm font-bold text-gray-900 shrink-0 tabular-nums whitespace-nowrap">{formatIDR(a.amount)}</p>
+            <p className="text-sm font-bold text-gray-900 shrink-0 tabular-nums whitespace-nowrap">{formatAmount(a.amount)}</p>
           </div>
           <p className="text-xs text-gray-400 mt-0.5 capitalize">{a.category}</p>
           <div className="flex flex-wrap gap-1.5 mt-2.5">
