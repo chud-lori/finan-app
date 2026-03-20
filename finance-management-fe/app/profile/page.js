@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
-import BottomNav from '@/components/BottomNav';
 import AuthGuard from '@/components/AuthGuard';
 import {
   getProfile,
@@ -546,7 +545,6 @@ export default function ProfilePage() {
 
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <BottomNav />
 
         <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6">
 

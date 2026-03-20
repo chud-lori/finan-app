@@ -5,6 +5,8 @@ import { CurrencyProvider } from "@/components/CurrencyContext";
 import { ToastProvider } from "@/components/ToastContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PageTransition from "@/components/PageTransition";
+import BottomNav from "@/components/BottomNav";
+import AndroidBackHandler from "@/components/AndroidBackHandler";
 
 export const metadata = {
   title: 'Finan App — Personal Finance Tracker & Planner',
@@ -61,6 +63,8 @@ export default function RootLayout({ children }) {
                 <ErrorBoundary>
                   <div className="flex flex-col min-h-screen">
                     <PageTransition>{children}</PageTransition>
+                    <BottomNav />
+                    <AndroidBackHandler />
                   </div>
                 </ErrorBoundary>
               </ToastProvider>

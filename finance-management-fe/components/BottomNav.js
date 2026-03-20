@@ -82,6 +82,7 @@ export default function BottomNav() {
             <Link
               key={tab.href}
               href={tab.href}
+              replace
               className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors ${
                 active
                   ? 'text-teal-600 dark:text-teal-400'

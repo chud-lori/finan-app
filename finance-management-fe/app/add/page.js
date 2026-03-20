@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
-import BottomNav from '@/components/BottomNav';
 import AuthGuard from '@/components/AuthGuard';
 import DateTimePicker from '@/components/DateTimePicker';
 import { addTransaction, getCategories, getCategorySuggestions, getTransactions } from '@/lib/api';
@@ -322,7 +321,6 @@ export default function AddPage() {
     <AuthGuard>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <BottomNav />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
           <h1 className="text-xl font-bold text-gray-900 mb-6">Add Transaction</h1>
 

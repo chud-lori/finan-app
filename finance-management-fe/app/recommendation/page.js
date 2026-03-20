@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
-import BottomNav from '@/components/BottomNav';
 import AuthGuard from '@/components/AuthGuard';
 import { getRecommendation, getProfile } from '@/lib/api';
 import { useCurrency } from '@/components/CurrencyContext';
@@ -1306,7 +1305,6 @@ export default function RecommendationPage() {
     <AuthGuard>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <BottomNav />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
           <h1 className="text-xl font-bold text-gray-900 mb-1">Planner</h1>
           <p className="text-sm text-gray-500 mb-6">Financial tools to help you plan, save, and spend smarter</p>
