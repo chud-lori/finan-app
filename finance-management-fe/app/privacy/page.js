@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import AuthNavLink from '@/components/AuthNavLink';
 
 export const metadata = {
   title: 'Privacy Policy — Finan App',
@@ -18,7 +19,7 @@ export default function PrivacyPage() {
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <Link href="/" className="font-bold text-teal-600 text-lg">Finan App</Link>
-          <Link href="/login" className="text-sm text-gray-500 hover:text-teal-600 transition-colors">Sign in</Link>
+          <AuthNavLink className="text-sm text-gray-500 hover:text-teal-600 transition-colors" />
         </div>
       </header>
 

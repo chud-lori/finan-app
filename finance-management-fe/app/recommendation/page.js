@@ -1267,7 +1267,7 @@ function RightPanel({ toolId }) {
       {/* Navigate tip */}
       <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
         <p className="text-xs text-gray-400 leading-relaxed">
-          <span className="font-medium text-gray-500">10 tools available.</span> Use the sidebar to switch between budgeting, saving, debt, investing, and tax tools.
+          <span className="font-medium text-gray-500">10 tools available.</span> Use the <span className="sm:hidden">tabs above</span><span className="hidden sm:inline">sidebar</span> to switch between budgeting, saving, debt, investing, and tax tools.
         </p>
       </div>
     </div>

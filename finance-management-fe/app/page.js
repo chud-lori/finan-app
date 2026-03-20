@@ -577,19 +577,7 @@ export default function LandingPage() {
               <p className="text-gray-500 mb-10 text-lg leading-relaxed">
                 No ads, no paywalls, no data selling, no credit card. A clean, private finance dashboard that respects your money and your privacy.
               </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Link href="/register"
-                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-teal-600 text-white font-bold text-base hover:bg-teal-700 hover:shadow-2xl hover:shadow-teal-200/60 hover:-translate-y-1 active:scale-95 transition-all duration-200">
-                  Create free account
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
-                </Link>
-                <Link href="/login"
-                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl border border-gray-200 bg-white text-gray-700 font-bold text-base hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all duration-200">
-                  Already have an account
-                </Link>
-              </div>
+              <LandingHeroCTA />
             </Reveal>
           </div>
         </section>
