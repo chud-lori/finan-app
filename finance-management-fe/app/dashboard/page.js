@@ -702,7 +702,7 @@ function StatCard({ label, value, icon, tip }) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           <span className="text-sm text-gray-500">{label}</span>
-          {tip && <Tooltip text={tip} />}
+          {tip && <Tooltip text={tip} fixed />}
         </div>
         <span className="text-xl">{icon}</span>
       </div>
@@ -760,7 +760,7 @@ function BudgetCard({ expense, budget, month, onSaved }) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           <span className="text-sm text-gray-500">Budget</span>
-          <Tooltip text="Per-month spending budget. Each month is tracked independently. Saving a new amount also updates the default for future months." />
+          <Tooltip text="Per-month spending budget. Each month is tracked independently. Saving a new amount also updates the default for future months." fixed />
         </div>
         <button onClick={startEdit} title="Edit budget for this month" className="text-gray-400 hover:text-teal-600 transition-colors">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

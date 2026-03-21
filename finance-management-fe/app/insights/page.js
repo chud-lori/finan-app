@@ -29,7 +29,7 @@ function RefreshButton({ generatedAt, onRefresh, loading, stale }) {
         </span>
       )}
       {!stale && generatedAt?.ts && (
-        <span className="text-xs text-gray-400 dark:text-slate-500 hidden sm:block">
+        <span className="text-xs text-gray-400 dark:text-slate-500">
           {`Updated ${timeAgo(generatedAt.ts)}`}
         </span>
       )}
