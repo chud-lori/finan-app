@@ -1282,11 +1282,11 @@ function NetWorthTool() {
           <input type="text" placeholder={`${placeholder} ${i+1}`} value={r.name}
             onChange={e => updateRow(setter, r.id, 'name', e.target.value)}
             className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-          <div className="relative w-36">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">{currency}</span>
+          <div className="relative w-40">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none max-w-[2.5rem] truncate">{currency}</span>
             <input type="text" placeholder="0" value={r.value}
               onChange={e => updateRow(setter, r.id, 'value', fmtInput(e.target.value))}
-              className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+              className="w-full pl-11 pr-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           </div>
           {rows.length > 1 && (
             <button type="button" onClick={() => removeRow(setter, r.id)}
@@ -1409,7 +1409,7 @@ const TOOL_INFO = {
     ],
   },
   emergency: {
-    tip:   { title: 'Build in stages', body: 'Start with a Rp 1 jt starter fund, then grow to 3 months. Most emergencies cost under Rp 5 jt.' },
+    tip:   { title: 'Build in stages', body: 'Start with a small starter fund, then grow to 3 months of expenses. Most everyday emergencies cost less than one month\'s salary.' },
     refs:  [
       { label: 'Minimum target', value: '3× monthly expenses' },
       { label: 'Ideal target',   value: '6× monthly expenses' },
