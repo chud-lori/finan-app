@@ -30,4 +30,7 @@ node_modules/
 # Personal deployment notes
 DEPLOY.md
 
+# Claude Code instructions (local only — not for repo)
+CLAUDE.md
+
 .logs/
