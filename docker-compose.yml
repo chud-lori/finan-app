@@ -92,7 +92,7 @@ services:
       mongo-init:
         condition: service_completed_successfully
       ai:
-        condition: service_healthy
+        condition: service_started
     networks:
       - finan-net
     healthcheck:
