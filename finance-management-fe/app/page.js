@@ -4,7 +4,6 @@ import Reveal from '@/components/Reveal';
 import LandingNav from '@/components/LandingNav';
 import LandingHeroCTA from '@/components/LandingHeroCTA';
 import ForceLightMode from '@/components/ForceLightMode';
-import HeroParticles from '@/components/HeroParticles';
 
 const SITE_URL = 'https://finance.lori.my.id';
 const SITE_NAME = 'Finan App';
@@ -255,7 +254,6 @@ export default function LandingPage() {
 
         {/* ── Hero ── */}
         <section className="relative overflow-hidden bg-gradient-to-br from-teal-50 via-white to-emerald-50 pt-20 pb-24 sm:pt-28 sm:pb-32">
-          <HeroParticles />
           <div aria-hidden className="absolute inset-0 pointer-events-none overflow-hidden">
             <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full bg-teal-100/60 blur-3xl" />
             <div className="absolute -bottom-32 -left-32 w-[400px] h-[400px] rounded-full bg-emerald-100/50 blur-3xl" />
