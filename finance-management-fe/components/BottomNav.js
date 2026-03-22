@@ -46,8 +46,15 @@ const TABS = [
   },
 ];
 
+const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password', '/privacy', '/terms'];
+
 export default function BottomNav() {
   const pathname = usePathname();
+
+  // Don't show the app nav on public/landing/auth pages
+  if (PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/reset-password') || pathname.startsWith('/verify-email')) {
+    return null;
+  }
 
   return (
     <nav
