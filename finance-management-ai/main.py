@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from models.anomaly import detect_anomalies
 from models.forecast import forecast_month_spend
+from models.classifier import classify_batch
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -37,6 +38,10 @@ class DailyTotal(BaseModel):
     amount: float
 
 
+class ClassifyRequest(BaseModel):
+    categories: List[str]
+
+
 class AnalyzeRequest(BaseModel):
     """Single combined request — one round-trip from the Node backend."""
     transactions: List[Transaction]          # 6 months of expenses
@@ -51,6 +56,17 @@ class AnalyzeRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/classify")
+def classify_categories(req: ClassifyRequest):
+    """
+    Classify a batch of category names into semantic groups.
+    Groups: essential | discretionary | savings | social | income | other
+    """
+    if not req.categories:
+        return {"results": []}
+    return {"results": classify_batch(req.categories)}
 
 
 @app.post("/analyze")

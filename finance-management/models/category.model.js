@@ -16,7 +16,19 @@ const CategorySchema = new Schema({
         type: String,
         enum: ['income', 'expense'],
         default: 'expense'
-    }
+    },
+    // Semantic group assigned by the AI classifier
+    group: {
+        type: String,
+        enum: ['essential', 'discretionary', 'savings', 'social', 'income', 'other'],
+        default: 'other',
+    },
+    groupConfidence: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 1,
+    },
 }, {
     timestamps: true
 });

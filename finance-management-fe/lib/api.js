@@ -272,6 +272,20 @@ export const getSmartRecommendations = () =>
     headers: authHeaders(),
   }).then(handleResponse);
 
+export const getGroupSummary = (month) => {
+  const qs = new URLSearchParams({ tz: browserTz() });
+  if (month) qs.set('month', month);
+  return fetch(`${BASE_URL}/api/category/group-summary?${qs}`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+};
+
+export const classifyAllCategories = () =>
+  fetch(`${BASE_URL}/api/category/classify-all`, {
+    method: 'POST',
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 // Returns a raw Response (CSV blob) — do not call .then(handleResponse)
 export const exportTransactions = (params = {}) => {
   const qs = new URLSearchParams({ tz: browserTz(), ...params });

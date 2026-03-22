@@ -17,6 +17,7 @@ const Snapshot = require('../models/snapshot.model');
 const Preference = require('../models/preference.model');
 const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
+const { classifyCategories } = require('../helpers/categoryClassifier');
 
 // Fire-and-forget: delete cached ML insight for a specific month so next read regenerates
 const invalidateMLInsight = (userId, yearMonth) => {
@@ -114,6 +115,19 @@ const addTransaction = async (req, res, next) => {
             }
         }
         const resolvedCategory = category.name;
+
+        // Fire-and-forget: classify new/unclassified categories so group is available for insights
+        if (category.group === 'other' || !category.group) {
+            classifyCategories([nameLower]).then(results => {
+                const r = results[nameLower];
+                if (r && r.group && r.group !== 'other') {
+                    Category.updateOne(
+                        { _id: category._id },
+                        { $set: { group: r.group, groupConfidence: r.confidence } }
+                    ).catch(() => {});
+                }
+            }).catch(() => {});
+        }
 
         // Validate currency
         const processedCurrency = transactionDTO.currency.toLowerCase();

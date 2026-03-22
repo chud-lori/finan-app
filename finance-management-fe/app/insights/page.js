@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnomalies, getExplainability, getTimeToZero, getMLInsights, refreshMLInsights } from '@/lib/api';
+import { getAnomalies, getExplainability, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, classifyAllCategories } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -458,6 +458,110 @@ function RuleBasedAnomalyList({ data }) {
   );
 }
 
+// ── Spending by Category Group ────────────────────────────────────────────────
+
+const GROUP_META = {
+  essential:     { label: 'Essential',     icon: '🏠', bar: 'bg-teal-500',    badge: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400',    desc: 'Rent, food, utilities, transport, health' },
+  discretionary: { label: 'Discretionary', icon: '🎯', bar: 'bg-violet-500',  badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400', desc: 'Dining out, shopping, travel, entertainment' },
+  savings:       { label: 'Savings',       icon: '💰', bar: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400', desc: 'Investments, emergency fund, deposits' },
+  social:        { label: 'Social',        icon: '🤝', bar: 'bg-amber-500',   badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',   desc: 'Gifts, donations, sharing, family' },
+  income:        { label: 'Income',        icon: '📥', bar: 'bg-blue-500',    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',    desc: 'Salary, freelance, dividends' },
+  other:         { label: 'Other',         icon: '📦', bar: 'bg-gray-400',    badge: 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400',    desc: 'Unclassified categories' },
+};
+
+function GroupBreakdown({ data, onReclassify, reclassifying }) {
+  const formatAmount = useFormatAmount();
+  const [expanded, setExpanded] = useState(null);
+  if (!data?.groups?.length) return (
+    <div className="p-8 text-center space-y-2">
+      <p className="text-2xl">📂</p>
+      <p className="text-sm text-gray-500 dark:text-slate-400">No spending data this month</p>
+    </div>
+  );
+
+  const maxPct = Math.max(...data.groups.map(g => g.pct), 1);
+
+  return (
+    <div className="p-5">
+      {/* Bar chart */}
+      <div className="flex h-4 rounded-full overflow-hidden gap-0.5 mb-5">
+        {data.groups.map(g => {
+          const meta = GROUP_META[g.group] ?? GROUP_META.other;
+          return (
+            <div
+              key={g.group}
+              className={`${meta.bar} transition-all duration-700 cursor-pointer hover:opacity-80`}
+              style={{ width: `${g.pct}%` }}
+              title={`${meta.label}: ${g.pct}%`}
+              onClick={() => setExpanded(expanded === g.group ? null : g.group)}
+            />
+          );
+        })}
+      </div>
+
+      {/* Group rows */}
+      <div className="space-y-3">
+        {data.groups.map(g => {
+          const meta = GROUP_META[g.group] ?? GROUP_META.other;
+          const isOpen = expanded === g.group;
+          return (
+            <div key={g.group}>
+              <button
+                className="w-full flex items-center gap-3 text-left hover:bg-gray-50 dark:hover:bg-slate-800/50 rounded-xl px-2 py-1.5 -mx-2 transition-colors"
+                onClick={() => setExpanded(isOpen ? null : g.group)}
+              >
+                <span className="text-base shrink-0">{meta.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-slate-200">{meta.label}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${meta.badge}`}>{g.pct}%</span>
+                  </div>
+                  <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className={`h-1.5 rounded-full ${meta.bar} transition-all duration-700`} style={{ width: `${(g.pct / maxPct) * 100}%` }} />
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-slate-100">{formatAmount(g.total)}</p>
+                  <p className="text-xs text-gray-400">{g.categories.length} cat.</p>
+                </div>
+                <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Expanded sub-categories */}
+              {isOpen && (
+                <div className="ml-8 mt-1 mb-2 space-y-1">
+                  {g.categories.map(c => (
+                    <div key={c.name} className="flex items-center justify-between py-1 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800/40">
+                      <span className="text-xs text-gray-600 dark:text-slate-400 capitalize">{c.name}</span>
+                      <span className="text-xs font-semibold tabular-nums text-gray-700 dark:text-slate-300">{formatAmount(c.total)}</span>
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-gray-400 px-2 pt-1 italic">{meta.desc}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between">
+        <p className="text-xs text-gray-400">Total expenses this month</p>
+        <p className="text-sm font-bold text-gray-700 dark:text-slate-300">{formatAmount(data.total)}</p>
+      </div>
+
+      <button
+        onClick={onReclassify}
+        disabled={reclassifying}
+        className="mt-3 w-full text-xs text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors disabled:opacity-40 text-center"
+      >
+        {reclassifying ? 'Classifying…' : '↻ Re-classify categories'}
+      </button>
+    </div>
+  );
+}
+
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
 function SectionSkeleton() {
@@ -505,6 +609,9 @@ export default function InsightsPage() {
   const [mlMeta,       setMlMeta]       = useState(null); // { ts, fromCache }
   const [mlStale,      setMlStale]      = useState(false);
   const [mlUnavailable, setMlUnavailable] = useState(false);
+  const [groups,       setGroups]       = useState(null);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [reclassifying, setReclassifying] = useState(false);
   const [loading,      setLoading]      = useState({ ttz: true, explain: true, anomaly: true, ml: true });
   const [refreshing,   setRefreshing]   = useState(false);
   const [errors,       setErrors]       = useState({});
@@ -532,6 +639,19 @@ export default function InsightsPage() {
     load('explain', getExplainability, setExplain);
     load('anomaly', getAnomalies,      setAnomaly);
 
+    // Kick off background classification then fetch group summary
+    classifyAllCategories().catch(() => {});
+    (async () => {
+      try {
+        const res = await getGroupSummary();
+        setGroups(res.data);
+      } catch {
+        // non-fatal — section just won't show
+      } finally {
+        setGroupsLoading(false);
+      }
+    })();
+
     // ML insights — apply metadata separately
     (async () => {
       try {
@@ -544,6 +664,19 @@ export default function InsightsPage() {
       }
     })();
   }, []);
+
+  const handleReclassify = async () => {
+    setReclassifying(true);
+    try {
+      await classifyAllCategories();
+      const res = await getGroupSummary();
+      setGroups(res.data);
+    } catch {
+      // silent
+    } finally {
+      setReclassifying(false);
+    }
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -630,6 +763,17 @@ export default function InsightsPage() {
                 : <div className="p-8 text-center text-sm text-gray-500">No spending data this month yet.</div>
               )}
             </Section>
+
+            {/* Spending by Category Group */}
+            <div className="lg:col-span-2">
+              <Section
+                title="📂 Spending by Group"
+                subtitle="How your expenses break down by life category — essential, discretionary, savings, and more"
+                loading={groupsLoading}
+              >
+                <GroupBreakdown data={groups} onReclassify={handleReclassify} reclassifying={reclassifying} />
+              </Section>
+            </div>
 
             {/* Spending Alerts — ML or rule-based fallback */}
             <div className="lg:col-span-2">
