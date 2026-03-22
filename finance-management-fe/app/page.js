@@ -1,12 +1,10 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import dynamic from 'next/dynamic';
 import Reveal from '@/components/Reveal';
 import LandingNav from '@/components/LandingNav';
 import LandingHeroCTA from '@/components/LandingHeroCTA';
 import ForceLightMode from '@/components/ForceLightMode';
-
-const HeroParticles = dynamic(() => import('@/components/HeroParticles'), { ssr: false });
+import HeroParticles from '@/components/HeroParticles';
 
 const SITE_URL = 'https://finance.lori.my.id';
 const SITE_NAME = 'Finan App';
