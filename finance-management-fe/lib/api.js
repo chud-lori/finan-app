@@ -267,6 +267,11 @@ export const getGamificationSummary = () =>
     headers: authHeaders(),
   }).then(handleResponse);
 
+export const getSmartRecommendations = () =>
+  fetch(`${BASE_URL}/api/recommendations?tz=${encodeURIComponent(browserTz())}`, {
+    headers: authHeaders(),
+  }).then(handleResponse);
+
 // Returns a raw Response (CSV blob) — do not call .then(handleResponse)
 export const exportTransactions = (params = {}) => {
   const qs = new URLSearchParams({ tz: browserTz(), ...params });

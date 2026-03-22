@@ -11,6 +11,7 @@ import Tooltip from '@/components/Tooltip';
 import { useToast } from '@/components/ToastContext';
 import SwipeToDelete from '@/components/SwipeToDelete';
 import GamificationBanner from '@/components/GamificationBanner';
+import SmartNudges from '@/components/SmartNudges';
 
 const MONTH_LABELS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LIMIT = 20;
@@ -348,6 +349,7 @@ export default function DashboardPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
 
           <GamificationBanner />
+          <SmartNudges />
 
           {/* Stats */}
           {loading && !data.transactions.length ? <SkeletonStatCards /> : (

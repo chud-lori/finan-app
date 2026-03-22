@@ -85,6 +85,7 @@ const transactionRoutes = require('./routers/transaction');
 const goalRoutes = require('./routers/goal');
 const profileRoutes = require('./routers/profile');
 const gamificationRoutes = require('./routers/gamification');
+const recommendationRoutes = require('./routers/recommendation');
 // Routes
 app.get("/", (req, res) => res.json("HEHHHH"));
 app.use('/api/auth', authRoutes);
@@ -92,6 +93,7 @@ app.use('/api/transaction', transactionRoutes);
 app.use('/api/goal', goalRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/gamification', gamificationRoutes);
+app.use('/api/recommendations', recommendationRoutes);
 // views
 // app.get('/', (req, res, next) => {
 //     res.render('./public/index');
