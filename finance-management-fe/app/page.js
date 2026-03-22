@@ -77,18 +77,21 @@ const TESTIMONIALS = [
     role: 'Freelance Designer',
     avatar: 'RS',
     text: 'I finally know where my money goes every month. The FIRE calculator alone changed how I think about saving.',
+    anim: 'left',
   },
   {
     name: 'Budi H.',
     role: 'Software Engineer',
     avatar: 'BH',
     text: 'Imported 3 months of bank CSV in one go, categories auto-filled. The AI anomaly detection caught a duplicate charge I missed.',
+    anim: 'up',
   },
   {
     name: 'Dewi P.',
     role: 'Small Business Owner',
     avatar: 'DP',
     text: 'The tax estimator saves me from surprises every year. Everything is free — I keep waiting for the upsell that never comes.',
+    anim: 'right',
   },
 ];
 
@@ -291,7 +294,13 @@ export default function LandingPage() {
                     <span key={n} className="text-xs text-gray-400 px-2.5 py-1 rounded-lg hidden sm:block hover:bg-gray-50">{n}</span>
                   ))}
                 </div>
-                <div className="w-20 h-6 bg-teal-600 rounded-lg" />
+                <div className="flex items-center gap-1.5 px-2.5 py-1 btn-cta rounded-lg text-white shadow-sm shadow-teal-300/40">
+                  <div className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[8px] font-bold shrink-0">F</div>
+                  <span className="text-[10px] font-semibold hidden sm:block">Open App</span>
+                  <svg className="w-2.5 h-2.5 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                </div>
               </div>
               {/* Stat cards */}
               <div className="p-4 sm:p-5 bg-gray-50/80">
@@ -342,7 +351,7 @@ export default function LandingPage() {
         {/* ── Features ── */}
         <section id="features" className="py-24 bg-white">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
-            <Reveal className="text-center mb-14">
+            <Reveal variant="blur" className="text-center mb-14">
               <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Features</p>
               <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">Everything you need</h2>
               <p className="text-gray-500 max-w-xl mx-auto">One app for tracking, analytics, reporting, AI insights, and planning. No spreadsheet juggling.</p>
@@ -447,7 +456,7 @@ export default function LandingPage() {
 
               {/* Text content */}
               <div className="flex-1">
-                <Reveal>
+                <Reveal variant="right">
                   <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Mobile</p>
                   <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4 leading-tight">
                     Feels like a native app.<br />
@@ -473,7 +482,7 @@ export default function LandingPage() {
                 <Reveal>
                   <div className="mt-8 flex items-center gap-3">
                     <Link href="/register"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-200 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl btn-cta text-white text-sm font-semibold shadow-md shadow-teal-300/30 hover:shadow-lg hover:shadow-teal-300/50 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
                       Try it on your phone
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
@@ -492,7 +501,7 @@ export default function LandingPage() {
           <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-teal-50/40" />
           <div aria-hidden className="absolute top-0 right-0 w-96 h-96 rounded-full bg-teal-100/30 blur-3xl pointer-events-none" />
           <div className="relative max-w-6xl mx-auto px-4 sm:px-6">
-            <Reveal className="text-center mb-14">
+            <Reveal variant="blur" className="text-center mb-14">
               <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Planner</p>
               <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">10 financial planning tools</h2>
               <p className="text-gray-500 max-w-xl mx-auto">From daily spending checks to retirement planning — each tool gives instant, actionable numbers.</p>
@@ -504,7 +513,7 @@ export default function LandingPage() {
             </div>
             <Reveal className="text-center">
               <Link href="/register"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-200 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl btn-cta text-white text-sm font-semibold shadow-md shadow-teal-300/30 hover:shadow-lg hover:shadow-teal-300/50 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
                 Try all tools free
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
@@ -517,7 +526,7 @@ export default function LandingPage() {
         {/* ── How it works ── */}
         <section id="how" className="py-24 bg-white">
           <div className="max-w-5xl mx-auto px-4 sm:px-6">
-            <Reveal className="text-center mb-16">
+            <Reveal variant="blur" className="text-center mb-16">
               <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Quick start</p>
               <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">Up and running in minutes</h2>
               <p className="text-gray-500 max-w-xl mx-auto">No complex setup, no tutorials. Sign up and start adding transactions.</p>
@@ -542,7 +551,7 @@ export default function LandingPage() {
         {/* ── Why Finan App ── */}
         <section className="py-20 bg-white">
           <div className="max-w-5xl mx-auto px-4 sm:px-6">
-            <Reveal className="text-center mb-12">
+            <Reveal variant="blur" className="text-center mb-12">
               <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Why choose us</p>
               <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">Built for real people</h2>
               <p className="text-gray-500 max-w-xl mx-auto">No bloat, no subscription, no data selling. Just a fast, honest finance tool.</p>
@@ -553,19 +562,22 @@ export default function LandingPage() {
                   icon: '🔒',
                   title: 'Private by design',
                   desc: 'No ads, no trackers, no data brokers. bcrypt passwords, JWT token versioning, and zero third-party analytics. Your data is yours alone.',
+                  anim: 'left',
                 },
                 {
                   icon: '⚡',
                   title: 'Fully free, always',
                   desc: 'No credit card required. No freemium gates. Every feature — tracking, analytics, all 10 planning tools, AI insights — is 100% free.',
+                  anim: 'up',
                 },
                 {
                   icon: '🌏',
                   title: 'Multi-currency ready',
                   desc: 'Supports 10+ currencies with dot or comma formatting preferences. Built-in local tax estimators. Works wherever you are.',
+                  anim: 'right',
                 },
-              ].map(({ icon, title, desc }, i) => (
-                <Reveal key={title} delay={`${i * 100}ms`}>
+              ].map(({ icon, title, desc, anim }, i) => (
+                <Reveal key={title} delay={`${i * 100}ms`} variant={anim}>
                   <div className="flex gap-4 p-5 rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-md transition-all duration-200 h-full">
                     <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-xl shrink-0">{icon}</div>
                     <div>
@@ -582,14 +594,14 @@ export default function LandingPage() {
         {/* ── Testimonials ── */}
         <section className="py-24 bg-white">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
-            <Reveal className="text-center mb-14">
+            <Reveal variant="blur" className="text-center mb-14">
               <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Stories</p>
               <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">What people are saying</h2>
               <p className="text-gray-500 max-w-xl mx-auto">Real people, real finances — finally under control.</p>
             </Reveal>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              {TESTIMONIALS.map(({ name, role, avatar, text }, i) => (
-                <Reveal key={name} delay={`${i * 100}ms`}>
+              {TESTIMONIALS.map(({ name, role, avatar, text, anim }, i) => (
+                <Reveal key={name} delay={`${i * 100}ms`} variant={anim}>
                   <div className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-lg hover:shadow-teal-100/50 transition-all duration-300 h-full">
                     <div className="flex items-center gap-1">
                       {[...Array(5)].map((_, s) => (
@@ -617,7 +629,7 @@ export default function LandingPage() {
         <section className="py-24 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-teal-50/30" />
           <div className="relative max-w-6xl mx-auto px-4 sm:px-6">
-            <Reveal className="text-center mb-14">
+            <Reveal variant="blur" className="text-center mb-14">
               <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Security & Privacy</p>
               <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">Your data is safe with us</h2>
               <p className="text-gray-500 max-w-xl mx-auto">
@@ -654,7 +666,7 @@ export default function LandingPage() {
                 { val: 'CSV', label: 'Import & export' },
                 { val: '$0',  label: 'Forever free' },
               ].map(({ val, label }, i) => (
-                <Reveal key={label} delay={`${i * 100}ms`}>
+                <Reveal key={label} delay={`${i * 100}ms`} variant="scale">
                   <p className="text-4xl font-black mb-1">{val}</p>
                   <p className="text-sm text-teal-100">{label}</p>
                 </Reveal>

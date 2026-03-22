@@ -218,12 +218,27 @@ body {
 .delay-800 { animation-delay: 800ms; }
 
 /* Reveal: hidden until IntersectionObserver fires */
-.reveal          { opacity: 0; transform: translateY(24px); transition: opacity 0.6s cubic-bezier(0.16,1,0.3,1), transform 0.6s cubic-bezier(0.16,1,0.3,1); }
+.reveal          { opacity: 0; transform: translateY(28px); transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1); }
 .reveal.visible  { opacity: 1; transform: translateY(0); }
-.reveal-left          { opacity: 0; transform: translateX(-24px); transition: opacity 0.6s cubic-bezier(0.16,1,0.3,1), transform 0.6s cubic-bezier(0.16,1,0.3,1); }
+.reveal-left          { opacity: 0; transform: translateX(-32px); transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1); }
 .reveal-left.visible  { opacity: 1; transform: translateX(0); }
-.reveal-scale          { opacity: 0; transform: scale(0.94); transition: opacity 0.6s cubic-bezier(0.16,1,0.3,1), transform 0.6s cubic-bezier(0.16,1,0.3,1); }
+.reveal-right          { opacity: 0; transform: translateX(32px); transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1); }
+.reveal-right.visible  { opacity: 1; transform: translateX(0); }
+.reveal-scale          { opacity: 0; transform: scale(0.93); transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1); }
 .reveal-scale.visible  { opacity: 1; transform: scale(1); }
+.reveal-blur          { opacity: 0; transform: scale(0.97); filter: blur(6px); transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1), filter 0.7s cubic-bezier(0.16,1,0.3,1); }
+.reveal-blur.visible  { opacity: 1; transform: scale(1); filter: blur(0); }
+
+/* CTA button shimmer */
+@keyframes btn-shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+.btn-cta {
+  background: linear-gradient(90deg, #0d9488 0%, #0f9a8a 40%, #5eead4 50%, #0f9a8a 60%, #0d9488 100%);
+  background-size: 200% auto;
+  animation: btn-shimmer 4s linear infinite;
+}
 
 /* ── react-day-picker overrides ── */
 .rdp-themed {

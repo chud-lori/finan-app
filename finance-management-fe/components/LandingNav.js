@@ -33,7 +33,7 @@ export default function LandingNav() {
           <div className="hidden sm:flex items-center gap-2">
             {loggedIn ? (
               <Link href="/dashboard"
-                className="px-4 py-1.5 rounded-xl text-sm font-semibold bg-teal-600 text-white hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-200 active:scale-95 transition-all">
+                className="px-4 py-1.5 rounded-xl text-sm font-semibold btn-cta text-white shadow-sm shadow-teal-300/30 hover:shadow-md hover:shadow-teal-300/50 active:scale-95 transition-all">
                 Dashboard
               </Link>
             ) : (
@@ -43,7 +43,7 @@ export default function LandingNav() {
                   Sign in
                 </Link>
                 <Link href="/register"
-                  className="px-3.5 py-1.5 rounded-xl text-sm font-semibold bg-teal-600 text-white hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-200 active:scale-95 transition-all">
+                  className="px-3.5 py-1.5 rounded-xl text-sm font-semibold btn-cta text-white shadow-sm shadow-teal-300/30 hover:shadow-md hover:shadow-teal-300/50 active:scale-95 transition-all">
                   Get started
                 </Link>
               </>
@@ -80,7 +80,7 @@ export default function LandingNav() {
             <div className="border-t border-gray-100 mt-2 pt-2 flex flex-col gap-1">
               {loggedIn ? (
                 <Link href="/dashboard" onClick={() => setOpen(false)}
-                  className="px-3 py-2.5 rounded-xl text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors text-center">
+                  className="px-3 py-2.5 rounded-xl text-sm font-semibold text-white btn-cta text-center">
                   Go to Dashboard
                 </Link>
               ) : (
@@ -90,7 +90,7 @@ export default function LandingNav() {
                     Sign in
                   </Link>
                   <Link href="/register" onClick={() => setOpen(false)}
-                    className="px-3 py-2.5 rounded-xl text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors text-center">
+                    className="px-3 py-2.5 rounded-xl text-sm font-semibold text-white btn-cta text-center">
                     Get started &mdash; it&apos;s free
                   </Link>
                 </>

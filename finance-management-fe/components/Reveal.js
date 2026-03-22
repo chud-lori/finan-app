@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 
 // Wraps children with a scroll-triggered reveal animation.
-// variant: 'up' | 'left' | 'scale'
+// variant: 'up' | 'left' | 'right' | 'scale' | 'blur'
 // delay: CSS delay string e.g. '150ms'
 export default function Reveal({ children, className = '', variant = 'up', delay = '0ms', threshold = 0.12 }) {
   const ref = useRef(null);
@@ -10,7 +10,12 @@ export default function Reveal({ children, className = '', variant = 'up', delay
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const cls = variant === 'left' ? 'reveal-left' : variant === 'scale' ? 'reveal-scale' : 'reveal';
+    const cls =
+      variant === 'left'  ? 'reveal-left'  :
+      variant === 'right' ? 'reveal-right' :
+      variant === 'scale' ? 'reveal-scale' :
+      variant === 'blur'  ? 'reveal-blur'  :
+                            'reveal';
     el.classList.add(cls);
     el.style.transitionDelay = delay;
 

@@ -9,11 +9,12 @@ export default function LandingHeroCTA() {
     setLoggedIn(!!localStorage.getItem('token'));
   }, []);
 
+  const primaryCls = "relative inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl btn-cta text-white font-semibold text-base shadow-lg shadow-teal-300/40 hover:shadow-xl hover:shadow-teal-300/60 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 overflow-hidden";
+
   return (
     <div className="animate-fade-in-up delay-300 flex flex-col sm:flex-row gap-3 justify-center">
       {loggedIn ? (
-        <Link href="/dashboard"
-          className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl bg-teal-600 text-white font-semibold text-base hover:bg-teal-700 hover:shadow-xl hover:shadow-teal-200/70 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
+        <Link href="/dashboard" className={primaryCls}>
           Go to Dashboard
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
@@ -21,8 +22,7 @@ export default function LandingHeroCTA() {
         </Link>
       ) : (
         <>
-          <Link href="/register"
-            className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl bg-teal-600 text-white font-semibold text-base hover:bg-teal-700 hover:shadow-xl hover:shadow-teal-200/70 hover:-translate-y-0.5 active:scale-95 transition-all duration-200">
+          <Link href="/register" className={primaryCls}>
             Start for free
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
