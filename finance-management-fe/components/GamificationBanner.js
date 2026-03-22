@@ -41,7 +41,7 @@ function StyleInjector() {
 }
 
 // ── Streak Badge ───────────────────────────────────────────────────────────────
-function StreakBadge({ streak }) {
+function StreakBadge({ streak, onDismiss }) {
   if (!streak || streak.current < 2) return null;
 
   const next      = streak.current < 7 ? 7 : streak.current < 14 ? 14 : streak.current < 30 ? 30 : null;
@@ -61,6 +61,18 @@ function StreakBadge({ streak }) {
         animation: 'gam-slide-in 0.4s ease both',
       }}
     >
+      {/* Dismiss — only shown when already logged today (not actionable) */}
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors z-10"
+          aria-label="Dismiss"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
       {/* Shimmer sweep */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -235,7 +247,7 @@ const MILESTONE_THEME = {
   25:  { ring: '#f59e0b', glow: 'rgba(245,158,11,0.35)', label: 'First 25%!',        bg: 'from-amber-500/10 to-amber-500/5',  border: 'border-amber-200',  text: 'text-amber-700'  },
 };
 
-function GoalRing({ goal, index }) {
+function GoalRing({ goal, index, onDismiss }) {
   const r            = 26;
   const circ         = +(2 * Math.PI * r).toFixed(2);
   const filled       = +(circ * Math.min(goal.progress, 100) / 100).toFixed(2);
@@ -249,6 +261,15 @@ function GoalRing({ goal, index }) {
       className={`relative flex items-center gap-3.5 rounded-2xl border bg-gradient-to-r ${theme.bg} ${theme.border} px-4 py-3 overflow-hidden`}
       style={{ animation: `gam-slide-in 0.4s ease ${delay} both` }}
     >
+      <button
+        onClick={onDismiss}
+        className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full bg-black/5 hover:bg-black/10 transition-colors"
+        aria-label="Dismiss"
+      >
+        <svg className="w-2.5 h-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
       {/* Pulsing glow ring behind SVG */}
       <div className="relative shrink-0">
         <div
@@ -306,32 +327,87 @@ function GoalRing({ goal, index }) {
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
-const DISMISS_KEY = 'gamification_budget_win_dismissed';
+// ── Dismiss helpers (localStorage) ────────────────────────────────────────────
+const STREAK_DISMISS_KEY  = 'gam_streak_dismissed_';   // + YYYY-MM-DD
+const BUDGET_DISMISS_KEY  = 'gam_budget_dismissed_';   // + YYYY-MM
+const GOAL_DISMISS_KEY    = 'gam_goal_dismissed_';     // + goalId_milestone
 
+const today = () => new Date().toISOString().slice(0, 10);      // YYYY-MM-DD
+const thisMonth = () => new Date().toISOString().slice(0, 7);   // YYYY-MM
+
+const MILESTONE_DAYS = new Set([7, 14, 30, 60, 100, 365]);
+
+function lsGet(key)      { try { return localStorage.getItem(key); } catch { return null; } }
+function lsSet(key, val) { try { localStorage.setItem(key, val);   } catch {}              }
+
+// ── Main Component ─────────────────────────────────────────────────────────────
 export default function GamificationBanner() {
-  const [data, setData]                     = useState(null);
-  const [budgetWinDismissed, setBudgetWinDismissed] = useState(false);
+  const [data, setData] = useState(null);
+  const [dismissed, setDismissed] = useState({
+    streak:    false,
+    budgetWin: false,
+    goals:     {},   // { [goalId_milestone]: true }
+  });
   const formatAmount = useFormatAmount();
 
   useEffect(() => {
-    try { setBudgetWinDismissed(!!sessionStorage.getItem(DISMISS_KEY)); } catch {}
+    // Read all dismiss states from localStorage up-front
+    setDismissed({
+      streak:    !!lsGet(STREAK_DISMISS_KEY + today()),
+      budgetWin: !!lsGet(BUDGET_DISMISS_KEY + thisMonth()),
+      goals:     {},
+    });
     getGamificationSummary()
-      .then(res => setData(res.data))
+      .then(res => {
+        const d = res.data;
+        // Load per-goal dismissals once we know which goals exist
+        const goalDismissals = {};
+        (d?.goals || []).forEach(g => {
+          const key = `${g.id}_${g.milestone}`;
+          goalDismissals[key] = !!lsGet(GOAL_DISMISS_KEY + key);
+        });
+        setDismissed(prev => ({ ...prev, goals: goalDismissals }));
+        setData(d);
+      })
       .catch(() => {});
   }, []);
 
+  const dismissStreak = () => {
+    lsSet(STREAK_DISMISS_KEY + today(), '1');
+    setDismissed(prev => ({ ...prev, streak: true }));
+  };
+
   const dismissBudgetWin = () => {
-    setBudgetWinDismissed(true);
-    try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch {}
+    lsSet(BUDGET_DISMISS_KEY + thisMonth(), '1');
+    setDismissed(prev => ({ ...prev, budgetWin: true }));
+  };
+
+  const dismissGoal = (goalId, milestone) => {
+    const key = `${goalId}_${milestone}`;
+    lsSet(GOAL_DISMISS_KEY + key, '1');
+    setDismissed(prev => ({ ...prev, goals: { ...prev.goals, [key]: true } }));
   };
 
   if (!data) return null;
 
-  const showStreak    = data.streak?.current >= 2;
-  const showBudgetWin = data.budgetWin?.won && !budgetWinDismissed;
-  const showGoals     = data.goals?.some(g => g.milestone >= 25 && !g.achieved);
-  const activeGoals   = (data.goals || []).filter(g => g.milestone >= 25 && !g.achieved).slice(0, 3);
+  const streak = data.streak;
+
+  // Streak: always show when NOT logged today (actionable).
+  // When already logged, only show on milestone days or dismiss-able.
+  const isMilestoneStreak = MILESTONE_DAYS.has(streak?.current);
+  const showStreak =
+    streak?.current >= 2 &&
+    !dismissed.streak &&
+    (!streak.todayLogged || isMilestoneStreak);
+
+  // Budget win: show once per month, persisted via localStorage.
+  const showBudgetWin = data.budgetWin?.won && !dismissed.budgetWin;
+
+  // Goals: show only undismissed milestones ≥ 25.
+  const activeGoals = (data.goals || [])
+    .filter(g => g.milestone >= 25 && !g.achieved && !dismissed.goals[`${g.id}_${g.milestone}`])
+    .slice(0, 3);
+  const showGoals = activeGoals.length > 0;
 
   if (!showStreak && !showBudgetWin && !showGoals) return null;
 
@@ -339,13 +415,25 @@ export default function GamificationBanner() {
     <>
       <StyleInjector />
       <div className="flex flex-col gap-3 mb-6">
-        {showStreak && <StreakBadge streak={data.streak} />}
+        {showStreak && (
+          <StreakBadge
+            streak={streak}
+            onDismiss={streak.todayLogged ? dismissStreak : null}
+          />
+        )}
         {showBudgetWin && (
           <BudgetWinBanner win={data.budgetWin} formatAmount={formatAmount} onDismiss={dismissBudgetWin} />
         )}
         {showGoals && (
           <div className={`grid gap-2.5 ${activeGoals.length > 1 ? 'sm:grid-cols-2' : ''}`}>
-            {activeGoals.map((g, i) => <GoalRing key={g.id} goal={g} index={i} />)}
+            {activeGoals.map((g, i) => (
+              <GoalRing
+                key={`${g.id}_${g.milestone}`}
+                goal={g}
+                index={i}
+                onDismiss={() => dismissGoal(g.id, g.milestone)}
+              />
+            ))}
           </div>
         )}
       </div>
