@@ -1,6 +1,6 @@
 const express = require('express');
 const router  = express.Router();
-const { authenticateJWT } = require('../middleware/authJWT');
+const authenticateJWT = require('../middleware/authJWT');
 const limiter = require('../middleware/rateLimit');
 const { getSmartRecommendations } = require('../controllers/recommendation');
 
