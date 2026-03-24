@@ -207,7 +207,7 @@ function LandingFooter() {
           <Link href="/terms"   className="hover:text-teal-400 transition-colors">Terms</Link>
         </div>
         <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span>Built with Next.js + Tailwind · by</span>
+          <span>Built with Hehe · by</span>
           <a href="https://profile.lori.my.id/" target="_blank" rel="noopener noreferrer"
             className="text-teal-400 font-semibold hover:text-teal-300 transition-colors">Lori</a>
         </div>
