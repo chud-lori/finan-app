@@ -13,7 +13,8 @@ const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 const classifyAll = async (req, res) => {
     const userId = req.user.id;
     try {
-        const unclassified = await Category.find({ user: userId, group: 'other' })
+        // Skip categories the user has manually overridden
+        const unclassified = await Category.find({ user: userId, group: 'other', groupOverridden: { $ne: true } })
             .select('name').lean();
 
         if (!unclassified.length) {
@@ -113,4 +114,31 @@ const getGroupSummary = async (req, res) => {
     }
 };
 
-module.exports = { classifyAll, getGroupSummary };
+const VALID_GROUPS = ['essential', 'discretionary', 'savings', 'social', 'income', 'other'];
+
+/**
+ * PATCH /api/category/:name/group
+ * Lets the user manually override which spending group a category belongs to.
+ * Sets groupOverridden = true so classifyAll will not reset it.
+ */
+const setCategoryGroup = async (req, res) => {
+    const userId = req.user.id;
+    const name   = decodeURIComponent(req.params.name).trim();
+    const { group } = req.body;
+
+    if (!VALID_GROUPS.includes(group)) {
+        return res.status(400).json({ status: 0, message: `group must be one of: ${VALID_GROUPS.join(', ')}` });
+    }
+
+    const updated = await Category.findOneAndUpdate(
+        { user: userId, name: { $regex: new RegExp(`^${name}$`, 'i') } },
+        { $set: { group, groupOverridden: true, groupConfidence: 1 } },
+        { new: true }
+    ).lean();
+
+    if (!updated) return res.status(404).json({ status: 0, message: 'Category not found' });
+
+    return res.json({ status: 1, data: { name: updated.name, group: updated.group } });
+};
+
+module.exports = { classifyAll, getGroupSummary, setCategoryGroup };

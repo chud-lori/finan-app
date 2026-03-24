@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnomalies, getExplainability, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, classifyAllCategories } from '@/lib/api';
+import { getAnomalies, getExplainability, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, classifyAllCategories, setCategoryGroup } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -469,7 +469,16 @@ const GROUP_META = {
   other:         { label: 'Other',         icon: '📦', bar: 'bg-gray-400',    badge: 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400',    desc: 'Unclassified categories' },
 };
 
-function GroupBreakdown({ data, onReclassify, reclassifying }) {
+const GROUP_OPTIONS = [
+  { value: 'essential',     label: 'Essential',     icon: '🏠' },
+  { value: 'discretionary', label: 'Discretionary', icon: '🎯' },
+  { value: 'savings',       label: 'Savings',       icon: '💰' },
+  { value: 'social',        label: 'Social',        icon: '🤝' },
+  { value: 'income',        label: 'Income',        icon: '📥' },
+  { value: 'other',         label: 'Other',         icon: '📦' },
+];
+
+function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, movingCategory }) {
   const formatAmount = useFormatAmount();
   const [expanded, setExpanded] = useState(null);
   if (!data?.groups?.length) return (
@@ -532,12 +541,32 @@ function GroupBreakdown({ data, onReclassify, reclassifying }) {
               {/* Expanded sub-categories */}
               {isOpen && (
                 <div className="ml-8 mt-1 mb-2 space-y-1">
-                  {g.categories.map(c => (
-                    <div key={c.name} className="flex items-center justify-between py-1 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800/40">
-                      <span className="text-xs text-gray-600 dark:text-slate-400 capitalize">{c.name}</span>
-                      <span className="text-xs font-semibold tabular-nums text-gray-700 dark:text-slate-300">{formatAmount(c.total)}</span>
-                    </div>
-                  ))}
+                  {g.categories.map(c => {
+                    const isMoving = movingCategory === c.name;
+                    return (
+                      <div key={c.name} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800/40">
+                        <span className="flex-1 text-xs text-gray-600 dark:text-slate-400 capitalize truncate">{c.name}</span>
+                        <span className="text-xs font-semibold tabular-nums text-gray-700 dark:text-slate-300 shrink-0">{formatAmount(c.total)}</span>
+                        {/* Group picker */}
+                        {isMoving ? (
+                          <span className="w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                        ) : (
+                          <select
+                            value={g.group}
+                            onChange={(e) => onMoveCategory && onMoveCategory(c.name, e.target.value)}
+                            disabled={!!movingCategory}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Move to group"
+                            className="text-[10px] border border-gray-200 dark:border-slate-700 rounded-md px-1 py-0.5 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 cursor-pointer hover:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-40 shrink-0"
+                          >
+                            {GROUP_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
                   <p className="text-[10px] text-gray-400 px-2 pt-1 italic">{meta.desc}</p>
                 </div>
               )}
@@ -612,6 +641,7 @@ export default function InsightsPage() {
   const [groups,       setGroups]       = useState(null);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [reclassifying, setReclassifying] = useState(false);
+  const [movingCategory, setMovingCategory] = useState(null); // category name being moved
   const [loading,      setLoading]      = useState({ ttz: true, explain: true, anomaly: true, ml: true });
   const [refreshing,   setRefreshing]   = useState(false);
   const [errors,       setErrors]       = useState({});
@@ -675,6 +705,19 @@ export default function InsightsPage() {
       // silent
     } finally {
       setReclassifying(false);
+    }
+  };
+
+  const handleMoveCategory = async (categoryName, newGroup) => {
+    setMovingCategory(categoryName);
+    try {
+      await setCategoryGroup(categoryName, newGroup);
+      const res = await getGroupSummary();
+      setGroups(res.data);
+    } catch {
+      // silent — group stays as-is on failure
+    } finally {
+      setMovingCategory(null);
     }
   };
 
@@ -771,7 +814,7 @@ export default function InsightsPage() {
                 subtitle="How your expenses break down by life category — essential, discretionary, savings, and more"
                 loading={groupsLoading}
               >
-                <GroupBreakdown data={groups} onReclassify={handleReclassify} reclassifying={reclassifying} />
+                <GroupBreakdown data={groups} onReclassify={handleReclassify} reclassifying={reclassifying} onMoveCategory={handleMoveCategory} movingCategory={movingCategory} />
               </Section>
             </div>
 

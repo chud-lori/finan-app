@@ -17,7 +17,7 @@ const CategorySchema = new Schema({
         enum: ['income', 'expense'],
         default: 'expense'
     },
-    // Semantic group assigned by the AI classifier
+    // Semantic group assigned by the AI classifier (or overridden by the user)
     group: {
         type: String,
         enum: ['essential', 'discretionary', 'savings', 'social', 'income', 'other'],
@@ -28,6 +28,11 @@ const CategorySchema = new Schema({
         default: 0,
         min: 0,
         max: 1,
+    },
+    // When true, the user has manually set this group — classifyAll will not overwrite it
+    groupOverridden: {
+        type: Boolean,
+        default: false,
     },
 }, {
     timestamps: true

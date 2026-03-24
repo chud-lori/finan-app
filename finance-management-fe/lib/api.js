@@ -247,3 +247,10 @@ export const getGroupSummary = (month) => {
 
 export const classifyAllCategories = () =>
   apiFetch('/api/category/classify-all', { method: 'POST' });
+
+export const setCategoryGroup = (categoryName, group) =>
+  apiFetch(`/api/category/${encodeURIComponent(categoryName)}/group`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ group }),
+  });
