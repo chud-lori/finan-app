@@ -54,7 +54,7 @@ const getSmartRecommendations = async (req, res) => {
                 icon: '🎯',
                 title: `${Math.round(savingsRate)}% savings rate this month`,
                 body:  `You're saving ${Math.round(savingsRate)}% of your income — above the recommended 20%. See when you can reach financial independence.`,
-                cta:  { label: 'Try FIRE Calculator', href: '/recommendation' },
+                cta:  { label: 'Try FIRE Calculator', href: '/recommendation?tool=fire' },
             });
         } else if (savingsRate !== null && income > 0 && expense > income) {
             const overpct = Math.round(((expense - income) / income) * 100);
@@ -64,7 +64,7 @@ const getSmartRecommendations = async (req, res) => {
                 icon: '⚠️',
                 title: 'Spending exceeds income this month',
                 body:  `Expenses are ${overpct}% over your income this month. The 50/30/20 rule can help you realign your spending.`,
-                cta:  { label: 'Check 50/30/20 Budget', href: '/recommendation' },
+                cta:  { label: 'Check 50/30/20 Budget', href: '/recommendation?tool=budget5030' },
             });
         }
 
@@ -114,7 +114,7 @@ const getSmartRecommendations = async (req, res) => {
                     icon: '🛡️',
                     title: 'No emergency fund detected',
                     body:  `Your balance covers ~${monthsCovered.toFixed(1)} months of expenses. Experts recommend 3–6 months as a safety net.`,
-                    cta:  { label: 'Set an Emergency Fund Goal', href: '/recommendation' },
+                    cta:  { label: 'Set an Emergency Fund Goal', href: '/recommendation?tool=emergency' },
                 });
             }
         }
@@ -133,7 +133,7 @@ const getSmartRecommendations = async (req, res) => {
                     icon: '🎯',
                     title: `"${goal.description}" is ${pct}% funded`,
                     body:  'This goal is a bit behind schedule. Adding even a small amount now builds momentum.',
-                    cta:  { label: 'Add savings', href: '/recommendation' },
+                    cta:  { label: 'Add savings', href: '/recommendation?tool=goal' },
                 });
                 break; // surface at most one goal warning
             }

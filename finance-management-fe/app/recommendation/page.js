@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { getRecommendation, getProfile, addGoal, getAllGoals, updateGoal, deleteGoal } from '@/lib/api';
@@ -1516,7 +1517,11 @@ const TOOLS = [
 ];
 
 export default function RecommendationPage() {
-  const [active,      setActive]      = useState('afford');
+  const searchParams = useSearchParams();
+  const TOOL_IDS = TOOLS.map(t => t.id);
+  const initialTool = TOOL_IDS.includes(searchParams.get('tool')) ? searchParams.get('tool') : 'afford';
+
+  const [active,      setActive]      = useState(initialTool);
   const [savedBudget, setSavedBudget] = useState(0);
 
   useEffect(() => {

@@ -392,13 +392,8 @@ export default function AddPage() {
                   </Field>
 
                   <Field label="Category">
-                    <CategoryCombobox
-                      value={form.category}
-                      onChange={(val) => setForm(f => ({ ...f, category: val }))}
-                      categories={[...new Set([form.category, ...categories, ...suggestions].filter(Boolean))]}
-                    />
                     {suggestions.length > 0 && (
-                      <div className="mt-2">
+                      <div className="mb-2">
                         <p className="text-xs text-gray-400 mb-1.5">✨ Suggested</p>
                         <div className="flex flex-wrap gap-1.5">
                           {suggestions.map(s => (
@@ -418,6 +413,11 @@ export default function AddPage() {
                         </div>
                       </div>
                     )}
+                    <CategoryCombobox
+                      value={form.category}
+                      onChange={(val) => setForm(f => ({ ...f, category: val }))}
+                      categories={[...new Set([form.category, ...categories, ...suggestions].filter(Boolean))]}
+                    />
                   </Field>
 
                   <Field label="Date & Time">

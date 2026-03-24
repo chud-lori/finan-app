@@ -29,6 +29,8 @@ KEYWORD_RULES: Dict[str, List[str]] = {
         # Food (basic)
         "food", "groceries", "grocery", "supermarket", "market", "pasar",
         "makan", "nasi", "warung", "beli makan", "sembako", "sayur",
+        "snack", "cemilan", "jajanan", "makanan", "minuman", "drinks",
+        "sarapan", "lunch", "dinner", "breakfast", "makan pagi", "makan siang", "makan malam",
         # Housing
         "rent", "rental", "housing", "kost", "kos", "kontrakan", "sewa rumah",
         "mortgage", "cicilan rumah", "ipl",
@@ -39,6 +41,8 @@ KEYWORD_RULES: Dict[str, List[str]] = {
         "transport", "transportation", "commute", "bus", "train", "mrt", "lrt",
         "ojek", "bensin", "fuel", "petrol", "bbm", "toll", "parkir",
         "transjakarta", "krl",
+        "motor", "motorcycle", "sepeda motor", "mobil", "car", "angkot", "angkutan",
+        "grab car", "gocar", "taksi", "taxi",
         # Health & medical
         "health", "medical", "medicine", "obat", "hospital", "rumah sakit",
         "clinic", "klinik", "dokter", "doctor", "pharmacy", "apotek",
