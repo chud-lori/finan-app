@@ -78,11 +78,15 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 ## Security
 
 - **Passwords hashed with bcrypt** (salt 10) — never stored in plaintext
-- **JWT with `tokenVersion`** — changing your password invalidates all existing sessions on all devices
+- **HttpOnly cookie sessions** — JWT never touches JavaScript or localStorage; XSS cannot steal it
+- **Stateful session store** — every request validated against a live MongoDB Session document; revoke = instant, no waiting for token expiry
+- **Per-device session management** — see and revoke any active session from the profile page
+- **Logout all devices** — deletes every session and bumps `tokenVersion`; old tokens are dead immediately
+- **Password change / reset** — automatically deletes all sessions across all devices
 - **Google OAuth** — sign in without a password; server-side token verification
 - **Email verification** — new accounts must verify before full access
 - **Anti-enumeration** — forgot-password always returns 200 regardless of whether the email exists
-- **CORS** restricted to the frontend origin only
+- **CORS** — restricted to the frontend origin with `credentials: true`
 - **Security headers** — `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`
 - **Input sanitization** — HTML tags and null bytes stripped from all transaction fields
 - **Rate limiting** — IP-based for auth endpoints, user-based for authenticated routes

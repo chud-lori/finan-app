@@ -8,7 +8,7 @@ Technical reference for setting up, developing, testing, and deploying Finan App
 |-------|-----------|
 | Backend | Node.js 22, Express.js |
 | Database | MongoDB 7 (Mongoose ODM) |
-| Auth | JWT (jsonwebtoken) + Google OAuth 2.0 (Passport.js) |
+| Auth | JWT (jsonwebtoken) in HttpOnly cookies + Google OAuth 2.0 (Passport.js) + stateful sessions (MongoDB) |
 | Password hashing | bcrypt (salt 10) |
 | Email | Resend SDK |
 | Error monitoring | Sentry (`@sentry/node` + `@sentry/nextjs`) |
@@ -60,6 +60,7 @@ finan-app/                          ← monorepo root
 │   │   └── profile.js              ← profile routes with rate limits
 │   ├── models/
 │   │   ├── user.model.js           ← password (bcrypt), tokenVersion, emailVerified, Google OAuth
+│   │   ├── session.model.js        ← stateful sessions: tokenHash, device info, TTL index (auto-expires)
 │   │   ├── balance.model.js        ← running balance per user
 │   │   ├── transaction.model.js    ← type enum: income | expense
 │   │   ├── category.model.js       ← scoped per user
@@ -74,7 +75,7 @@ finan-app/                          ← monorepo root
 │   │   ├── auth.dto.js
 │   │   └── goal.dto.js
 │   ├── middleware/
-│   │   ├── authJWT.js              ← JWT verification + tokenVersion check
+│   │   ├── authJWT.js              ← reads JWT from HttpOnly cookie, verifies signature, looks up Session doc
 │   │   ├── rateLimit.js            ← sliding-window limiter (byIp / byUser)
 │   │   └── log.js                  ← Morgan request logger
 │   ├── helpers/
@@ -246,9 +247,9 @@ Swagger UI (non-production only): http://localhost:3000/api-docs
 Seed default categories once after first start:
 
 ```bash
-# get a JWT by logging in, then:
-curl -X POST http://localhost:3000/api/transaction/category \
-  -H "Authorization: Bearer <token>"
+# login first to get the session cookie, then:
+make seed TOKEN=<unused>   # or use the Makefile target which handles the cookie jar
+# Alternatively, log in via the browser and use the app UI — categories are seeded automatically on first login
 ```
 
 ### 3. AI service
@@ -355,14 +356,17 @@ Swagger UI is available at `/api-docs` when `NODE_ENV !== production`.
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
 | POST | `/api/auth/register` | 10/min per IP | — | Create account, returns user + initial balance |
-| POST | `/api/auth/login` | 10/min per IP | — | Returns JWT |
-| GET | `/api/auth/check` | — | — | Verify token validity |
-| POST | `/api/auth/google/verify` | 20/min per IP | — | Verify Google id_token, return JWT |
-| PATCH | `/api/auth/password` | 5/min per user | ✓ | Change password (invalidates all sessions) |
-| POST | `/api/auth/logout-all` | 5/min per user | ✓ | Bump tokenVersion, invalidating all JWTs |
+| POST | `/api/auth/login` | 10/min per IP | — | Credentials login — sets HttpOnly session cookie |
+| GET | `/api/auth/check` | — | ✓ | Verify session validity, returns current user |
+| POST | `/api/auth/google/verify` | 20/min per IP | — | Verify Google id_token — sets HttpOnly session cookie |
+| POST | `/api/auth/logout` | — | ✓ | Delete current session + clear cookie |
+| POST | `/api/auth/logout-all` | 5/min per user | ✓ | Delete all sessions + bump tokenVersion + clear cookie |
+| GET | `/api/auth/sessions` | — | ✓ | List all active sessions with device info |
+| DELETE | `/api/auth/sessions/:id` | — | ✓ | Revoke a specific session (cannot revoke current) |
+| PATCH | `/api/auth/password` | 5/min per user | ✓ | Change password (deletes all sessions across all devices) |
 | DELETE | `/api/auth/account` | — | ✓ | Delete account and all associated data |
 | POST | `/api/auth/forgot-password` | 5/min per IP | — | Send password reset email (always returns 200) |
-| POST | `/api/auth/reset-password` | 10/min per IP | — | Validate token + set new password |
+| POST | `/api/auth/reset-password` | 10/min per IP | — | Validate token + set new password (deletes all sessions) |
 
 ### Transactions
 
@@ -411,7 +415,33 @@ Swagger UI is available at `/api-docs` when `NODE_ENV !== production`.
 
 ### Authentication & sessions
 
-JWT is signed with `SECRET_TOKEN`. Each token contains a `tv` (tokenVersion) field. On password change or logout-all, `tokenVersion` is incremented in the database, immediately invalidating all existing tokens. The `authJWT` middleware checks `tv` on every request.
+Auth uses HttpOnly cookie sessions backed by a MongoDB `Session` collection.
+
+**Token storage:** JWT is signed with `SECRET_TOKEN` and set as an HttpOnly, `SameSite: none` (production) / `lax` (dev) cookie — never returned in the response body and never readable from JavaScript.
+
+**Session document:** On every login or Google OAuth, `createSession()`:
+1. SHA-256 hashes the JWT → `tokenHash` (stored in `Session`, never the raw token)
+2. Parses the `User-Agent` with `ua-parser-js` → `device.name`, `browser`, `os`
+3. Creates a `Session` doc with `expiresAt = now + 7 days`
+4. A MongoDB TTL index on `expiresAt` auto-deletes expired sessions
+
+**Every authenticated request (`authJWT.js`):**
+1. Reads JWT from `req.cookies.token`
+2. Verifies JWT signature
+3. SHA-256 hashes the token → looks up the `Session` doc by `tokenHash`
+4. Returns 403 if no session found (revoked or expired)
+5. Updates `lastSeen` fire-and-forget (non-blocking)
+6. Attaches `req.user`, `req.token`, `req.sessionId`
+
+**Revocation:**
+- `POST /logout` — deletes the current session doc + clears the cookie
+- `DELETE /sessions/:id` — deletes one session by ID (cannot delete current session)
+- `POST /logout-all` — `Session.deleteMany({ user })` + bumps `tokenVersion` + clears cookie
+- Password change and password reset — `Session.deleteMany({ user })` + clears cookie
+
+`tokenVersion` is retained on the User model as a secondary signal for password-change flows, but session existence is the primary auth gate.
+
+**CORS:** `credentials: true` is required in the CORS config. The frontend sets `credentials: 'include'` on all fetch calls. In production, `SameSite: none` + `Secure: true` is required for cross-origin cookie sending.
 
 ### Password reset
 
