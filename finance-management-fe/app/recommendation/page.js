@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
@@ -1516,9 +1516,10 @@ const TOOLS = [
   { id: 'networth',  label: 'Net Worth',            icon: '📋', desc: 'Track assets vs liabilities',               Component: NetWorthTool,   passbudget: false },
 ];
 
-export default function RecommendationPage() {
+const TOOL_IDS = TOOLS.map(t => t.id);
+
+function PlannerInner() {
   const searchParams = useSearchParams();
-  const TOOL_IDS = TOOLS.map(t => t.id);
   const initialTool = TOOL_IDS.includes(searchParams.get('tool')) ? searchParams.get('tool') : 'afford';
 
   const [active,      setActive]      = useState(initialTool);
@@ -1604,5 +1605,13 @@ export default function RecommendationPage() {
         </main>
       </div>
     </AuthGuard>
+  );
+}
+
+export default function RecommendationPage() {
+  return (
+    <Suspense>
+      <PlannerInner />
+    </Suspense>
   );
 }
