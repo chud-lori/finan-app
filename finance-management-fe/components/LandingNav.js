@@ -8,7 +8,7 @@ export default function LandingNav() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    setLoggedIn(!!localStorage.getItem('token'));
+    setLoggedIn(!!localStorage.getItem('username'));
   }, []);
 
   return (

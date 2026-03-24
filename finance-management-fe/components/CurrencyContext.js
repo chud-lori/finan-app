@@ -16,9 +16,9 @@ export function CurrencyProvider({ children }) {
   const [numberFormat, setNumberFormat] = useState('dot');
 
   const refresh = useCallback(async () => {
-    // Only fetch if a token exists — getProfile on 401 auto-redirects to /login
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    if (!token) return;
+    // Only fetch if a user session is likely active (username is stored on login, cleared on logout)
+    const username = typeof window !== 'undefined' ? localStorage.getItem('username') : null;
+    if (!username) return;
     try {
       const res = await getProfile();
       const prefs = res.data?.preferences;

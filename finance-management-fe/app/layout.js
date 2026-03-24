@@ -45,6 +45,8 @@ export default function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{ __html: `
           (function(){
             try {
+              // Auth overhaul migration: remove old JWT token (now uses HttpOnly cookie)
+              localStorage.removeItem('token');
               var t = localStorage.getItem('theme');
               var meta = document.querySelector('meta[name="color-scheme"]');
               if (t === 'dark' && window.location.pathname !== '/') {

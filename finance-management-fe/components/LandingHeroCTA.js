@@ -6,7 +6,7 @@ export default function LandingHeroCTA() {
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
-    setLoggedIn(!!localStorage.getItem('token'));
+    setLoggedIn(!!localStorage.getItem('username'));
   }, []);
 
   const primaryCls = "relative inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl btn-cta text-white font-semibold text-base shadow-lg shadow-teal-300/40 hover:shadow-xl hover:shadow-teal-300/60 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 overflow-hidden";

@@ -22,12 +22,18 @@ const handleResponse = async (res) => {
   }
   const data = await res.json();
   if (!res.ok) {
-    // Session expired / revoked — redirect to login
+    // Session expired / revoked — redirect to login from protected pages only
     // EMAIL_NOT_VERIFIED is a 403 that should NOT trigger auto-redirect
     if ((res.status === 401 || res.status === 403) && data.code !== 'EMAIL_NOT_VERIFIED') {
       if (typeof window !== 'undefined') {
-        try { localStorage.removeItem('username'); } catch {}
-        window.location.href = '/login';
+        const p = window.location.pathname;
+        const isPublic = p === '/' || p === '/login' || p === '/register' ||
+          p === '/forgot-password' || p.startsWith('/reset-password') ||
+          p.startsWith('/verify-email') || p.startsWith('/auth/');
+        if (!isPublic) {
+          try { localStorage.removeItem('username'); } catch {}
+          window.location.href = '/login';
+        }
       }
     }
     const err = new Error(data.message || `Request failed: ${res.status}`);
