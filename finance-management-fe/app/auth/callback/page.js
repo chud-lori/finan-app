@@ -19,15 +19,9 @@ function CallbackHandler() {
       return;
     }
 
-    if (!token) {
-      setStatus('No token received. Redirecting…');
-      setTimeout(() => router.replace('/login'), 1500);
-      return;
+    if (username) {
+      try { localStorage.setItem('username', decodeURIComponent(username)); } catch {}
     }
-
-    localStorage.setItem('token', token);
-    if (username) localStorage.setItem('username', decodeURIComponent(username));
-
     setStatus('Signed in! Redirecting to dashboard…');
     router.replace('/');
   }, [params, router]);

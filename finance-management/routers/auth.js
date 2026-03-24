@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { loginValidatorRules, registerValidatorRules, validate } = require('../helpers/validator');
-const { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices, forgotPassword, resetPassword, verifyEmail, resendVerification } = require('../controllers/auth');
+const { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logout, logoutAllDevices, getSessions, revokeSession, forgotPassword, resetPassword, verifyEmail, resendVerification } = require('../controllers/auth');
 const authenticateJWT = require('../middleware/authJWT');
 const limiter = require('../middleware/rateLimit');
 
@@ -180,7 +180,7 @@ router.post('/register', limiter.byIp(10), registerValidatorRules(), validate, r
  *       500:
  *         description: Server error
  */
-router.get('/check', checkAuth);
+router.get('/check', authenticateJWT, checkAuth);
 
 /**
  * @openapi
@@ -215,7 +215,10 @@ router.get('/check', checkAuth);
 router.post('/google/verify', limiter.byIp(20), verifyGoogleToken);
 router.delete('/account', authenticateJWT, deleteAccount);
 router.patch('/password', authenticateJWT, limiter.byUser(5), changePassword);
+router.post('/logout', authenticateJWT, logout);
 router.post('/logout-all', authenticateJWT, limiter.byUser(5), logoutAllDevices);
+router.get('/sessions', authenticateJWT, getSessions);
+router.delete('/sessions/:id', authenticateJWT, revokeSession);
 router.post('/forgot-password', limiter.byIp(5), forgotPassword);
 router.post('/reset-password', limiter.byIp(10), resetPassword);
 router.get('/verify-email/:token', limiter.byIp(20), verifyEmail);

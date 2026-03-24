@@ -1,9 +1,11 @@
 const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
+const UAParser = require('ua-parser-js');
 const User = require('../models/user.model');
 const Balance = require('../models/balance.model');
 const PasswordReset = require('../models/passwordReset.model');
 const EmailVerification = require('../models/emailVerification.model');
+const Session = require('../models/session.model');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const {USER_EMAIL:email, SECRET_TOKEN, FE_URL, GOOGLE_CLIENT_ID} = require('../config/keys');
@@ -13,10 +15,42 @@ const {
     RegisterRequestDTO,
     LoginRequestDTO,
     RegisterResponseDTO,
-    LoginResponseDTO,
     AuthCheckResponseDTO,
     BaseResponseDTO
 } = require('../dtos/auth.dto');
+
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const COOKIE_OPTS = {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge:   SESSION_TTL_MS,
+};
+
+/** Create a session doc + set HttpOnly cookie. Call after signing a JWT. */
+const createSession = async (userId, token, req, res) => {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const ua      = new UAParser(req.headers['user-agent'] || '').getResult();
+    const browser = [ua.browser?.name, ua.browser?.version].filter(Boolean).join(' ') || 'Unknown browser';
+    const os      = [ua.os?.name, ua.os?.version].filter(Boolean).join(' ') || 'Unknown OS';
+    const deviceName = `${browser} on ${os}`;
+
+    await Session.create({
+        user:      userId,
+        tokenHash,
+        device: {
+            name:    deviceName,
+            browser,
+            os,
+            ip: (req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim() || 'unknown',
+        },
+        expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    });
+
+    res.cookie('token', token, COOKIE_OPTS);
+};
 
 const registerUser = async (req, res, next) => {
   try {
@@ -142,16 +176,15 @@ const loginUser = async (req, res, next) => {
       tv: user.tokenVersion || 0,
     };
 
-    // Sign token
-    const token = jwt.sign(payload, SECRET_TOKEN, {
-      expiresIn: '7d',
-    });
+    // Sign token and create session (sets HttpOnly cookie)
+    const token = jwt.sign(payload, SECRET_TOKEN, { expiresIn: '7d' });
+    await createSession(user._id, token, req, res);
 
     User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
 
-    // Return DTO response
-    const responseDTO = new LoginResponseDTO(token, user);
-    res.status(200).json(BaseResponseDTO.success('Login successful', responseDTO));
+    res.status(200).json(BaseResponseDTO.success('Login successful', {
+        user: { id: user._id, name: user.name },
+    }));
 
   } catch (error) {
     logger.error('Login user error:', error);
@@ -159,32 +192,14 @@ const loginUser = async (req, res, next) => {
   }
 }
 
-const checkAuth = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader) {
-      return res.status(401).json(BaseResponseDTO.error('Unauthorized - No token provided'));
-    }
-
-    const token = authHeader.split(" ")[1];
-    if (!token) {
-      return res.status(401).json(BaseResponseDTO.error('Unauthorized - Invalid token format'));
-    }
-
-    jwt.verify(token, SECRET_TOKEN, (err, user) => {
-      if (err) {
-        return res.status(403).json(BaseResponseDTO.error('Forbidden - Invalid token'));
-      }
-
-      const responseDTO = new AuthCheckResponseDTO(true);
-      res.status(200).json(BaseResponseDTO.success('Authorized', responseDTO));
-    });
-  } catch (error) {
-    logger.error('Check auth error:', error);
-    res.status(500).json(BaseResponseDTO.error('\1'));
-  }
-}
+// checkAuth is called after authenticateJWT middleware, so req.user is already verified
+const checkAuth = (req, res) => {
+    const responseDTO = new AuthCheckResponseDTO(true);
+    res.status(200).json(BaseResponseDTO.success('Authorized', {
+        ...responseDTO,
+        user: { id: req.user.id, name: req.user.name },
+    }));
+};
 
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -225,15 +240,14 @@ const verifyGoogleToken = async (req, res) => {
     const { sub: googleId, email, name } = ticket.getPayload();
     const user = await findOrCreateGoogleUser(googleId, email, name);
 
-    const token = jwt.sign({ id: user._id, name: user.name, tv: user.tokenVersion || 0 }, SECRET_TOKEN, { expiresIn: '30d' });
+    const token = jwt.sign({ id: user._id, name: user.name, tv: user.tokenVersion || 0 }, SECRET_TOKEN, { expiresIn: '7d' });
     logger.info(`Google verify: issued token for user ${user._id}`);
 
+    await createSession(user._id, token, req, res);
     User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
 
     res.status(200).json(BaseResponseDTO.success('Login successful', {
-      token,
-      token_type: 'bearer',
-      user: { id: user._id, name: user.name },
+        user: { id: user._id, name: user.name },
     }));
   } catch (error) {
     logger.error(`Google verify error: ${error.message}`);
@@ -283,6 +297,8 @@ const changePassword = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(newPassword, salt);
     await User.findByIdAndUpdate(userId, { password: hash, $inc: { tokenVersion: 1 } });
+    await Session.deleteMany({ user: userId });
+    res.clearCookie('token', COOKIE_OPTS);
 
     res.status(200).json(BaseResponseDTO.success('Password changed. Please log in again.'));
   } catch (e) {
@@ -291,14 +307,69 @@ const changePassword = async (req, res) => {
   }
 };
 
+const logout = async (req, res) => {
+    try {
+        const tokenHash = crypto.createHash('sha256').update(req.token).digest('hex');
+        await Session.deleteOne({ tokenHash });
+        res.clearCookie('token', COOKIE_OPTS);
+        res.status(200).json(BaseResponseDTO.success('Logged out successfully.'));
+    } catch (e) {
+        logger.error(`Logout error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to logout'));
+    }
+};
+
 const logoutAllDevices = async (req, res) => {
-  try {
-    await User.findByIdAndUpdate(req.user.id, { $inc: { tokenVersion: 1 } });
-    res.status(200).json(BaseResponseDTO.success('All sessions invalidated. Please log in again.'));
-  } catch (e) {
-    logger.error(`Logout all error: ${e.message}`);
-    res.status(500).json(BaseResponseDTO.error('Failed to logout all devices', e.message));
-  }
+    try {
+        await Session.deleteMany({ user: req.user.id });
+        await User.findByIdAndUpdate(req.user.id, { $inc: { tokenVersion: 1 } });
+        res.clearCookie('token', COOKIE_OPTS);
+        res.status(200).json(BaseResponseDTO.success('All sessions invalidated. Please log in again.'));
+    } catch (e) {
+        logger.error(`Logout all error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to logout all devices'));
+    }
+};
+
+const getSessions = async (req, res) => {
+    try {
+        const sessions = await Session.find({ user: req.user.id })
+            .select('device createdAt lastSeen expiresAt')
+            .sort({ lastSeen: -1 })
+            .lean();
+
+        const currentHash = crypto.createHash('sha256').update(req.token).digest('hex');
+        const data = sessions.map(s => ({
+            id:        s._id,
+            device:    s.device,
+            createdAt: s.createdAt,
+            lastSeen:  s.lastSeen,
+            isCurrent: String(s._id) === String(req.sessionId),
+        }));
+
+        res.status(200).json(BaseResponseDTO.success('Sessions retrieved', { sessions: data }));
+    } catch (e) {
+        logger.error(`Get sessions error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to retrieve sessions'));
+    }
+};
+
+const revokeSession = async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Prevent revoking your own current session via this endpoint (use logout for that)
+        if (String(id) === String(req.sessionId)) {
+            return res.status(400).json(BaseResponseDTO.error('Use /logout to end your current session'));
+        }
+        const result = await Session.deleteOne({ _id: id, user: req.user.id });
+        if (result.deletedCount === 0) {
+            return res.status(404).json(BaseResponseDTO.error('Session not found'));
+        }
+        res.status(200).json(BaseResponseDTO.success('Session revoked'));
+    } catch (e) {
+        logger.error(`Revoke session error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to revoke session'));
+    }
 };
 
 const forgotPassword = async (req, res) => {
@@ -351,11 +422,12 @@ const resetPassword = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(newPassword, salt);
 
-    // Update password and invalidate all existing sessions via tokenVersion bump
+    // Update password, invalidate all sessions
     await User.findByIdAndUpdate(record.user, {
-      password: hash,
-      $inc: { tokenVersion: 1 },
+        password: hash,
+        $inc: { tokenVersion: 1 },
     });
+    await Session.deleteMany({ user: record.user });
 
     record.used = true;
     await record.save();
@@ -418,4 +490,4 @@ const resendVerification = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logoutAllDevices, forgotPassword, resetPassword, verifyEmail, resendVerification };
+module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logout, logoutAllDevices, getSessions, revokeSession, forgotPassword, resetPassword, verifyEmail, resendVerification };

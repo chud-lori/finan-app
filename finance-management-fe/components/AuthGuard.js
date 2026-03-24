@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { checkAuth } from '@/lib/api';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 
 function PageSkeleton() {
@@ -53,12 +54,17 @@ export default function AuthGuard({ children }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.replace('/login');
-    } else {
-      setReady(true);
-    }
+    checkAuth()
+      .then((data) => {
+        // Persist username for display (non-sensitive)
+        if (data?.data?.user?.name) {
+          try { localStorage.setItem('username', data.data.user.name); } catch {}
+        }
+        setReady(true);
+      })
+      .catch(() => {
+        router.replace('/login');
+      });
   }, [router]);
 
   if (!ready) return <PageSkeleton />;

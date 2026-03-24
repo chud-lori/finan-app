@@ -44,9 +44,8 @@ function LoginForm() {
   const [googleBtnWidth, setGoogleBtnWidth] = useState(300);
 
   useEffect(() => {
-    if (localStorage.getItem('token')) { router.replace('/dashboard'); return; }
     if (params.get('error') === 'oauth_failed') setError('Google sign-in failed. Please try again.');
-  }, [router, params]);
+  }, [params]);
 
   useEffect(() => {
     if (!googleBtnRef.current) return;
@@ -63,8 +62,7 @@ function LoginForm() {
     setLoading(true);
     try {
       const data = await login(form.identifier, form.password);
-      localStorage.setItem('token', data.data.token);
-      localStorage.setItem('username', data.data.user?.name || form.identifier);
+      try { localStorage.setItem('username', data.data.user?.name || form.identifier); } catch {}
       router.replace('/dashboard');
     } catch (err) {
       setError(err.message || 'Login failed');
@@ -91,8 +89,7 @@ function LoginForm() {
     setLoading(true);
     try {
       const data = await verifyGoogleToken(credential);
-      localStorage.setItem('token', data.data.token);
-      localStorage.setItem('username', data.data.user?.name || '');
+      try { localStorage.setItem('username', data.data.user?.name || ''); } catch {}
       router.replace('/dashboard');
     } catch (err) {
       setError(err.message || 'Google sign-in failed');

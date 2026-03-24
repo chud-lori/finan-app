@@ -22,6 +22,7 @@ const morgan = require('morgan');
 require('winston-daily-rotate-file');
 const helmet = require('helmet');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const connectDB = require("./config/db");
@@ -56,10 +57,12 @@ const morganJSONFormat = () => JSON.stringify({
 
 // middleware — lock CORS to the frontend origin only
 app.use(cors({
-  origin: FE_URL,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+    origin:      FE_URL,
+    credentials: true,   // required for HttpOnly cookie to be sent cross-origin
+    methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
 }));
+app.use(cookieParser());
 app.use(helmet({
   // API-only server — no HTML is rendered, so CSP is not useful here.
   // HSTS is handled by the nginx reverse proxy in front of this service.
