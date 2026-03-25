@@ -28,6 +28,15 @@ const COOKIE_OPTS = {
     maxAge:   SESSION_TTL_MS,
 };
 
+// clearCookie must NOT include maxAge — Express merges options into a cookie() call
+// and maxAge overrides the expires:epoch that clearCookie sets, so the cookie never expires.
+const CLEAR_COOKIE_OPTS = {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path:     '/',
+};
+
 /** Create a session doc + set HttpOnly cookie. Call after signing a JWT. */
 const createSession = async (userId, token, req, res) => {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -298,7 +307,7 @@ const changePassword = async (req, res) => {
     const hash = await bcrypt.hash(newPassword, salt);
     await User.findByIdAndUpdate(userId, { password: hash, $inc: { tokenVersion: 1 } });
     await Session.deleteMany({ user: userId });
-    res.clearCookie('token', COOKIE_OPTS);
+    res.clearCookie('token', CLEAR_COOKIE_OPTS);
 
     res.status(200).json(BaseResponseDTO.success('Password changed. Please log in again.'));
   } catch (e) {
@@ -311,7 +320,7 @@ const logout = async (req, res) => {
     try {
         const tokenHash = crypto.createHash('sha256').update(req.token).digest('hex');
         await Session.deleteOne({ tokenHash });
-        res.clearCookie('token', COOKIE_OPTS);
+        res.clearCookie('token', CLEAR_COOKIE_OPTS);
         res.status(200).json(BaseResponseDTO.success('Logged out successfully.'));
     } catch (e) {
         logger.error(`Logout error: ${e.message}`);
@@ -323,7 +332,7 @@ const logoutAllDevices = async (req, res) => {
     try {
         await Session.deleteMany({ user: req.user.id });
         await User.findByIdAndUpdate(req.user.id, { $inc: { tokenVersion: 1 } });
-        res.clearCookie('token', COOKIE_OPTS);
+        res.clearCookie('token', CLEAR_COOKIE_OPTS);
         res.status(200).json(BaseResponseDTO.success('All sessions invalidated. Please log in again.'));
     } catch (e) {
         logger.error(`Logout all error: ${e.message}`);

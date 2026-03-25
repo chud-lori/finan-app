@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@/components/ThemeContext';
 import { useCurrency } from '@/components/CurrencyContext';
+import { logout as apiLogout } from '@/lib/api';
 
 const NAV_LINKS = [
   { href: '/dashboard',      label: 'Dashboard' },
@@ -130,9 +131,9 @@ export default function Navbar() {
     setUsername(localStorage.getItem('username') || 'User');
   }, []);
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
+  const logout = async () => {
+    await apiLogout().catch(() => {});
+    try { localStorage.removeItem('username'); } catch {}
     clearCurrency();
     router.replace('/login');
   };
