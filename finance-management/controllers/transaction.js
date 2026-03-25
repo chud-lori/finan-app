@@ -118,7 +118,7 @@ const addTransaction = async (req, res, next) => {
 
         // Fire-and-forget: classify new/unclassified categories so group is available for insights
         if (category.group === 'other' || !category.group) {
-            classifyCategories([nameLower]).then(results => {
+            classifyCategories([nameLower], user.id).then(results => {
                 const r = results[nameLower];
                 if (r && r.group && r.group !== 'other') {
                     Category.updateOne(

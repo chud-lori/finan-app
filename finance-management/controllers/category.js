@@ -22,7 +22,7 @@ const classifyAll = async (req, res) => {
         }
 
         const names = unclassified.map(c => c.name);
-        const results = await classifyCategories(names);
+        const results = await classifyCategories(names, userId);
 
         const ops = Object.entries(results)
             .filter(([, r]) => r.group && r.group !== 'other')
@@ -130,15 +130,21 @@ const setCategoryGroup = async (req, res) => {
         return res.status(400).json({ status: 0, message: `group must be one of: ${VALID_GROUPS.join(', ')}` });
     }
 
-    const updated = await Category.findOneAndUpdate(
-        { user: userId, name: { $regex: new RegExp(`^${name}$`, 'i') } },
-        { $set: { group, groupOverridden: true, groupConfidence: 1 } },
-        { new: true }
-    ).lean();
+    try {
+        // Escape regex special characters so category names like "Coffee (Starbucks)" or "Food+Drinks" match correctly
+        const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const updated = await Category.findOneAndUpdate(
+            { user: userId, name: { $regex: new RegExp(`^${escapedName}$`, 'i') } },
+            { $set: { group, groupOverridden: true, groupConfidence: 1 } },
+            { new: true }
+        ).lean();
 
-    if (!updated) return res.status(404).json({ status: 0, message: 'Category not found' });
+        if (!updated) return res.status(404).json({ status: 0, message: 'Category not found' });
 
-    return res.json({ status: 1, data: { name: updated.name, group: updated.group } });
+        return res.json({ status: 1, data: { name: updated.name, group: updated.group } });
+    } catch (err) {
+        return res.status(500).json({ status: 0, message: 'Failed to update category group' });
+    }
 };
 
 module.exports = { classifyAll, getGroupSummary, setCategoryGroup };
