@@ -55,13 +55,13 @@ function buildInsights(explain, ttz, anomaly, ml) {
 
   if (ttz) {
     if (ttz.status === 'critical') {
-      insights.push({ level: 'danger', icon: '🔥', text: `You're on track to overspend — balance runs out in ${ttz.daysToZero} days at current burn rate` });
+      insights.push({ level: 'danger', icon: '🔥', text: `You're on track to overspend — balance runs out in ${ttz.daysToZero} days at current burn rate`, anchor: 'runway', cta: 'See runway' });
     } else if (ttz.status === 'already_zero') {
-      insights.push({ level: 'danger', icon: '🔥', text: `Your balance is already at zero — stop all discretionary spending immediately` });
+      insights.push({ level: 'danger', icon: '🔥', text: `Your balance is already at zero — stop all discretionary spending immediately`, anchor: 'runway', cta: 'See runway' });
     } else if (ttz.status === 'warning') {
-      insights.push({ level: 'warn', icon: '⚡', text: `Balance runway is ${ttz.daysToZero} days — consider cutting back on discretionary spending` });
+      insights.push({ level: 'warn', icon: '⚡', text: `Balance runway is ${ttz.daysToZero} days — consider cutting back on discretionary spending`, anchor: 'runway', cta: 'See runway' });
     } else if (ttz.status === 'safe' && ttz.daysToZero > 90) {
-      insights.push({ level: 'good', icon: '✅', text: `Your balance can last ${ttz.daysToZero} days at current pace — you're in solid shape` });
+      insights.push({ level: 'good', icon: '✅', text: `Your balance can last ${ttz.daysToZero} days at current pace — you're in solid shape`, anchor: 'runway', cta: 'See details' });
     }
   }
 
@@ -69,42 +69,42 @@ function buildInsights(explain, ttz, anomaly, ml) {
   if (ml?.forecast?.available) {
     const f = ml.forecast;
     if (f.over_budget) {
-      insights.push({ level: 'danger', icon: '📊', text: `You're on pace to overspend your budget by ${f.variance > 0 ? '+' : ''}${f.variance?.toLocaleString()} this month` });
+      insights.push({ level: 'danger', icon: '📊', text: `You're on pace to overspend your budget by ${f.variance > 0 ? '+' : ''}${f.variance?.toLocaleString()} this month`, anchor: 'forecast', cta: 'See forecast' });
     } else if (f.pct_of_budget >= 85) {
-      insights.push({ level: 'warn', icon: '📊', text: `You'll use ${f.pct_of_budget}% of your monthly budget at this rate` });
+      insights.push({ level: 'warn', icon: '📊', text: `You'll use ${f.pct_of_budget}% of your monthly budget at this rate`, anchor: 'forecast', cta: 'See forecast' });
     } else if (f.trend === 'accelerating') {
-      insights.push({ level: 'warn', icon: '📈', text: `Your spending is accelerating — you're likely to end higher than expected` });
+      insights.push({ level: 'warn', icon: '📈', text: `Your spending is accelerating — you're likely to end higher than expected`, anchor: 'forecast', cta: 'See forecast' });
     } else if (f.trend === 'decelerating') {
-      insights.push({ level: 'good', icon: '📉', text: `Your spending is slowing down — you're trending under your usual pace` });
+      insights.push({ level: 'good', icon: '📉', text: `Your spending is slowing down — you're trending under your usual pace`, anchor: 'forecast', cta: 'See forecast' });
     }
   }
 
   // ML anomaly insights
   if (ml?.anomaly_count > 0) {
-    insights.push({ level: 'warn', icon: '🚨', text: `${ml.anomaly_count} unusual transaction${ml.anomaly_count > 1 ? 's' : ''} detected this month — statistically outside your normal pattern` });
+    insights.push({ level: 'warn', icon: '🚨', text: `${ml.anomaly_count} unusual transaction${ml.anomaly_count > 1 ? 's' : ''} detected this month — statistically outside your normal pattern`, anchor: 'spending-alerts', cta: 'See transactions' });
   } else if (anomaly?.count > 0) {
-    insights.push({ level: 'warn', icon: '🚨', text: `${anomaly.count} unusual transaction${anomaly.count > 1 ? 's' : ''} flagged this month — higher than your normal pattern` });
+    insights.push({ level: 'warn', icon: '🚨', text: `${anomaly.count} unusual transaction${anomaly.count > 1 ? 's' : ''} flagged this month — higher than your normal pattern`, anchor: 'spending-alerts', cta: 'See transactions' });
   }
 
   if (explain?.topCategories?.length) {
     explain.topCategories.forEach(c => {
       if (c.pct >= 35) {
-        insights.push({ level: 'warn', icon: '⚠️', text: `You spent ${c.pct}% on ${cap(c.category)} — very high dependency on a single category` });
+        insights.push({ level: 'warn', icon: '⚠️', text: `You spent ${c.pct}% on ${cap(c.category)} — very high dependency on a single category`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
       if (c.delta !== null && c.delta >= 30) {
-        insights.push({ level: 'danger', icon: '📈', text: `${cap(c.category)} spending spiked ${c.delta}% vs last month` });
+        insights.push({ level: 'danger', icon: '📈', text: `${cap(c.category)} spending spiked ${c.delta}% vs last month`, anchor: 'where-its-going', cta: 'See breakdown' });
       } else if (c.delta !== null && c.delta >= 15) {
-        insights.push({ level: 'warn', icon: '📈', text: `${cap(c.category)} up ${c.delta}% vs last month — worth watching` });
+        insights.push({ level: 'warn', icon: '📈', text: `${cap(c.category)} up ${c.delta}% vs last month — worth watching`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
       if (c.delta !== null && c.delta <= -20) {
-        insights.push({ level: 'good', icon: '📉', text: `${cap(c.category)} down ${Math.abs(c.delta)}% vs last month — great progress` });
+        insights.push({ level: 'good', icon: '📉', text: `${cap(c.category)} down ${Math.abs(c.delta)}% vs last month — great progress`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
       if (c.count >= 10) {
         const avg = (c.count / daysElapsed).toFixed(1);
-        insights.push({ level: 'info', icon: '🔁', text: `You made ${c.count} ${cap(c.category)} transactions this month — avg ${avg}/day` });
+        insights.push({ level: 'info', icon: '🔁', text: `You made ${c.count} ${cap(c.category)} transactions this month — avg ${avg}/day`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
       if (c.pct >= 20 && c.pct < 35 && (c.delta === null || Math.abs(c.delta) < 15)) {
-        insights.push({ level: 'info', icon: '📊', text: `${cap(c.category)} is your top expense at ${c.pct}% of total spending` });
+        insights.push({ level: 'info', icon: '📊', text: `${cap(c.category)} is your top expense at ${c.pct}% of total spending`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
     });
   }
@@ -154,11 +154,34 @@ function InsightFeed({ explain, ttz, anomaly, ml, loading }) {
       <div className="divide-y divide-gray-50 dark:divide-slate-800">
         {top.map((ins, i) => {
           const s = LEVEL[ins.level] ?? LEVEL.info;
-          return (
-            <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+          const inner = (
+            <>
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
               <p className="text-sm text-gray-700 dark:text-slate-300 flex-1 leading-snug">{ins.text}</p>
-              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full flex-shrink-0 ${s.badge}`}>{s.label}</span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.badge}`}>{s.label}</span>
+                {ins.anchor && (
+                  <span className="text-xs text-teal-600 dark:text-teal-400 font-medium whitespace-nowrap">
+                    {ins.cta ?? 'See details'} →
+                  </span>
+                )}
+              </div>
+            </>
+          );
+          if (ins.anchor) {
+            return (
+              <a
+                key={i}
+                href={`#${ins.anchor}`}
+                className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+              >
+                {inner}
+              </a>
+            );
+          }
+          return (
+            <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+              {inner}
             </div>
           );
         })}
@@ -603,9 +626,9 @@ function SectionSkeleton() {
   );
 }
 
-function Section({ title, subtitle, tooltip, tag, headerRight, children, loading, error }) {
+function Section({ id, title, subtitle, tooltip, tag, headerRight, children, loading, error }) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
+    <div id={id} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
       <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -762,7 +785,7 @@ export default function InsightsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* Month Forecast — ML */}
-            <div className="lg:col-span-2">
+            <div id="forecast" className="lg:col-span-2">
               <Section
                 title="📈 Month Forecast"
                 subtitle="Predicted spend by end of month based on your current trajectory"
@@ -784,6 +807,7 @@ export default function InsightsPage() {
 
             {/* Runway */}
             <Section
+              id="runway"
               title="⏳ Runway"
               subtitle="How long until your balance runs out at current burn rate"
               tooltip="Current net balance ÷ average daily spending over the last 30 days."
@@ -795,6 +819,7 @@ export default function InsightsPage() {
 
             {/* Where It's Going */}
             <Section
+              id="where-its-going"
               title="🧠 Where It's Going"
               subtitle="Top categories driving your spending this month"
               tooltip="Your top expense categories sorted by total. % change shows vs last month."
@@ -819,7 +844,7 @@ export default function InsightsPage() {
             </div>
 
             {/* Spending Alerts — ML or rule-based fallback */}
-            <div className="lg:col-span-2">
+            <div id="spending-alerts" className="lg:col-span-2">
               <Section
                 title="🚨 Spending Alerts"
                 subtitle={mlAvailable ? "Transactions that stand out from your normal pattern — ranked by how unusual they are" : "Transactions higher than your usual or brand-new categories"}
