@@ -29,13 +29,14 @@ function RefreshButton({ generatedAt, onRefresh, loading, stale }) {
         </span>
       )}
       {!stale && generatedAt?.ts && (
-        <span className="text-xs text-gray-400 dark:text-slate-500">
+        <span className="hidden sm:inline text-xs text-gray-400 dark:text-slate-500">
           {`Updated ${timeAgo(generatedAt.ts)}`}
         </span>
       )}
       <button
         onClick={onRefresh}
         disabled={loading}
+        title={!stale && generatedAt?.ts ? `Updated ${timeAgo(generatedAt.ts)}` : undefined}
         className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
       >
         <svg className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -630,9 +631,9 @@ function Section({ id, title, subtitle, tooltip, tag, headerRight, children, loa
   return (
     <div id={id} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
       <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">{title}</h2>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <h2 className="text-base font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{title}</h2>
             {tag && (
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 shrink-0">
                 {tag}
@@ -640,7 +641,7 @@ function Section({ id, title, subtitle, tooltip, tag, headerRight, children, loa
             )}
             {tooltip && <Tooltip text={tooltip} align="left" fixed />}
           </div>
-          {headerRight}
+          {headerRight && <div className="shrink-0">{headerRight}</div>}
         </div>
         {subtitle && <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
       </div>
