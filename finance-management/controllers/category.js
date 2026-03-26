@@ -147,4 +147,85 @@ const setCategoryGroup = async (req, res) => {
     }
 };
 
-module.exports = { classifyAll, getGroupSummary, setCategoryGroup };
+/**
+ * GET /api/category
+ * List all categories for the user with full metadata.
+ */
+const listCategories = async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const cats = await Category.find({ user: userId })
+            .select('name type group groupOverridden')
+            .sort({ name: 1 })
+            .lean();
+        return res.json({ status: 1, data: { categories: cats } });
+    } catch (err) {
+        return res.status(500).json({ status: 0, message: 'Failed to fetch categories' });
+    }
+};
+
+/**
+ * DELETE /api/category/:name
+ * Deletes a category only if no transactions reference it.
+ */
+const deleteCategory = async (req, res) => {
+    const userId = req.user.id;
+    const name   = decodeURIComponent(req.params.name).trim();
+    try {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRegex = new RegExp(`^${escaped}$`, 'i');
+
+        const txCount = await Transaction.countDocuments({ user: userId, category: { $regex: nameRegex } });
+        if (txCount > 0) {
+            return res.status(409).json({ status: 0, message: `Cannot delete — ${txCount} transaction${txCount > 1 ? 's' : ''} use this category` });
+        }
+
+        const deleted = await Category.findOneAndDelete({ user: userId, name: { $regex: nameRegex } });
+        if (!deleted) return res.status(404).json({ status: 0, message: 'Category not found' });
+
+        return res.json({ status: 1, data: { name: deleted.name } });
+    } catch (err) {
+        return res.status(500).json({ status: 0, message: 'Failed to delete category' });
+    }
+};
+
+/**
+ * PATCH /api/category/:name/rename
+ * Renames a category and updates all transactions that reference the old name.
+ */
+const renameCategory = async (req, res) => {
+    const userId  = req.user.id;
+    const oldName = decodeURIComponent(req.params.name).trim();
+    const newName = (req.body.name || '').trim();
+
+    if (!newName)          return res.status(400).json({ status: 0, message: 'New name is required' });
+    if (newName.length > 100) return res.status(400).json({ status: 0, message: 'Name must be 100 characters or fewer' });
+
+    try {
+        const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const oldRegex = new RegExp(`^${escapeRe(oldName)}$`, 'i');
+        const newRegex = new RegExp(`^${escapeRe(newName)}$`, 'i');
+
+        const conflict = await Category.findOne({ user: userId, name: { $regex: newRegex } });
+        if (conflict) return res.status(409).json({ status: 0, message: 'A category with that name already exists' });
+
+        const updated = await Category.findOneAndUpdate(
+            { user: userId, name: { $regex: oldRegex } },
+            { $set: { name: newName } },
+            { new: true }
+        ).lean();
+        if (!updated) return res.status(404).json({ status: 0, message: 'Category not found' });
+
+        // Keep transaction references in sync
+        await Transaction.updateMany(
+            { user: userId, category: { $regex: oldRegex } },
+            { $set: { category: newName } }
+        );
+
+        return res.json({ status: 1, data: { oldName, name: updated.name } });
+    } catch (err) {
+        return res.status(500).json({ status: 0, message: 'Failed to rename category' });
+    }
+};
+
+module.exports = { classifyAll, getGroupSummary, setCategoryGroup, listCategories, deleteCategory, renameCategory };

@@ -260,3 +260,16 @@ export const setCategoryGroup = (categoryName, group) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ group }),
   });
+
+export const listAllCategories = () =>
+  apiFetch('/api/category');
+
+export const renameCategoryApi = (oldName, newName) =>
+  apiFetch(`/api/category/${encodeURIComponent(oldName)}/rename`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName }),
+  });
+
+export const deleteCategoryApi = (name) =>
+  apiFetch(`/api/category/${encodeURIComponent(name)}`, { method: 'DELETE' });
