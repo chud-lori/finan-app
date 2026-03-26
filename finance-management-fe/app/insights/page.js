@@ -80,9 +80,13 @@ function buildInsights(explain, ttz, anomaly, ml) {
     }
   }
 
-  // ML anomaly insights
-  if (ml?.anomaly_count > 0) {
-    insights.push({ level: 'warn', icon: '🚨', text: `${ml.anomaly_count} unusual transaction${ml.anomaly_count > 1 ? 's' : ''} detected this month — statistically outside your normal pattern`, anchor: 'spending-alerts', cta: 'See transactions' });
+  // ML anomaly insights — if ML is available (even with 0 results) don't fall
+  // through to the rule-based count; the two use different detection logic and
+  // showing a rule-based count while the section displays ML results is misleading.
+  if (ml && !ml.unavailable) {
+    if (ml.anomaly_count > 0) {
+      insights.push({ level: 'warn', icon: '🚨', text: `${ml.anomaly_count} unusual transaction${ml.anomaly_count > 1 ? 's' : ''} detected this month — statistically outside your normal pattern`, anchor: 'spending-alerts', cta: 'See transactions' });
+    }
   } else if (anomaly?.count > 0) {
     insights.push({ level: 'warn', icon: '🚨', text: `${anomaly.count} unusual transaction${anomaly.count > 1 ? 's' : ''} flagged this month — higher than your normal pattern`, anchor: 'spending-alerts', cta: 'See transactions' });
   }
