@@ -75,9 +75,9 @@ finan-app/                          ← monorepo root
 │   ├── app.js                      ← Express entry point (CORS, Helmet, Sentry, routes)
 │   ├── Dockerfile
 │   ├── controllers/
-│   │   ├── auth.js                 ← register, login, Google OAuth, sessions, password reset
-│   │   ├── transaction.js          ← CRUD, analytics, insights, import/export, ML proxy
-│   │   ├── category.js             ← group summary, classify-all, manual group override
+│   │   ├── auth.js                 ← register, login, Google OAuth, sessions, password reset; seeds default categories on new signup
+│   │   ├── transaction.js          ← CRUD, analytics, insights, import/export, ML proxy; lazy category seed on first getCategory call
+│   │   ├── category.js             ← group summary (includes _id), classify-all, group override, list, rename, delete (all mutations by _id)
 │   │   ├── goal.js                 ← savings goals
 │   │   ├── profile.js              ← profile, preferences, CSV export, balance reconcile
 │   │   ├── gamification.js         ← streaks, budget wins, goal rings
@@ -114,6 +114,7 @@ finan-app/                          ← monorepo root
 │   │   └── goal.dto.js
 │   ├── helpers/
 │   │   ├── categoryClassifier.js   ← AI classify proxy + user-override learning hints
+│   │   ├── seedDefaultCategories.js ← idempotent per-user upsert of default categories from categories.json
 │   │   ├── validator.js            ← express-validator rule sets
 │   │   ├── mailer.js               ← Resend SDK (password reset + email verification)
 │   │   ├── snapshot.js             ← refreshSnapshot() + applySnapshotDelta()
@@ -141,7 +142,7 @@ finan-app/                          ← monorepo root
     │   ├── page.js                 ← Landing page (always light mode)
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
     │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown
-    │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary
+    │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
     │   ├── recommendation/page.js  ← 10 financial planning calculators
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
     │   └── settings/page.js        ← Theme, password change, sessions, delete account
@@ -310,7 +311,9 @@ Category.updateOne({ group, groupConfidence })
    (skipped if result is still 'other')
 ```
 
-**User override learning:** When a user manually moves a category to a different group (`PATCH /api/category/:name/group`), `groupOverridden: true` is set. On the next classification run for that user, the overridden categories are loaded and used as learning hints — so future categories with similar names are matched to the user-defined group before the AI service is consulted.
+**User override learning:** When a user manually moves a category to a different group (`PATCH /api/category/:id/group`), `groupOverridden: true` is set. On the next classification run for that user, the overridden categories are loaded and used as learning hints — so future categories with similar names are matched to the user-defined group before the AI service is consulted.
+
+**Default categories:** 28 expense + 9 income categories are seeded per-user from `categories.json` via `seedDefaultCategories()`. This runs fire-and-forget on new user registration (email/password and Google OAuth). For existing users with zero categories, `GET /api/transaction/category` triggers a passive seed before returning results — no manual migration needed.
 
 **`classifyAll` (`POST /api/category/classify-all`):** Processes all categories where `group === 'other'` AND `groupOverridden !== true`. Safe to call repeatedly. Called automatically on the Insights page load.
 
@@ -920,13 +923,16 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/profile/export` | 10/min | ✓ | Export all transactions as CSV |
 | POST | `/api/profile/reconcile-balance` | 5/min | ✓ | Recompute balance from raw transaction ledger |
 
-### Category groups
+### Category management
 
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
 | POST | `/api/category/classify-all` | 10/min | ✓ | Classify all unclassified categories (`group === 'other'`) for the user; skips `groupOverridden` |
-| GET | `/api/category/group-summary` | 30/min | ✓ | Spending totals by semantic group; query: `?month=YYYY-MM&tz=IANA` |
-| PATCH | `/api/category/:name/group` | 30/min | ✓ | Manually override a category's spending group; body: `{ group }` — sets `groupOverridden: true` and stores as learning hint for future classifications |
+| GET | `/api/category/group-summary` | 30/min | ✓ | Spending totals by semantic group; query: `?month=YYYY-MM&tz=IANA`. Each category entry includes `_id` |
+| GET | `/api/category` | 60/min | ✓ | List all user categories with `_id`, `name`, `type`, `group`, `groupOverridden` |
+| PATCH | `/api/category/:id/group` | 30/min | ✓ | Override a category's spending group; body: `{ group }` — sets `groupOverridden: true` |
+| PATCH | `/api/category/:id/rename` | 30/min | ✓ | Rename a category; body: `{ name }`. Updates all referencing transactions atomically. 409 if new name already exists |
+| DELETE | `/api/category/:id` | 30/min | ✓ | Delete a category. 409 if any transaction uses it (returns count). 400 if `:id` is not a valid ObjectId |
 
 ### Gamification
 
@@ -990,15 +996,17 @@ The app is multi-currency. Never hardcode `Rp`, `IDR`, or `jt` in UI text. Use `
 
 Writing a budget updates `Preference.monthlyBudget` only when `updateDefault: true` is explicitly passed — prevents one-off month overrides from silently becoming the global default.
 
-### Category regex safety
+### Category mutations use `_id`, not `:name`
 
-`PATCH /api/category/:name/group` escapes the category name before using it in `new RegExp()`:
+All category mutation routes (`PATCH /:id/group`, `PATCH /:id/rename`, `DELETE /:id`) address categories by MongoDB `_id`, not by name. Reasons:
 
-```js
-const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-```
+- **Stability** — the URL is unchanged even after a rename.
+- **Performance** — `_id` lookup is an indexed equality scan; name-based regex matching is slower and requires escaping special characters.
+- **Correctness** — `encodeURIComponent` edge cases (parentheses, `+`, etc.) are avoided entirely.
 
-This prevents regex injection for category names containing special characters like `(`, `)`, `+`, `.`.
+`getGroupSummary` includes `_id` in each category entry so the frontend can address categories by id after a single data fetch. `listCategories` (`GET /api/category`) also returns `_id` for use by the ManageCategories UI.
+
+Regex escaping is still applied internally in `deleteCategory` and `renameCategory` when updating `Transaction` documents by category name (transactions store the name as a string, not an `_id` reference).
 
 ---
 

@@ -33,6 +33,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Anomaly detection** — flags unusually large transactions compared to your spending baseline
 - **Spending explainability** — shows which categories drive your spending the most
 - **Time-to-zero runway** — estimates when your balance hits zero if current spending continues
+- **Category management** — rename categories (updates all transactions automatically) or delete unused ones; 28 default categories pre-loaded for every new account
 
 ### Plan
 10 built-in financial planning tools — no external apps needed:
@@ -65,7 +66,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing |
 | Add transaction | Income or expense with smart category suggestions |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
-| Insights | Anomaly detection, spending explainability, time-to-zero runway |
+| Insights | Anomaly detection, spending explainability, time-to-zero runway, AI category classification, category management (rename / delete) |
 | Recommendation | 10 built-in financial planning calculators |
 | Range report | Custom date range with income/expense summary |
 | Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |
