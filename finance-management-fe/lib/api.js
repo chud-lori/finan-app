@@ -254,8 +254,8 @@ export const getGroupSummary = (month) => {
 export const classifyAllCategories = () =>
   apiFetch('/api/category/classify-all', { method: 'POST' });
 
-export const setCategoryGroup = (categoryName, group) =>
-  apiFetch(`/api/category/${encodeURIComponent(categoryName)}/group`, {
+export const setCategoryGroup = (categoryId, group) =>
+  apiFetch(`/api/category/${categoryId}/group`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ group }),
@@ -264,12 +264,12 @@ export const setCategoryGroup = (categoryName, group) =>
 export const listAllCategories = () =>
   apiFetch('/api/category');
 
-export const renameCategoryApi = (oldName, newName) =>
-  apiFetch(`/api/category/${encodeURIComponent(oldName)}/rename`, {
+export const renameCategoryApi = (categoryId, newName) =>
+  apiFetch(`/api/category/${categoryId}/rename`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: newName }),
   });
 
-export const deleteCategoryApi = (name) =>
-  apiFetch(`/api/category/${encodeURIComponent(name)}`, { method: 'DELETE' });
+export const deleteCategoryApi = (categoryId) =>
+  apiFetch(`/api/category/${categoryId}`, { method: 'DELETE' });

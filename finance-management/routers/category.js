@@ -13,13 +13,13 @@ router.get('/group-summary', authenticateJWT, limiter.byUser(30), getGroupSummar
 // GET /api/category — list all categories with full metadata
 router.get('/', authenticateJWT, limiter.byUser(60), listCategories);
 
-// PATCH /api/category/:name/group — manually override a category's spending group
-router.patch('/:name/group', authenticateJWT, limiter.byUser(30), setCategoryGroup);
+// PATCH /api/category/:id/group — manually override a category's spending group
+router.patch('/:id/group', authenticateJWT, limiter.byUser(30), setCategoryGroup);
 
-// PATCH /api/category/:name/rename — rename a category (and update all referencing transactions)
-router.patch('/:name/rename', authenticateJWT, limiter.byUser(30), renameCategory);
+// PATCH /api/category/:id/rename — rename a category (and update all referencing transactions)
+router.patch('/:id/rename', authenticateJWT, limiter.byUser(30), renameCategory);
 
-// DELETE /api/category/:name — delete a category (blocked if any transaction uses it)
-router.delete('/:name', authenticateJWT, limiter.byUser(30), deleteCategory);
+// DELETE /api/category/:id — delete a category (blocked if any transaction uses it)
+router.delete('/:id', authenticateJWT, limiter.byUser(30), deleteCategory);
 
 module.exports = router;

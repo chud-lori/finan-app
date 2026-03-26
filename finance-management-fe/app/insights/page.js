@@ -570,7 +570,7 @@ function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, mov
               {isOpen && (
                 <div className="ml-8 mt-1 mb-2 space-y-1">
                   {g.categories.map(c => {
-                    const isMoving = movingCategory === c.name;
+                    const isMoving = movingCategory === String(c._id);
                     return (
                       <div key={c.name} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800/40">
                         <span className="flex-1 text-xs text-gray-600 dark:text-slate-400 capitalize truncate">{c.name}</span>
@@ -581,7 +581,7 @@ function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, mov
                         ) : (
                           <select
                             value={g.group}
-                            onChange={(e) => onMoveCategory && onMoveCategory(c.name, e.target.value)}
+                            onChange={(e) => onMoveCategory && onMoveCategory(String(c._id), e.target.value)}
                             disabled={!!movingCategory}
                             onClick={(e) => e.stopPropagation()}
                             title="Move to group"
@@ -662,17 +662,17 @@ function ManageCategories({ onCategoryChanged }) {
   const startRename = (cat) => {
     setConfirmDelete(null);
     setErrorMsg(null);
-    setRenamingName(cat.name);
+    setRenamingName(cat._id);
     setRenameValue(cat.name);
   };
 
-  const commitRename = async (oldName) => {
+  const commitRename = async (cat) => {
     const newName = renameValue.trim();
-    if (!newName || newName === oldName) { setRenamingName(null); return; }
-    setBusyName(oldName);
+    if (!newName || newName === cat.name) { setRenamingName(null); return; }
+    setBusyName(cat._id);
     setErrorMsg(null);
     try {
-      await renameCategoryApi(oldName, newName);
+      await renameCategoryApi(cat._id, newName);
       setRenamingName(null);
       await load();
       onCategoryChanged?.();
@@ -683,11 +683,11 @@ function ManageCategories({ onCategoryChanged }) {
     }
   };
 
-  const handleDelete = async (name) => {
-    setBusyName(name);
+  const handleDelete = async (cat) => {
+    setBusyName(cat._id);
     setErrorMsg(null);
     try {
-      await deleteCategoryApi(name);
+      await deleteCategoryApi(cat._id);
       setConfirmDelete(null);
       await load();
       onCategoryChanged?.();
@@ -733,9 +733,10 @@ function ManageCategories({ onCategoryChanged }) {
       ) : (
         <div className="divide-y divide-gray-100 dark:divide-slate-800">
           {filtered.map(cat => {
-            const isBusy   = busyName === cat.name;
-            const isRenaming = renamingName === cat.name;
-            const isConfirmingDelete = confirmDelete === cat.name;
+            const catId  = String(cat._id);
+            const isBusy   = busyName === catId;
+            const isRenaming = renamingName === catId;
+            const isConfirmingDelete = confirmDelete === catId;
 
             return (
               <div key={cat.name} className="flex items-center gap-2 py-2 min-w-0">
@@ -746,7 +747,7 @@ function ManageCategories({ onCategoryChanged }) {
                     value={renameValue}
                     onChange={e => setRenameValue(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter')  commitRename(cat.name);
+                      if (e.key === 'Enter')  commitRename(cat);
                       if (e.key === 'Escape') setRenamingName(null);
                     }}
                     maxLength={100}
@@ -774,7 +775,7 @@ function ManageCategories({ onCategoryChanged }) {
                 ) : isRenaming ? (
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      onClick={() => commitRename(cat.name)}
+                      onClick={() => commitRename(cat)}
                       className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-teal-600 text-white hover:bg-teal-700 transition-colors"
                     >Save</button>
                     <button
@@ -786,7 +787,7 @@ function ManageCategories({ onCategoryChanged }) {
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="text-[10px] text-gray-500 dark:text-slate-400">Delete?</span>
                     <button
-                      onClick={() => handleDelete(cat.name)}
+                      onClick={() => handleDelete(cat)}
                       className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors"
                     >Yes</button>
                     <button
@@ -806,7 +807,7 @@ function ManageCategories({ onCategoryChanged }) {
                       </svg>
                     </button>
                     <button
-                      onClick={() => { setRenamingName(null); setErrorMsg(null); setConfirmDelete(cat.name); }}
+                      onClick={() => { setRenamingName(null); setErrorMsg(null); setConfirmDelete(catId); }}
                       title="Delete"
                       className="p-1 rounded-md text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
                     >
@@ -946,10 +947,10 @@ export default function InsightsPage() {
     }
   };
 
-  const handleMoveCategory = async (categoryName, newGroup) => {
-    setMovingCategory(categoryName);
+  const handleMoveCategory = async (categoryId, newGroup) => {
+    setMovingCategory(categoryId);
     try {
-      await setCategoryGroup(categoryName, newGroup);
+      await setCategoryGroup(categoryId, newGroup);
       const res = await getGroupSummary();
       setGroups(res.data);
     } catch {
