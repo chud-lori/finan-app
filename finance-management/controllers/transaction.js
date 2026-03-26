@@ -18,6 +18,7 @@ const Preference = require('../models/preference.model');
 const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
+const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
 
 // Fire-and-forget: delete cached ML insight for a specific month so next read regenerates
 const invalidateMLInsight = (userId, yearMonth) => {
@@ -525,28 +526,9 @@ const getRecommendation = async (req, res, next) => {
 const seedCategory = async (req, res, next) => {
     try {
         logger.info("Seed category");
-
-        // Read categories.json
-        const categoriesPath = path.join(__dirname, '../categories.json');
-        const categoriesData = JSON.parse(fs.readFileSync(categoriesPath, 'utf8'));
-        const categories = categoriesData.categories.map(c =>
-            typeof c === 'string' ? { name: c, type: 'expense' } : { name: c.name, type: c.type || 'expense' }
-        );
-
-        const userId = req.user.id;
-        // Upsert each category scoped to this user
-        await Promise.all(categories.map(c =>
-            Category.findOneAndUpdate(
-                { user: userId, name: { $regex: new RegExp(`^${escapeRegex(c.name)}$`, 'i') } },
-                { $set: { type: c.type }, $setOnInsert: { user: userId, name: c.name } },
-                { upsert: true }
-            )
-        ));
-
-        // Return DTO response
+        const categories = await seedDefaultCategories(req.user.id);
         const responseDTO = new SeedCategoryResponseDTO(categories);
         res.status(200).json(BaseResponseDTO.success('Categories seeded successfully', responseDTO));
-
     } catch (error) {
         logger.error("Seed category error", error);
         res.status(500).json(BaseResponseDTO.error('\1'));
@@ -558,6 +540,16 @@ const getCategory = async (req, res, next) => {
         logger.info(`Get list of category`);
         const search = req.query.search || '';
         const typeFilter = req.query.type; // 'income' | 'expense' | undefined
+
+        // Passive top-up for existing users who have no categories yet
+        if (!search && !typeFilter) {
+            const count = await Category.countDocuments({ user: req.user.id });
+            if (count === 0) {
+                await seedDefaultCategories(req.user.id).catch(err =>
+                    logger.error(`Auto-seed categories error for user ${req.user.id}: ${err.message}`)
+                );
+            }
+        }
 
         const query = { user: req.user.id };
         if (search) {

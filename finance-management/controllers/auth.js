@@ -11,6 +11,7 @@ const jwt = require("jsonwebtoken");
 const {USER_EMAIL:email, SECRET_TOKEN, FE_URL, GOOGLE_CLIENT_ID} = require('../config/keys');
 const logger = require("../helpers/logger");
 const { sendPasswordResetEmail, sendVerificationEmail } = require('../helpers/mailer');
+const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
 const {
     RegisterRequestDTO,
     LoginRequestDTO,
@@ -109,6 +110,11 @@ const registerUser = async (req, res, next) => {
     });
 
     const savedBalance = await newBalance.save();
+
+    // Seed default categories for new user (fire-and-forget)
+    seedDefaultCategories(savedUser._id).catch(err =>
+        logger.error(`Failed to seed categories for new user ${savedUser._id}: ${err.message}`)
+    );
 
     // Send verification email (non-blocking — don't fail registration if email fails)
     // Skipped in test environment
@@ -231,6 +237,10 @@ const findOrCreateGoogleUser = async (googleId, email, name) => {
   user = new User({ name, username, email, googleId });
   const saved = await user.save();
   await new Balance({ user: saved._id, amount: 0 }).save();
+  // Seed default categories for new Google user (fire-and-forget)
+  seedDefaultCategories(saved._id).catch(err =>
+      logger.error(`Failed to seed categories for new Google user ${saved._id}: ${err.message}`)
+  );
   return saved;
 };
 
