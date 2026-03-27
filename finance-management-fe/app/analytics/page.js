@@ -389,20 +389,20 @@ export default function AnalyticsPage() {
 
           {/* Period selectors */}
           <div className="mb-6 space-y-3">
-            <div className="flex flex-wrap gap-1.5">
-              {availableYears.map(y => (
-                <button
-                  key={y}
-                  onClick={() => setYear(y)}
-                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                    y === year
-                      ? 'bg-teal-600 text-white shadow-sm'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:border-teal-300 hover:text-teal-700'
-                  }`}
-                >
-                  {y}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setYear(y => y - 1)}
+                disabled={year <= Math.min(...availableYears)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Previous year"
+              >‹</button>
+              <span className="text-base font-semibold text-gray-800 w-12 text-center tabular-nums">{year}</span>
+              <button
+                onClick={() => setYear(y => y + 1)}
+                disabled={year >= Math.max(...availableYears)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Next year"
+              >›</button>
             </div>
 
             {tab === 'Monthly' && (
