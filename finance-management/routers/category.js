@@ -8,7 +8,7 @@ const { classifyAll, getGroupSummary, setCategoryGroup, listCategories, deleteCa
 router.post('/classify-all', authenticateJWT, limiter.byUser(10), classifyAll);
 
 // POST /api/category/repair-types — fix categories whose type doesn't match transaction usage
-router.post('/repair-types', authenticateJWT, limiter.byUser(5), repairTypes);
+router.post('/repair-types', authenticateJWT, limiter.byUser(10), repairTypes);
 
 // GET /api/category/group-summary — spending breakdown by semantic group for a month
 router.get('/group-summary', authenticateJWT, limiter.byUser(30), getGroupSummary);

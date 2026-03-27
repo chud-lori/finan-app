@@ -292,9 +292,6 @@ const GROUP_BADGE = {
   other:         'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
-// Runs at most once per browser session — subsequent profile visits skip the repair call
-let categoryTypeRepairDone = false;
-
 function ManageCategories() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -309,9 +306,11 @@ function ManageCategories() {
   const load = async () => {
     setLoading(true);
     try {
-      if (!categoryTypeRepairDone) {
+      const username = (() => { try { return localStorage.getItem('username') || 'u'; } catch { return 'u'; } })();
+      const repairKey = `cat_type_repaired_${username}`;
+      if (!localStorage.getItem(repairKey)) {
         await repairCategoryTypes().catch(() => {});
-        categoryTypeRepairDone = true;
+        try { localStorage.setItem(repairKey, '1'); } catch {}
       }
       const res = await listAllCategories();
       setCategories(res.data.categories);
