@@ -737,8 +737,6 @@ export default function ProfilePage() {
   };
 
   // ── Import CSV ────────────────────────────────────────────────────────────
-  const MAX_CSV_FILES = 5;
-
   const handleImportFiles = (fileList) => {
     if (!fileList || fileList.length === 0) return;
     const valid = Array.from(fileList).filter(f => f.name.endsWith('.csv') || f.type === 'text/csv');
@@ -746,10 +744,6 @@ export default function ProfilePage() {
     if (invalid > 0) setImportError(`${invalid} file(s) skipped — only .csv allowed`);
     else setImportError('');
     if (valid.length === 0) return;
-    if (valid.length > MAX_CSV_FILES) {
-      setImportError(`Too many files — maximum ${MAX_CSV_FILES} allowed per upload`);
-      return;
-    }
     setImportFiles(valid); setImportResult(null);
     // Preview first file only
     const reader = new FileReader();
@@ -1333,7 +1327,7 @@ export default function ProfilePage() {
                           <p className="text-sm font-medium text-gray-700">
                             Drop CSV(s) or <span className="text-teal-600 underline">browse</span>
                           </p>
-                          <p className="text-xs text-gray-400">Up to 5 .csv files, max 5 MB each</p>
+                          <p className="text-xs text-gray-400">Multiple .csv files supported, max 5 MB each</p>
                         </>
                       )}
                     </div>
