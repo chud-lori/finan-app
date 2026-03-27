@@ -28,7 +28,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Full timezone support** — records each transaction in the timezone it was made
 
 ### Understand
-- **Analytics** — monthly and yearly charts, category breakdown, savings rate, and "So What?" plain-language insight
+- **Analytics** — monthly and yearly charts, category breakdown, savings rate, and "So What?" plain-language insight; year selector bounded to years with actual transactions; click any bar in yearly view to see that month's transactions
 - **Period comparison** — this month vs last month or vs your average, with per-category deltas and spike warnings
 - **Anomaly detection** — flags unusually large transactions compared to your spending baseline
 - **Spending explainability** — shows which categories drive your spending the most

@@ -141,7 +141,7 @@ finan-app/                          ← monorepo root
     │   ├── layout.js               ← root layout, ErrorBoundary, theme script
     │   ├── page.js                 ← Landing page (always light mode)
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
-    │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown
+    │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown; year nav bounded by availableYears; clicking a bar in yearly view opens month transaction modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
     │   ├── recommendation/page.js  ← 10 financial planning calculators
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
@@ -886,7 +886,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | PUT | `/api/transaction/budget/:yearMonth` | 30/min | ✓ | Set budget for a month; body: `{ amount, updateDefault? }` |
 | GET | `/api/transaction/ml-insights` | 20/min | ✓ | ML anomaly detection + month-end forecast (cached; degrades gracefully) |
 | POST | `/api/transaction/ml-insights/refresh` | 10/min | ✓ | Force-refresh ML insights; bypasses tx-count cache check |
-| POST | `/api/transaction/import/csv` | 10/min | ✓ | Bulk CSV import; `multipart/form-data`, field: `files`, up to 5 files, max 5 MB each |
+| POST | `/api/transaction/import/csv` | 10/min | ✓ | Bulk CSV import; `multipart/form-data`, field: `files`, up to 10 files, max 5 MB each; MulterErrors return 400 |
 | GET | `/api/transaction/category` | — | ✓ | List categories; query: `?search=X&type=income\|expense` |
 | GET | `/api/transaction/category/suggestions` | — | ✓ | Smart category suggestions based on time of day and past habits |
 | POST | `/api/transaction/category` | — | ✓ | Seed default categories (idempotent) |
