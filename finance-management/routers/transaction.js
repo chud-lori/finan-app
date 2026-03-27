@@ -155,7 +155,18 @@ router.post('/ml-insights/refresh', authenticateJWT, limiter.byUser(10), refresh
  *       500:
  *         description: Server error
  */
-router.post('/import/csv', authenticateJWT, limiter.byUser(10), upload.array('files', 10), importCsv);
+router.post('/import/csv', authenticateJWT, limiter.byUser(10), (req, res, next) => {
+    upload.array('files', 5)(req, res, (err) => {
+        if (!err) return next();
+        if (err instanceof multer.MulterError) {
+            const msg = err.code === 'LIMIT_FILE_COUNT' ? 'Too many files — maximum 5 allowed per upload'
+                      : err.code === 'LIMIT_FILE_SIZE'  ? 'File too large — maximum 5 MB per file'
+                      : `Upload error: ${err.message}`;
+            return res.status(400).json({ error: msg });
+        }
+        return res.status(400).json({ error: err.message || 'Upload failed' });
+    });
+}, importCsv);
 
 /**
  * @openapi
