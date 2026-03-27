@@ -21,10 +21,19 @@ const VBarTooltip = ({ active, payload, label }) => {
   );
 };
 
-export default function VBarChart({ data, bars, height = 300 }) {
+export default function VBarChart({ data, bars, height = 300, onBarClick }) {
+  const handleClick = onBarClick
+    ? (d) => { if (d?.activeLabel) onBarClick(d.activeLabel); }
+    : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+      <BarChart
+        data={data}
+        margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+        onClick={handleClick}
+        style={onBarClick ? { cursor: 'pointer' } : undefined}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
         <YAxis tickFormatter={formatK} tick={{ fontSize: 11 }} width={52} />

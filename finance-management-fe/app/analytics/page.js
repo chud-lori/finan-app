@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnalytics } from '@/lib/api';
+import { getAnalytics, getTransactions } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -262,10 +262,17 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
 
+  const [availableYears, setAvailableYears] = useState([now.getFullYear()]);
+
   // Comparison
   const [compareMode, setCompareMode]   = useState('none'); // 'none' | 'last_month' | 'average'
   const [compData,    setCompData]      = useState(null);
   const [loadingComp, setLoadingComp]   = useState(false);
+
+  // Month transaction modal (yearly tab bar click)
+  const [monthModal,       setMonthModal]       = useState(null); // { label, monthStr } e.g. { label: 'Jan 2024', monthStr: '2024-01' }
+  const [monthTxns,        setMonthTxns]        = useState([]);
+  const [loadingMonthTxns, setLoadingMonthTxns] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -274,6 +281,9 @@ export default function AnalyticsPage() {
       const m   = tab === 'Monthly' ? month : null;
       const res = await getAnalytics(year, m);
       setData(res.data);
+      if (res.data?.availableYears?.length) {
+        setAvailableYears(res.data.availableYears);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -332,6 +342,24 @@ export default function AnalyticsPage() {
     router.push(`/?category=${encodeURIComponent(cat)}&month=${monthParam}`);
   };
 
+  // Yearly bar click → fetch transactions for that month
+  const handleBarClick = async (label) => {
+    const mIdx = MONTH_LABELS.indexOf(label);
+    if (mIdx === -1) return;
+    const monthStr = `${year}-${String(mIdx + 1).padStart(2, '0')}`;
+    setMonthModal({ label: `${label} ${year}`, monthStr });
+    setMonthTxns([]);
+    setLoadingMonthTxns(true);
+    try {
+      const res = await getTransactions({ month: monthStr, limit: 200 });
+      setMonthTxns(res.data?.transactions ?? []);
+    } catch {
+      setMonthTxns([]);
+    } finally {
+      setLoadingMonthTxns(false);
+    }
+  };
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gray-50">
@@ -361,19 +389,20 @@ export default function AnalyticsPage() {
 
           {/* Period selectors */}
           <div className="mb-6 space-y-3">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setYear(y => y - 1)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-colors"
-                aria-label="Previous year"
-              >‹</button>
-              <span className="text-base font-semibold text-gray-800 w-12 text-center tabular-nums">{year}</span>
-              <button
-                onClick={() => setYear(y => y + 1)}
-                disabled={year >= new Date().getFullYear()}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                aria-label="Next year"
-              >›</button>
+            <div className="flex flex-wrap gap-1.5">
+              {availableYears.map(y => (
+                <button
+                  key={y}
+                  onClick={() => setYear(y)}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                    y === year
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:border-teal-300 hover:text-teal-700'
+                  }`}
+                >
+                  {y}
+                </button>
+              ))}
             </div>
 
             {tab === 'Monthly' && (
@@ -518,7 +547,7 @@ export default function AnalyticsPage() {
                     />
                   </div>
 
-                  <ChartCard title={`Monthly income vs expense — ${year}`}>
+                  <ChartCard title={`Monthly income vs expense — ${year}`} hint="Click a bar to see transactions">
                     <VBarChart
                       data={monthlyBars}
                       bars={[
@@ -526,6 +555,7 @@ export default function AnalyticsPage() {
                         { key: 'Expense', color: '#f43f5e' },
                       ]}
                       height={300}
+                      onBarClick={handleBarClick}
                     />
                   </ChartCard>
 
@@ -574,15 +604,75 @@ export default function AnalyticsPage() {
           )}
         </main>
       </div>
+
+      {/* Month transaction modal */}
+      {monthModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setMonthModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="font-semibold text-gray-900">Transactions — {monthModal.label}</h3>
+                {!loadingMonthTxns && (
+                  <p className="text-xs text-gray-400 mt-0.5">{monthTxns.length} transaction{monthTxns.length !== 1 ? 's' : ''}</p>
+                )}
+              </div>
+              <button onClick={() => setMonthModal(null)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-2">
+              {loadingMonthTxns ? (
+                <div className="space-y-3 py-3">
+                  {[0,1,2,3,4].map(i => (
+                    <div key={i} className="flex gap-3 items-center">
+                      <SkeletonLine className="h-4 flex-1" />
+                      <SkeletonLine className="h-4 w-20 flex-shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              ) : monthTxns.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">No transactions this month.</p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {monthTxns.map(tx => (
+                    <div key={tx._id} className="py-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{tx.description || tx.category}</p>
+                        <p className="text-xs text-gray-500 capitalize">
+                          {tx.category} · {new Date(tx.time).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                        </p>
+                      </div>
+                      <span className={`text-sm font-semibold shrink-0 ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {tx.type === 'income' ? '+' : '−'}{formatAmount(tx.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </AuthGuard>
   );
 }
 
 // ─── Reusable UI pieces ───────────────────────────────────────────────────────
-function ChartCard({ title, children }) {
+function ChartCard({ title, hint, children }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-      <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
+      <div className="flex items-center gap-2 mb-4">
+        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+        {hint && <span className="text-xs text-gray-400 italic">{hint}</span>}
+      </div>
       {children}
     </div>
   );
