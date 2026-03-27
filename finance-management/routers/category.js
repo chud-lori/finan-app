@@ -2,10 +2,13 @@ const express = require('express');
 const router  = express.Router();
 const authenticateJWT = require('../middleware/authJWT');
 const limiter = require('../middleware/rateLimit');
-const { classifyAll, getGroupSummary, setCategoryGroup, listCategories, deleteCategory, renameCategory } = require('../controllers/category');
+const { classifyAll, getGroupSummary, setCategoryGroup, listCategories, deleteCategory, renameCategory, repairTypes } = require('../controllers/category');
 
 // POST /api/category/classify-all — classify all unclassified categories for the user
 router.post('/classify-all', authenticateJWT, limiter.byUser(10), classifyAll);
+
+// POST /api/category/repair-types — fix categories whose type doesn't match transaction usage
+router.post('/repair-types', authenticateJWT, limiter.byUser(5), repairTypes);
 
 // GET /api/category/group-summary — spending breakdown by semantic group for a month
 router.get('/group-summary', authenticateJWT, limiter.byUser(30), getGroupSummary);

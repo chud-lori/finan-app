@@ -273,3 +273,6 @@ export const renameCategoryApi = (categoryId, newName) =>
 
 export const deleteCategoryApi = (categoryId) =>
   apiFetch(`/api/category/${categoryId}`, { method: 'DELETE' });
+
+export const repairCategoryTypes = () =>
+  apiFetch('/api/category/repair-types', { method: 'POST' });

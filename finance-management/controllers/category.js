@@ -236,4 +236,53 @@ const renameCategory = async (req, res) => {
     }
 };
 
-module.exports = { classifyAll, getGroupSummary, setCategoryGroup, listCategories, deleteCategory, renameCategory };
+/**
+ * POST /api/category/repair-types
+ * Re-derives each category's type from transaction usage.
+ * Useful for correcting categories that were created before the type-on-insert fix.
+ * Safe to call repeatedly — only updates rows that are actually wrong.
+ */
+const repairTypes = async (req, res) => {
+    const userId = req.user.id;
+    try {
+        // Aggregate: for each category name, count income vs expense transactions
+        const usage = await Transaction.aggregate([
+            { $match: { user: mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null } },
+            { $group: { _id: { name: '$category', type: '$type' }, count: { $sum: 1 } } },
+        ]);
+
+        // Build map: categoryName → dominant type (income wins if income count > 0)
+        const typeMap = {};
+        for (const row of usage) {
+            const name = row._id.name?.toLowerCase();
+            const type = row._id.type;
+            if (!name || !type) continue;
+            if (!typeMap[name]) typeMap[name] = { income: 0, expense: 0 };
+            typeMap[name][type] = (typeMap[name][type] || 0) + row.count;
+        }
+
+        const bulkOps = [];
+        for (const [name, counts] of Object.entries(typeMap)) {
+            // A category is treated as income only if ALL its transactions are income
+            const dominant = counts.income > 0 && counts.expense === 0 ? 'income' : 'expense';
+            bulkOps.push({
+                updateOne: {
+                    filter: { user: userId, name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }, type: { $ne: dominant } },
+                    update: { $set: { type: dominant } },
+                },
+            });
+        }
+
+        let updated = 0;
+        if (bulkOps.length) {
+            const result = await Category.bulkWrite(bulkOps, { ordered: false });
+            updated = result.modifiedCount;
+        }
+
+        return res.json({ status: 1, data: { updated } });
+    } catch (err) {
+        return res.status(500).json({ status: 0, message: 'Failed to repair category types' });
+    }
+};
+
+module.exports = { classifyAll, getGroupSummary, setCategoryGroup, listCategories, deleteCategory, renameCategory, repairTypes };

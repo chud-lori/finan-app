@@ -18,6 +18,7 @@ import {
   listAllCategories,
   renameCategoryApi,
   deleteCategoryApi,
+  repairCategoryTypes,
 } from '@/lib/api';
 import { toTitleCase } from '@/lib/format';
 import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
@@ -302,9 +303,10 @@ function ManageCategories() {
   const [errorMsg, setErrorMsg]     = useState(null);
   const renameInputRef = useRef(null);
 
-  const load = async () => {
+  const load = async (repair = false) => {
     setLoading(true);
     try {
+      if (repair) await repairCategoryTypes().catch(() => {});
       const res = await listAllCategories();
       setCategories(res.data.categories);
     } catch (e) {
@@ -314,7 +316,7 @@ function ManageCategories() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(true); }, []);
 
   useEffect(() => {
     if (renamingName && renameInputRef.current) renameInputRef.current.focus();
