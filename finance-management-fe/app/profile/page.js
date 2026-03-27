@@ -292,6 +292,9 @@ const GROUP_BADGE = {
   other:         'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
+// Runs at most once per browser session — subsequent profile visits skip the repair call
+let categoryTypeRepairDone = false;
+
 function ManageCategories() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -303,10 +306,13 @@ function ManageCategories() {
   const [errorMsg, setErrorMsg]     = useState(null);
   const renameInputRef = useRef(null);
 
-  const load = async (repair = false) => {
+  const load = async () => {
     setLoading(true);
     try {
-      if (repair) await repairCategoryTypes().catch(() => {});
+      if (!categoryTypeRepairDone) {
+        await repairCategoryTypes().catch(() => {});
+        categoryTypeRepairDone = true;
+      }
       const res = await listAllCategories();
       setCategories(res.data.categories);
     } catch (e) {
@@ -316,7 +322,7 @@ function ManageCategories() {
     }
   };
 
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(); }, []);
 
   useEffect(() => {
     if (renamingName && renameInputRef.current) renameInputRef.current.focus();
