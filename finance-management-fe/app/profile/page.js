@@ -292,16 +292,18 @@ const GROUP_BADGE = {
   other:         'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
-function ManageCategories() {
+function ManageCategoriesModal({ onClose }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [filter, setFilter]         = useState('all');
-  const [renamingName, setRenamingName] = useState(null);
-  const [renameValue, setRenameValue]   = useState('');
+  const [search, setSearch]         = useState('');
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [busyName, setBusyName]     = useState(null);
+  const [busyId, setBusyId]         = useState(null);
   const [errorMsg, setErrorMsg]     = useState(null);
   const renameInputRef = useRef(null);
+  const searchRef      = useRef(null);
 
   const load = async () => {
     setLoading(true);
@@ -321,37 +323,48 @@ function ManageCategories() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // focus search after load
+    setTimeout(() => searchRef.current?.focus(), 80);
+  }, []);
+
+  // close on Escape
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
 
   useEffect(() => {
-    if (renamingName && renameInputRef.current) renameInputRef.current.focus();
-  }, [renamingName]);
+    if (renamingId && renameInputRef.current) renameInputRef.current.focus();
+  }, [renamingId]);
 
   const startRename = (cat) => {
     setConfirmDelete(null);
     setErrorMsg(null);
-    setRenamingName(cat._id);
+    setRenamingId(cat._id);
     setRenameValue(cat.name);
   };
 
   const commitRename = async (cat) => {
     const newName = renameValue.trim();
-    if (!newName || newName === cat.name) { setRenamingName(null); return; }
-    setBusyName(cat._id);
+    if (!newName || newName === cat.name) { setRenamingId(null); return; }
+    setBusyId(cat._id);
     setErrorMsg(null);
     try {
       await renameCategoryApi(cat._id, newName);
-      setRenamingName(null);
+      setRenamingId(null);
       await load();
     } catch (e) {
       setErrorMsg(e.message);
     } finally {
-      setBusyName(null);
+      setBusyId(null);
     }
   };
 
   const handleDelete = async (cat) => {
-    setBusyName(cat._id);
+    setBusyId(cat._id);
     setErrorMsg(null);
     try {
       await deleteCategoryApi(cat._id);
@@ -361,114 +374,166 @@ function ManageCategories() {
       setErrorMsg(e.message);
       setConfirmDelete(null);
     } finally {
-      setBusyName(null);
+      setBusyId(null);
     }
   };
 
-  const filtered = filter === 'all' ? categories : categories.filter(c => c.type === filter);
+  const byType = (t) => categories.filter(c => c.type === t);
+  const counts = { all: categories.length, expense: byType('expense').length, income: byType('income').length };
+
+  const filtered = categories
+    .filter(c => filter === 'all' || c.type === filter)
+    .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div>
-      {/* Filter tabs */}
-      <div className="flex gap-1 mb-4">
-        {['all', 'expense', 'income'].map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
-              filter === f
-                ? 'bg-teal-600 text-white'
-                : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-            }`}
-          >
-            {cap(f)}{filter !== f && ` (${f === 'all' ? categories.length : categories.filter(c => c.type === f).length})`}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg flex flex-col"
+        style={{ maxHeight: 'min(90vh, 640px)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100 shrink-0">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">Manage Categories</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Rename or delete your categories</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
-        ))}
+        </div>
+
+        {/* Search + filter */}
+        <div className="px-5 py-3 space-y-2 border-b border-gray-100 shrink-0">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search categories…"
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1">
+            {['all', 'expense', 'income'].map(f => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+                  filter === f
+                    ? 'bg-teal-600 text-white'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {cap(f)} <span className={`${filter === f ? 'text-teal-200' : 'text-gray-400'}`}>({counts[f]})</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="overflow-y-auto flex-1 px-5">
+          {errorMsg && (
+            <p className="text-xs text-rose-600 py-2">{errorMsg}</p>
+          )}
+          {loading ? (
+            <div className="space-y-2 py-3">
+              {[1,2,3,4,5].map(i => <div key={i} className="h-9 bg-gray-100 rounded-lg animate-pulse" />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-10 text-center text-sm text-gray-400">
+              {search ? `No categories matching "${search}"` : 'No categories yet.'}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {filtered.map(cat => {
+                const catId = String(cat._id);
+                const isBusy             = busyId === catId;
+                const isRenaming         = renamingId === catId;
+                const isConfirmingDelete = confirmDelete === catId;
+
+                return (
+                  <div key={catId} className="flex items-center gap-2 py-2.5 min-w-0">
+                    {isRenaming ? (
+                      <input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter')  commitRename(cat);
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        maxLength={100}
+                        className="flex-1 min-w-0 text-xs border border-teal-400 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+                      />
+                    ) : (
+                      <span className="flex-1 min-w-0 text-xs font-medium text-gray-800 capitalize truncate">{cat.name}</span>
+                    )}
+
+                    {!isRenaming && !isConfirmingDelete && (
+                      <>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${cat.type === 'income' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {cat.type}
+                        </span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${GROUP_BADGE[cat.group] ?? GROUP_BADGE.other}`}>
+                          {cat.group ?? 'other'}
+                        </span>
+                      </>
+                    )}
+
+                    {isBusy ? (
+                      <span className="w-3.5 h-3.5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                    ) : isRenaming ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => commitRename(cat)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-teal-600 text-white hover:bg-teal-700 transition-colors">Save</button>
+                        <button onClick={() => setRenamingId(null)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors">Cancel</button>
+                      </div>
+                    ) : isConfirmingDelete ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[10px] text-gray-500">Delete?</span>
+                        <button onClick={() => handleDelete(cat)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors">Yes</button>
+                        <button onClick={() => setConfirmDelete(null)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors">No</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => startRename(cat)} title="Rename" className="p-1 rounded-md text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button onClick={() => { setRenamingId(null); setErrorMsg(null); setConfirmDelete(catId); }} title="Delete" className="p-1 rounded-md text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-gray-100 shrink-0">
+          <p className="text-[10px] text-gray-400">
+            Categories with transactions cannot be deleted. Renaming updates all existing transactions.
+          </p>
+        </div>
       </div>
-
-      {errorMsg && (
-        <p className="text-xs text-rose-600 dark:text-rose-400 mb-3">{errorMsg}</p>
-      )}
-
-      {loading ? (
-        <div className="space-y-2">
-          {[1,2,3,4,5].map(i => <div key={i} className="h-9 bg-gray-100 dark:bg-slate-800 rounded-lg animate-pulse" />)}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="py-6 text-center text-sm text-gray-400">No categories yet.</div>
-      ) : (
-        <div className="divide-y divide-gray-100 dark:divide-slate-800">
-          {filtered.map(cat => {
-            const catId = String(cat._id);
-            const isBusy             = busyName === catId;
-            const isRenaming         = renamingName === catId;
-            const isConfirmingDelete = confirmDelete === catId;
-
-            return (
-              <div key={catId} className="flex items-center gap-2 py-2 min-w-0">
-                {isRenaming ? (
-                  <input
-                    ref={renameInputRef}
-                    value={renameValue}
-                    onChange={e => setRenameValue(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter')  commitRename(cat);
-                      if (e.key === 'Escape') setRenamingName(null);
-                    }}
-                    maxLength={100}
-                    className="flex-1 min-w-0 text-xs border border-teal-400 rounded-md px-2 py-1 bg-white dark:bg-slate-900 text-gray-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                  />
-                ) : (
-                  <span className="flex-1 min-w-0 text-xs font-medium text-gray-800 dark:text-slate-200 capitalize truncate">{cat.name}</span>
-                )}
-
-                {!isRenaming && !isConfirmingDelete && (
-                  <>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${cat.type === 'income' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'}`}>
-                      {cat.type}
-                    </span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${GROUP_BADGE[cat.group] ?? GROUP_BADGE.other}`}>
-                      {cat.group ?? 'other'}
-                    </span>
-                  </>
-                )}
-
-                {isBusy ? (
-                  <span className="w-3.5 h-3.5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin shrink-0" />
-                ) : isRenaming ? (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => commitRename(cat)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-teal-600 text-white hover:bg-teal-700 transition-colors">Save</button>
-                    <button onClick={() => setRenamingName(null)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-500 hover:bg-gray-200 transition-colors">Cancel</button>
-                  </div>
-                ) : isConfirmingDelete ? (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[10px] text-gray-500 dark:text-slate-400">Delete?</span>
-                    <button onClick={() => handleDelete(cat)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors">Yes</button>
-                    <button onClick={() => setConfirmDelete(null)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-500 hover:bg-gray-200 transition-colors">No</button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => startRename(cat)} title="Rename" className="p-1 rounded-md text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-colors">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button onClick={() => { setRenamingName(null); setErrorMsg(null); setConfirmDelete(catId); }} title="Delete" className="p-1 rounded-md text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <p className="text-[10px] text-gray-400 mt-4">
-        Categories attached to transactions cannot be deleted. Renaming updates all existing transactions.
-      </p>
     </div>
   );
 }
@@ -538,7 +603,8 @@ export default function ProfilePage() {
   const [csvPreview,    setCsvPreview]    = useState(null); // { headers, rows }
   const importInputRef = useRef(null);
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDeleteModal,   setShowDeleteModal]   = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   // Change password
   const [pwForm,    setPwForm]    = useState({ current: '', next: '', confirm: '' });
@@ -763,6 +829,9 @@ export default function ProfilePage() {
           onCancel={() => setShowDeleteModal(false)}
           onConfirmed={handleDeleteConfirmed}
         />
+      )}
+      {showCategoryModal && (
+        <ManageCategoriesModal onClose={() => setShowCategoryModal(false)} />
       )}
 
       <div className="min-h-screen bg-gray-50">
@@ -1251,8 +1320,16 @@ export default function ProfilePage() {
               </Card>
 
               {/* Manage Categories */}
-              <Card title="Manage Categories" subtitle="Rename or delete your categories">
-                <ManageCategories />
+              <Card title="Categories" subtitle="Rename or delete your spending and income categories">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-gray-500">Organise your categories — rename or remove ones you don't need.</p>
+                  <button
+                    onClick={() => setShowCategoryModal(true)}
+                    className="shrink-0 px-4 py-1.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors"
+                  >
+                    Manage
+                  </button>
+                </div>
               </Card>
 
               {/* Danger Zone */}
