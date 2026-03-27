@@ -42,7 +42,8 @@ export default function SmartNudges() {
   const [loading, setLoading] = useState(true);
   const [leaving, setLeaving] = useState(false); // slide-out direction
   const [dir,     setDir]     = useState('next'); // 'next' | 'prev'
-  const timerRef = useRef(null);
+  const timerRef   = useRef(null);
+  const navigateRef = useRef(null);
 
   useEffect(() => {
     getSmartRecommendations()
@@ -53,14 +54,14 @@ export default function SmartNudges() {
 
   const resetTimer = useCallback(() => {
     clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => navigate('next'), INTERVAL_MS);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    timerRef.current = setInterval(() => navigateRef.current?.('next'), INTERVAL_MS);
+  }, []);
 
   useEffect(() => {
     if (recs.length <= 1) return;
-    timerRef.current = setInterval(() => navigate('next'), INTERVAL_MS);
+    timerRef.current = setInterval(() => navigateRef.current?.('next'), INTERVAL_MS);
     return () => clearInterval(timerRef.current);
-  }, [recs.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [recs.length]);
 
   const navigate = (direction) => {
     if (leaving) return;
@@ -75,6 +76,8 @@ export default function SmartNudges() {
     }, 200);
     resetTimer();
   };
+  // Keep ref current so the interval always calls the latest navigate (with up-to-date recs/leaving)
+  navigateRef.current = navigate;
 
   const goTo = (i) => {
     if (i === idx || leaving) return;
