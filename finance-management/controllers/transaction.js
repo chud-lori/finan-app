@@ -105,7 +105,7 @@ const addTransaction = async (req, res, next) => {
         try {
             category = await Category.findOneAndUpdate(
                 { user: user.id, name: nameLower },
-                { $setOnInsert: { user: user.id, name: nameLower } },
+                { $setOnInsert: { user: user.id, name: nameLower, type: transactionDTO.type } },
                 { upsert: true, new: true }
             );
         } catch (e) {

@@ -15,6 +15,9 @@ import {
   logoutAllDevices,
   getSessions,
   revokeSession,
+  listAllCategories,
+  renameCategoryApi,
+  deleteCategoryApi,
 } from '@/lib/api';
 import { toTitleCase } from '@/lib/format';
 import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
@@ -277,6 +280,192 @@ function ImportSuccessModal({ result, onClose }) {
 }
 
 // ─── Reusable section card ────────────────────────────────────────────────────
+const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+const GROUP_BADGE = {
+  essential:     'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-400',
+  discretionary: 'bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400',
+  savings:       'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400',
+  social:        'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400',
+  income:        'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400',
+  other:         'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400',
+};
+
+function ManageCategories() {
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [filter, setFilter]         = useState('all');
+  const [renamingName, setRenamingName] = useState(null);
+  const [renameValue, setRenameValue]   = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [busyName, setBusyName]     = useState(null);
+  const [errorMsg, setErrorMsg]     = useState(null);
+  const renameInputRef = useRef(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await listAllCategories();
+      setCategories(res.data.categories);
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (renamingName && renameInputRef.current) renameInputRef.current.focus();
+  }, [renamingName]);
+
+  const startRename = (cat) => {
+    setConfirmDelete(null);
+    setErrorMsg(null);
+    setRenamingName(cat._id);
+    setRenameValue(cat.name);
+  };
+
+  const commitRename = async (cat) => {
+    const newName = renameValue.trim();
+    if (!newName || newName === cat.name) { setRenamingName(null); return; }
+    setBusyName(cat._id);
+    setErrorMsg(null);
+    try {
+      await renameCategoryApi(cat._id, newName);
+      setRenamingName(null);
+      await load();
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setBusyName(null);
+    }
+  };
+
+  const handleDelete = async (cat) => {
+    setBusyName(cat._id);
+    setErrorMsg(null);
+    try {
+      await deleteCategoryApi(cat._id);
+      setConfirmDelete(null);
+      await load();
+    } catch (e) {
+      setErrorMsg(e.message);
+      setConfirmDelete(null);
+    } finally {
+      setBusyName(null);
+    }
+  };
+
+  const filtered = filter === 'all' ? categories : categories.filter(c => c.type === filter);
+
+  return (
+    <div>
+      {/* Filter tabs */}
+      <div className="flex gap-1 mb-4">
+        {['all', 'expense', 'income'].map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+              filter === f
+                ? 'bg-teal-600 text-white'
+                : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            {cap(f)}{filter !== f && ` (${f === 'all' ? categories.length : categories.filter(c => c.type === f).length})`}
+          </button>
+        ))}
+      </div>
+
+      {errorMsg && (
+        <p className="text-xs text-rose-600 dark:text-rose-400 mb-3">{errorMsg}</p>
+      )}
+
+      {loading ? (
+        <div className="space-y-2">
+          {[1,2,3,4,5].map(i => <div key={i} className="h-9 bg-gray-100 dark:bg-slate-800 rounded-lg animate-pulse" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="py-6 text-center text-sm text-gray-400">No categories yet.</div>
+      ) : (
+        <div className="divide-y divide-gray-100 dark:divide-slate-800">
+          {filtered.map(cat => {
+            const catId = String(cat._id);
+            const isBusy             = busyName === catId;
+            const isRenaming         = renamingName === catId;
+            const isConfirmingDelete = confirmDelete === catId;
+
+            return (
+              <div key={catId} className="flex items-center gap-2 py-2 min-w-0">
+                {isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter')  commitRename(cat);
+                      if (e.key === 'Escape') setRenamingName(null);
+                    }}
+                    maxLength={100}
+                    className="flex-1 min-w-0 text-xs border border-teal-400 rounded-md px-2 py-1 bg-white dark:bg-slate-900 text-gray-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  />
+                ) : (
+                  <span className="flex-1 min-w-0 text-xs font-medium text-gray-800 dark:text-slate-200 capitalize truncate">{cat.name}</span>
+                )}
+
+                {!isRenaming && !isConfirmingDelete && (
+                  <>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${cat.type === 'income' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'}`}>
+                      {cat.type}
+                    </span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${GROUP_BADGE[cat.group] ?? GROUP_BADGE.other}`}>
+                      {cat.group ?? 'other'}
+                    </span>
+                  </>
+                )}
+
+                {isBusy ? (
+                  <span className="w-3.5 h-3.5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                ) : isRenaming ? (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => commitRename(cat)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-teal-600 text-white hover:bg-teal-700 transition-colors">Save</button>
+                    <button onClick={() => setRenamingName(null)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-500 hover:bg-gray-200 transition-colors">Cancel</button>
+                  </div>
+                ) : isConfirmingDelete ? (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-[10px] text-gray-500 dark:text-slate-400">Delete?</span>
+                    <button onClick={() => handleDelete(cat)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors">Yes</button>
+                    <button onClick={() => setConfirmDelete(null)} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-500 hover:bg-gray-200 transition-colors">No</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => startRename(cat)} title="Rename" className="p-1 rounded-md text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button onClick={() => { setRenamingName(null); setErrorMsg(null); setConfirmDelete(catId); }} title="Delete" className="p-1 rounded-md text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-[10px] text-gray-400 mt-4">
+        Categories attached to transactions cannot be deleted. Renaming updates all existing transactions.
+      </p>
+    </div>
+  );
+}
+
 function Card({ title, subtitle, danger = false, children }) {
   return (
     <div className={`bg-white rounded-2xl border shadow-sm ${danger ? 'border-red-200' : 'border-gray-200'}`}>
@@ -1052,6 +1241,11 @@ export default function ProfilePage() {
                     </button>
                   </form>
                 </div>
+              </Card>
+
+              {/* Manage Categories */}
+              <Card title="Manage Categories" subtitle="Rename or delete your categories">
+                <ManageCategories />
               </Card>
 
               {/* Danger Zone */}
