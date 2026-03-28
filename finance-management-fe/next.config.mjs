@@ -16,6 +16,10 @@ const nextConfig = {
           // Tell browsers to always use HTTPS for this origin for 1 year.
           // Only effective when served over HTTPS (nginx terminates TLS).
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          // Allow popups (e.g. Google OAuth) to postMessage back to this window.
+          // 'same-origin' (Sentry's default) severs the opener relationship and
+          // blocks the Google Identity popup from completing the sign-in handshake.
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
         ],
       },
     ];
