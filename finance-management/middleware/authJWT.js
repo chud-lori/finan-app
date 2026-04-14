@@ -2,6 +2,7 @@ const crypto  = require('crypto');
 const jwt     = require('jsonwebtoken');
 const { SECRET_TOKEN } = require('../config/keys');
 const Session = require('../models/session.model');
+const User    = require('../models/user.model');
 
 const authenticateJWT = async (req, res, next) => {
     const token = req.cookies?.token;
@@ -25,6 +26,17 @@ const authenticateJWT = async (req, res, next) => {
 
     if (!session) {
         return res.status(403).json({ message: 'Session expired. Please log in again.' });
+    }
+
+    // Defence-in-depth: reject tokens issued before the last "logout everywhere" /
+    // password change, even if a stale Session doc somehow exists.
+    try {
+        const user = await User.findById(decoded.id).select('tokenVersion').lean();
+        if (!user || (user.tokenVersion || 0) !== (decoded.tv || 0)) {
+            return res.status(403).json({ message: 'Session expired. Please log in again.' });
+        }
+    } catch {
+        return res.status(500).json({ message: 'Auth check failed' });
     }
 
     // Update lastSeen fire-and-forget — don't block the request

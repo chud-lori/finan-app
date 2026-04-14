@@ -67,7 +67,8 @@ describe('Auth Integration Tests', () => {
 
             expect(res).to.have.status(409);
             expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Username already exists');
+            // Generic message to prevent user enumeration
+            expect(res.body.message).to.include('Unable to complete registration');
         });
 
         it('should return 409 for duplicate email', async () => {
@@ -84,7 +85,7 @@ describe('Auth Integration Tests', () => {
 
             expect(res).to.have.status(409);
             expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Email already exists');
+            expect(res.body.message).to.include('Unable to complete registration');
         });
     });
 
@@ -116,7 +117,7 @@ describe('Auth Integration Tests', () => {
             authToken = res.body.data.token;
         });
 
-        it('should return 400 for invalid password', async () => {
+        it('should return 401 for invalid password', async () => {
             const res = await chai.request(server)
                 .post('/api/auth/login')
                 .send({
@@ -124,12 +125,13 @@ describe('Auth Integration Tests', () => {
                     password: 'wrongpassword'
                 });
 
-            expect(res).to.have.status(400);
+            // Generic 401 to prevent user enumeration (was 400 "Password incorrect")
+            expect(res).to.have.status(401);
             expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Password incorrect');
+            expect(res.body.message).to.include('Invalid credentials');
         });
 
-        it('should return 404 for non-existent username', async () => {
+        it('should return 401 for non-existent username', async () => {
             const res = await chai.request(server)
                 .post('/api/auth/login')
                 .send({
@@ -137,9 +139,10 @@ describe('Auth Integration Tests', () => {
                     password: testUser.password
                 });
 
-            expect(res).to.have.status(404);
+            // Generic 401 identical to the bad-password branch (was 404 "Username not found")
+            expect(res).to.have.status(401);
             expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Username not found');
+            expect(res.body.message).to.include('Invalid credentials');
         });
 
         it('should return 400 for validation errors', async () => {

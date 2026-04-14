@@ -37,6 +37,11 @@ if (process.env.NODE_ENV !== 'test') {
 
 const app = express();
 
+// Behind nginx / proxy: trust exactly one hop so req.ip reflects the real client.
+// Without this, all traffic appears to come from the proxy's IP — the per-IP
+// rate limiter would share one bucket across every user (global DoS by 1 attacker).
+app.set('trust proxy', 1);
+
 logger.stream = {
     write: function(message, encoding){
         const data = JSON.parse(message);

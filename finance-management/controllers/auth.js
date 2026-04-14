@@ -54,7 +54,9 @@ const createSession = async (userId, token, req, res) => {
             name:    deviceName,
             browser,
             os,
-            ip: (req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim() || 'unknown',
+            // req.ip honours `trust proxy` — do NOT read x-forwarded-for directly or a
+            // client can spoof it by sending the header themselves.
+            ip: req.ip || 'unknown',
         },
         expiresAt: new Date(Date.now() + SESSION_TTL_MS),
     });
@@ -71,19 +73,12 @@ const registerUser = async (req, res, next) => {
       return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
     }
 
-    // Check if username exists
+    // Single generic error for all "already in use" cases so the response
+    // doesn't leak which field collided (classic enumeration vector).
     const existingUserByUsername = await User.findOne({ username: registerDTO.username });
-    if (existingUserByUsername) {
-      return res.status(409).json(BaseResponseDTO.error("Username already exists"));
-    }
-
-    // Check if email exists
-    const existingUserByEmail = await User.findOne({ email: registerDTO.email });
-    if (existingUserByEmail) {
-      if (existingUserByEmail.googleId) {
-        return res.status(409).json(BaseResponseDTO.error("This email is already registered via Google. Please sign in with Google."));
-      }
-      return res.status(409).json(BaseResponseDTO.error("Email already exists"));
+    const existingUserByEmail    = await User.findOne({ email: registerDTO.email });
+    if (existingUserByUsername || existingUserByEmail) {
+      return res.status(409).json(BaseResponseDTO.error('Unable to complete registration. If you already have an account, please sign in.'));
     }
 
     const isTest = process.env.NODE_ENV === 'test';
@@ -142,7 +137,7 @@ const registerUser = async (req, res, next) => {
 
   } catch (error) {
     logger.error('Register user error:', error);
-    res.status(500).json(BaseResponseDTO.error('\1'));
+    res.status(500).json(BaseResponseDTO.error('Internal server error'));
   }
 }
 
@@ -162,26 +157,28 @@ const loginUser = async (req, res, next) => {
     const user = isEmail
       ? await User.findOne({ email: loginDTO.identifier.toLowerCase() })
       : await User.findOne({ username: loginDTO.identifier });
-    if (!user) {
-      logger.error(`Auth Login: ${loginDTO.identifier} not found`);
-      return res.status(404).json(BaseResponseDTO.error(isEmail ? "Email not found" : "Username not found"));
+
+    // Single generic error for every "cannot authenticate" branch so the
+    // response does not leak which of (account missing | Google-only | wrong
+    // password) applies. The EMAIL_NOT_VERIFIED code is still returned, but
+    // ONLY after the password check passes — so it cannot be used to enumerate.
+    const INVALID = () => res.status(401).json(BaseResponseDTO.error('Invalid credentials'));
+
+    if (!user || !user.password) {
+      logger.error(`Auth Login: ${loginDTO.identifier} failed (missing or oauth-only)`);
+      return INVALID();
     }
 
-    // Block OAuth-only accounts from password login
-    if (!user.password) {
-      return res.status(400).json(BaseResponseDTO.error("This account was created with Google. Please sign in with Google."));
-    }
-
-    // Block unverified email accounts
-    if (user.emailVerified === false) {
-      return res.status(403).json({ ...BaseResponseDTO.error('Please verify your email before signing in.'), code: 'EMAIL_NOT_VERIFIED' });
-    }
-
-    // Check password
     const isMatch = await bcrypt.compare(loginDTO.password, user.password);
     if (!isMatch) {
       logger.error(`Auth Login: ${loginDTO.identifier} password incorrect`);
-      return res.status(400).json(BaseResponseDTO.error("Password incorrect"));
+      return INVALID();
+    }
+
+    // Block unverified email accounts (checked AFTER password so unauth requests
+    // can't use this branch to enumerate which emails are registered).
+    if (user.emailVerified === false) {
+      return res.status(403).json({ ...BaseResponseDTO.error('Please verify your email before signing in.'), code: 'EMAIL_NOT_VERIFIED' });
     }
 
     // Create JWT Payload
@@ -203,7 +200,7 @@ const loginUser = async (req, res, next) => {
 
   } catch (error) {
     logger.error('Login user error:', error);
-    res.status(500).json(BaseResponseDTO.error('\1'));
+    res.status(500).json(BaseResponseDTO.error('Internal server error'));
   }
 }
 
@@ -270,7 +267,7 @@ const verifyGoogleToken = async (req, res) => {
     }));
   } catch (error) {
     logger.error(`Google verify error: ${error.message}`);
-    res.status(401).json(BaseResponseDTO.error('\1'));
+    res.status(401).json(BaseResponseDTO.error('Google authentication failed'));
   }
 };
 
@@ -291,7 +288,7 @@ const deleteAccount = async (req, res) => {
         res.status(200).json(BaseResponseDTO.success('Account and all data deleted successfully'));
     } catch (error) {
         logger.error(`Delete account error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 };
 
@@ -422,6 +419,11 @@ const forgotPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
+    // Reject non-string inputs to prevent NoSQL operator injection (e.g. {$ne: null}),
+    // which would otherwise match arbitrary unused reset records → account takeover.
+    if (typeof token !== 'string' || typeof newPassword !== 'string') {
+      return res.status(400).json(BaseResponseDTO.error('Token and new password are required'));
+    }
     if (!token || !newPassword) {
       return res.status(400).json(BaseResponseDTO.error('Token and new password are required'));
     }

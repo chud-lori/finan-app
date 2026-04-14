@@ -2,7 +2,9 @@ require("dotenv").config();
 
 // Crash loudly at startup if any secret required for security is missing.
 // Better to fail fast here than to start with a broken/insecure configuration.
-const REQUIRED_IN_PRODUCTION = ['SECRET_TOKEN', 'DB_URI'];
+// FE_URL is required: reset-password / verify-email emails embed it; falling back
+// to localhost in prod would send users broken links that still leak the token.
+const REQUIRED_IN_PRODUCTION = ['SECRET_TOKEN', 'DB_URI', 'FE_URL'];
 if (process.env.NODE_ENV === 'production') {
   for (const key of REQUIRED_IN_PRODUCTION) {
     if (!process.env[key]) {
