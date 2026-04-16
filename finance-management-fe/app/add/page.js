@@ -95,7 +95,7 @@ function CategoryCombobox({ value, onChange, categories }) {
               value={query}
               autoComplete="off"
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+              className="w-full px-3 py-1.5 text-base border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
             />
           </div>
 
@@ -464,7 +464,7 @@ export default function AddPage() {
   );
 }
 
-const inputCls = 'w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white';
+const inputCls = 'w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-base focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white';
 
 function Field({ label, children }) {
   return (
