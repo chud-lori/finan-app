@@ -24,6 +24,7 @@ const {
     setBudget,
     getMLInsights,
     refreshMLInsights,
+    getAIAnalysis,
 } = require('../controllers/transaction');
 
 const ALLOWED_CSV_MIMES = new Set(['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel']);
@@ -90,6 +91,7 @@ router.get('/active-months',  authenticateJWT, limiter.byUser(60), getActiveMont
 router.put('/budget/:yearMonth', authenticateJWT, limiter.byUser(30), setBudget);
 router.get('/ml-insights',      authenticateJWT, limiter.byUser(20), getMLInsights);
 router.post('/ml-insights/refresh', authenticateJWT, limiter.byUser(10), refreshMLInsights);
+router.post('/ai-analysis',        authenticateJWT, limiter.byUser(5),  getAIAnalysis);
 
 /**
  * @openapi

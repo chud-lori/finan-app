@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnomalies, getExplainability, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, classifyAllCategories, setCategoryGroup } from '@/lib/api';
+import { getAnomalies, getExplainability, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, classifyAllCategories, setCategoryGroup, getAIAnalysis } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -673,6 +673,9 @@ export default function InsightsPage() {
   const [loading,      setLoading]      = useState({ ttz: true, explain: true, anomaly: true, ml: true });
   const [refreshing,   setRefreshing]   = useState(false);
   const [errors,       setErrors]       = useState({});
+  const [aiAnalysis,   setAiAnalysis]   = useState(null);
+  const [aiLoading,    setAiLoading]    = useState(false);
+  const [aiError,      setAiError]      = useState(null);
 
   const applyMlResult = (data) => {
     setMl(data);
@@ -758,6 +761,19 @@ export default function InsightsPage() {
       setErrors(prev => ({ ...prev, ml: e.message }));
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleAIAnalysis = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await getAIAnalysis();
+      setAiAnalysis(res.data);
+    } catch (e) {
+      setAiError(e.message);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -865,6 +881,100 @@ export default function InsightsPage() {
                   ? <MLAnomalyList data={ml} />
                   : anomaly && <RuleBasedAnomalyList data={anomaly} />
                 }
+              </Section>
+            </div>
+
+            {/* AI Analysis — Gemini powered, on-demand */}
+            <div id="ai-analysis" className="lg:col-span-2">
+              <Section
+                title="✨ AI Analysis"
+                subtitle="Deep financial analysis powered by Gemini — generated on demand"
+                tag="Gemini"
+              >
+                {!aiAnalysis && !aiLoading && !aiError && (
+                  <div className="p-8 text-center space-y-3">
+                    <p className="text-sm text-gray-500 dark:text-slate-400">Get a personalized analysis of your spending habits, patterns, and actionable tips.</p>
+                    <button
+                      onClick={handleAIAnalysis}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold shadow-sm transition-all"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Generate Analysis
+                    </button>
+                  </div>
+                )}
+                {aiLoading && (
+                  <div className="p-8 text-center space-y-3">
+                    <div className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Analyzing your finances…
+                    </div>
+                  </div>
+                )}
+                {aiError && (
+                  <div className="p-5 space-y-3">
+                    <p className="text-sm text-red-600 dark:text-red-400">{aiError}</p>
+                    <button
+                      onClick={handleAIAnalysis}
+                      className="text-xs text-gray-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                    >
+                      ↻ Try again
+                    </button>
+                  </div>
+                )}
+                {aiAnalysis && (
+                  <div className="p-5 space-y-4">
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-slate-300 [&>h1]:text-base [&>h1]:font-bold [&>h2]:text-sm [&>h2]:font-bold [&>h3]:text-sm [&>h3]:font-semibold [&>ul]:text-sm [&>ol]:text-sm [&>p]:text-sm [&>blockquote]:text-sm">
+                      {aiAnalysis.analysis.split('\n').map((line, i) => {
+                        if (!line.trim()) return <br key={i} />;
+                        // Bold headers
+                        const h2Match = line.match(/^##\s+(.+)/);
+                        if (h2Match) return <h2 key={i}>{h2Match[1].replace(/\*\*/g, '')}</h2>;
+                        const h3Match = line.match(/^###\s+(.+)/);
+                        if (h3Match) return <h3 key={i}>{h3Match[1].replace(/\*\*/g, '')}</h3>;
+                        // Bullet points
+                        const bulletMatch = line.match(/^[-*]\s+(.+)/);
+                        if (bulletMatch) {
+                          return (
+                            <div key={i} className="flex gap-2 text-sm">
+                              <span className="text-teal-500 shrink-0 mt-0.5">•</span>
+                              <span dangerouslySetInnerHTML={{ __html: bulletMatch[1].replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
+                            </div>
+                          );
+                        }
+                        // Numbered list
+                        const numMatch = line.match(/^(\d+)\.\s+(.+)/);
+                        if (numMatch) {
+                          return (
+                            <div key={i} className="flex gap-2 text-sm">
+                              <span className="text-teal-500 font-semibold shrink-0">{numMatch[1]}.</span>
+                              <span dangerouslySetInnerHTML={{ __html: numMatch[2].replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
+                            </div>
+                          );
+                        }
+                        // Regular paragraph with bold support
+                        return <p key={i} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />;
+                      })}
+                    </div>
+                    <div className="pt-3 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between">
+                      <span className="text-xs text-gray-400 dark:text-slate-500">
+                        Generated {timeAgo(aiAnalysis.generatedAt)}
+                      </span>
+                      <button
+                        onClick={handleAIAnalysis}
+                        disabled={aiLoading}
+                        className="text-xs text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors disabled:opacity-40"
+                      >
+                        ↻ Regenerate
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Section>
             </div>
 

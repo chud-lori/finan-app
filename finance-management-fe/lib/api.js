@@ -183,6 +183,9 @@ export const refreshMLInsights = () =>
 export const getActiveMonths = () =>
   apiFetch('/api/transaction/active-months');
 
+export const getAIAnalysis = () =>
+  apiFetch(`/api/transaction/ai-analysis?tz=${encodeURIComponent(browserTz())}`, { method: 'POST' });
+
 export const setBudget = (yearMonth, amount, updateDefault = false) =>
   apiFetch(`/api/transaction/budget/${yearMonth}`, {
     method: 'PUT',

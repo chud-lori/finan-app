@@ -1331,6 +1331,129 @@ const refreshMLInsights = async (req, res) => {
     }
 };
 
+// ── Gemini AI Analysis (on-demand) ──────────────────────────────────────────
+
+const getAIAnalysis = async (req, res) => {
+    const userId = req.user.id;
+    const tz     = validTz(req.query.tz);
+
+    const { GEMINI_API_KEY } = require('../config/keys');
+    if (!GEMINI_API_KEY) {
+        return res.status(503).json(BaseResponseDTO.error('AI analysis is not configured — missing Gemini API key'));
+    }
+
+    try {
+        const now          = moment.tz(tz);
+        const sixMonthsAgo = moment.tz(tz).subtract(6, 'months').startOf('month').toDate();
+        const endOfMonth   = now.clone().endOf('month').toDate();
+
+        const [transactions, snapshots, balanceDoc, categories] = await Promise.all([
+            Transaction.find({ user: userId, time: { $gte: sixMonthsAgo, $lte: endOfMonth } })
+                .sort({ time: -1 }).lean(),
+            Snapshot.find({ user: userId, yearMonth: { $gte: moment.tz(tz).subtract(6, 'months').format('YYYY-MM') } })
+                .sort({ yearMonth: -1 }).lean(),
+            Balance.findOne({ user: userId }).lean(),
+            Category.find({ user: userId }).lean(),
+        ]);
+
+        if (transactions.length === 0) {
+            return res.status(200).json(BaseResponseDTO.success('AI analysis', {
+                analysis: 'Not enough data to analyze. Add some transactions first!',
+            }));
+        }
+
+        // Build a concise summary for the prompt
+        const monthlySummary = snapshots.map(s => ({
+            month: s.yearMonth,
+            income: s.income,
+            expense: s.expense,
+            txCount: s.txCount,
+            topCategories: (s.byCategory || [])
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 5)
+                .map(c => ({ name: c.category, total: c.total, count: c.count })),
+        }));
+
+        const recentTransactions = transactions.slice(0, 50).map(tx => ({
+            description: tx.description,
+            amount: tx.amount,
+            category: tx.category,
+            type: tx.type,
+            date: moment.tz(tx.time, tz).format('YYYY-MM-DD'),
+        }));
+
+        const categoryGroups = categories.reduce((acc, c) => {
+            const g = c.group || 'other';
+            if (!acc[g]) acc[g] = [];
+            acc[g].push(c.name);
+            return acc;
+        }, {});
+
+        const currentBalance = balanceDoc?.amount ?? null;
+        const currency = transactions[0]?.currency || 'IDR';
+
+        const prompt = `You are a personal finance advisor. Analyze this user's financial data and provide actionable insights.
+
+**Current balance:** ${currentBalance !== null ? `${currency} ${currentBalance.toLocaleString()}` : 'Unknown'}
+**Currency:** ${currency}
+**Analysis period:** Last 6 months
+
+**Monthly summary (newest first):**
+${JSON.stringify(monthlySummary, null, 2)}
+
+**Recent transactions (last 50):**
+${JSON.stringify(recentTransactions, null, 2)}
+
+**Category groups:**
+${JSON.stringify(categoryGroups, null, 2)}
+
+Please provide:
+1. **Spending Overview** — A brief summary of their financial health
+2. **Key Patterns** — Notable spending habits, trends, or recurring expenses
+3. **Concerns** — Any red flags like overspending, declining savings, or risky patterns
+4. **Actionable Tips** — 3-5 specific, practical suggestions to improve their finances
+5. **Monthly Trend** — Is their spending going up, down, or stable? Comment on income vs expense ratio
+
+Keep the tone friendly and concise. Use the actual category names and amounts. Format with markdown. Do not use any preamble like "Here's my analysis" — jump straight into the content.`;
+
+        const geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 1500,
+                    },
+                }),
+                signal: AbortSignal.timeout(30000),
+            }
+        );
+
+        if (!geminiRes.ok) {
+            const errBody = await geminiRes.text().catch(() => '');
+            logger.error(`Gemini API error ${geminiRes.status}: ${errBody}`);
+            return res.status(502).json(BaseResponseDTO.error('AI service temporarily unavailable — try again later'));
+        }
+
+        const geminiData = await geminiRes.json();
+        const analysis = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'No analysis generated.';
+
+        return res.status(200).json(BaseResponseDTO.success('AI analysis', {
+            analysis,
+            generatedAt: new Date().toISOString(),
+        }));
+    } catch (e) {
+        if (e.name === 'TimeoutError') {
+            return res.status(504).json(BaseResponseDTO.error('AI analysis timed out — try again'));
+        }
+        logger.error(`AI analysis error: ${e.message}`);
+        return res.status(500).json(BaseResponseDTO.error('Failed to generate AI analysis'));
+    }
+};
+
 module.exports = {
     addTransaction,
     getUserTransaction,
@@ -1352,4 +1475,5 @@ module.exports = {
     setBudget,
     getMLInsights,
     refreshMLInsights,
+    getAIAnalysis,
 };

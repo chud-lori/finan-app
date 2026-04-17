@@ -88,6 +88,7 @@ services:
       FROM_EMAIL: ${FROM_EMAIL:-noreply@lori.my.id}
       SENTRY_DSN: ${SENTRY_DSN}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:3002}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     depends_on:
       mongo-init:
         condition: service_completed_successfully
