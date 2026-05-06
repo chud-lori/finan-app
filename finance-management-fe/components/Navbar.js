@@ -142,8 +142,8 @@ export default function Navbar() {
     <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-gray-200/80 dark:border-slate-700/80 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-15 gap-4" style={{ height: '3.75rem' }}>
 
-        {/* Brand */}
-        <Link href="/" className="flex items-center shrink-0">
+        {/* Brand — Navbar only renders on authenticated pages, so always points to dashboard */}
+        <Link href="/dashboard" className="flex items-center shrink-0">
           <Image src="/logo.png" alt="Finan App" width={120} height={64} className="h-8 w-auto" priority />
         </Link>
 

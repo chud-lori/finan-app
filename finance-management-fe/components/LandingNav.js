@@ -15,7 +15,7 @@ export default function LandingNav() {
     <>
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center">
+          <Link href={loggedIn ? '/dashboard' : '/'} className="flex items-center">
             <Image src="/logo.png" alt="Finan App" width={120} height={64} className="h-8 w-auto" priority />
           </Link>
 
