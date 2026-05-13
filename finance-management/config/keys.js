@@ -24,4 +24,12 @@ module.exports = {
   FE_URL: process.env.FE_URL || 'http://localhost:3000',
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   FROM_EMAIL:     process.env.FROM_EMAIL || 'noreply@lori.my.id',
+
+  // ── ML routing ───────────────────────────────────────────────────────────
+  // USE_NATIVE_ML=true  → classifier/anomaly/forecast run in-process (services/ml)
+  // USE_NATIVE_ML=false → backend calls the external Python AI service at AI_SERVICE_URL
+  // Default is native. The HTTP path is kept as a rollback hatch and is removed
+  // once Phase 2 has been stable in production.
+  USE_NATIVE_ML:  (process.env.USE_NATIVE_ML ?? 'true').toLowerCase() !== 'false',
+  AI_SERVICE_URL: process.env.AI_SERVICE_URL || 'http://127.0.0.1:3002',
 };

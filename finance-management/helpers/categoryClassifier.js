@@ -9,8 +9,8 @@
  */
 const logger = require('./logger');
 const Category = require('../models/category.model');
-
-const AI_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:3002';
+const { USE_NATIVE_ML, AI_SERVICE_URL } = require('../config/keys');
+const nativeMl = require('../services/ml');
 
 /**
  * @param {string[]} names   — category names to classify
@@ -78,9 +78,18 @@ const classifyCategories = async (names, userId = null) => {
 
     if (toClassify.length === 0) return preClassified;
 
-    // Call the AI service for the remaining unmatched names
+    // Native path — synchronous in-process, no network, no timeout to worry about
+    if (USE_NATIVE_ML) {
+        const results = nativeMl.classifyBatch(toClassify);
+        const aiResults = Object.fromEntries(
+            results.map(r => [r.category, { group: r.group, confidence: r.confidence }])
+        );
+        return { ...preClassified, ...aiResults };
+    }
+
+    // Fallback path — Python AI service
     try {
-        const res = await fetch(`${AI_URL}/classify`, {
+        const res = await fetch(`${AI_SERVICE_URL}/classify`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ categories: toClassify }),

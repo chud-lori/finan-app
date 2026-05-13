@@ -19,6 +19,8 @@ const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
 const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
+const { USE_NATIVE_ML, AI_SERVICE_URL } = require('../config/keys');
+const nativeMl = require('../services/ml');
 
 // Fire-and-forget: delete cached ML insight for a specific month so next read regenerates
 const invalidateMLInsight = (userId, yearMonth) => {
@@ -1169,22 +1171,28 @@ const _runMLPipeline = async (userId, tz) => {
         is_current_month: tx.time >= startOfMonth,
     }));
 
-    const AI_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:3002';
-    const aiRes  = await fetch(`${AI_URL}/analyze`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            transactions:  txPayload,
-            daily_totals:  Object.entries(dailyMap).map(([day, amount]) => ({ day: parseInt(day, 10), amount })),
-            current_day:   now.date(),
-            days_in_month: now.daysInMonth(),
-            budget:        budgetDoc?.amount ?? null,
-        }),
-        signal: AbortSignal.timeout(8000),
-    });
+    const analyzePayload = {
+        transactions:  txPayload,
+        daily_totals:  Object.entries(dailyMap).map(([day, amount]) => ({ day: parseInt(day, 10), amount })),
+        current_day:   now.date(),
+        days_in_month: now.daysInMonth(),
+        budget:        budgetDoc?.amount ?? null,
+    };
 
-    if (!aiRes.ok) throw new Error(`AI service responded ${aiRes.status}`);
-    const aiData = await aiRes.json();
+    let aiData;
+    if (USE_NATIVE_ML) {
+        // In-process — no network, no timeout, deterministic
+        aiData = nativeMl.analyze(analyzePayload);
+    } else {
+        const aiRes = await fetch(`${AI_SERVICE_URL}/analyze`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(analyzePayload),
+            signal:  AbortSignal.timeout(8000),
+        });
+        if (!aiRes.ok) throw new Error(`AI service responded ${aiRes.status}`);
+        aiData = await aiRes.json();
+    }
     return { aiData, yearMonth, currentMonthTxCount };
 };
 

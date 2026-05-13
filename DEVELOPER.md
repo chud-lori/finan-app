@@ -16,7 +16,7 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
    - [ML insights pipeline](#ml-insights-pipeline)
    - [Snapshot system](#snapshot-system)
 4. [Data schemas](#data-schemas)
-5. [AI service models](#ai-service-models)
+5. [ML modules](#ml-modules-servicesml)
 6. [Environment variables](#environment-variables)
 7. [Local development](#local-development-without-docker)
 8. [Docker Compose](#docker-compose-full-stack)
@@ -46,7 +46,8 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
 | Frontend | Next.js 14 (App Router), React, Tailwind CSS v4 |
 | Charts | Recharts |
 | Frontend testing | Playwright E2E |
-| AI service | Python 3.12, FastAPI, scikit-learn (Isolation Forest + Linear Regression + TF-IDF) |
+| ML (in-process) | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, z-score anomaly detector, linear-regression forecast |
+| ML — legacy Python service (retired) | `finance-management-ai/` kept on disk for `USE_NATIVE_ML=false` rollback only; no longer in `docker-compose.yml` or CI/CD |
 | Container | Docker + Docker Compose |
 | CI/CD | GitHub Actions → GHCR → Watchtower (auto-deploy) |
 
@@ -62,16 +63,9 @@ finan-app/                          ← monorepo root
 ├── README.md                       ← product overview
 ├── DEVELOPER.md                    ← this file
 │
-├── finance-management-ai/          ← AI microservice (Python FastAPI)
-│   ├── main.py                     ← FastAPI app: /health + /classify + /analyze
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── models/
-│       ├── anomaly.py              ← Isolation Forest anomaly detection (z-score fallback)
-│       ├── forecast.py             ← Linear Regression month-end spending forecast
-│       └── classifier.py          ← TF-IDF keyword classifier for category taxonomy
+├── finance-management-ai/          ← retired Phase 2; kept for `USE_NATIVE_ML=false` rollback
 │
-├── finance-management/             ← Backend (Express.js + MongoDB)
+├── finance-management/             ← Backend (Bun + Express.js + MongoDB)
 │   ├── app.js                      ← Express entry point (CORS, Helmet, Sentry, routes)
 │   ├── Dockerfile
 │   ├── controllers/
@@ -112,8 +106,15 @@ finan-app/                          ← monorepo root
 │   │   ├── transaction.dto.js      ← request validation + sanitizeText()
 │   │   ├── auth.dto.js
 │   │   └── goal.dto.js
+│   ├── services/
+│   │   └── ml/                     ← in-process ML — replaces the retired Python service
+│   │       ├── index.js            ← facade: classifyBatch() + analyze()
+│   │       ├── classifier.js       ← keyword + TF-IDF char-ngram cosine
+│   │       ├── anomaly.js          ← per-category z-score detector
+│   │       ├── forecast.js         ← linear-regression month-end forecast
+│   │       └── keywords.js         ← bilingual EN/ID taxonomy
 │   ├── helpers/
-│   │   ├── categoryClassifier.js   ← AI classify proxy + user-override learning hints
+│   │   ├── categoryClassifier.js   ← user-override pre-resolver; delegates remaining names to services/ml or the legacy Python service (USE_NATIVE_ML flag)
 │   │   ├── seedDefaultCategories.js ← idempotent per-user upsert of default categories from categories.json
 │   │   ├── validator.js            ← express-validator rule sets
 │   │   ├── mailer.js               ← Resend SDK (password reset + email verification)
@@ -178,22 +179,22 @@ finan-app/                          ← monorepo root
 │  Next.js 14 App Router  │   │  container port 3000             │
 │  SSR + static assets    │   │  host port 3001                  │
 │  Tailwind CSS v4        │   │  JWT · rate limiting · REST API  │
-└─────────────────────────┘   └─────────────┬───────────┬────────┘
-                                            │           │
-                               ┌────────────▼──┐  ┌─────▼──────────────┐
-                               │  MongoDB 7     │  │  AI Service         │
-                               │  rs0 replica   │  │  FastAPI / Python   │
-                               │  set (single)  │  │  port 3002          │
-                               │  internal only │  │  internal only      │
-                               └────────────────┘  └────────────────────┘
+└─────────────────────────┘   └─────────────┬────────────────────────┘
+                                            │  (ML runs in-process — services/ml)
+                               ┌────────────▼──┐
+                               │  MongoDB 7     │
+                               │  rs0 replica   │
+                               │  set (single)  │
+                               │  internal only │
+                               └────────────────┘
 ```
 
-**Network isolation:** MongoDB and the AI service are not exposed to the host. Only the backend (port 3001) and frontend (port 3000) are published. The backend reaches MongoDB via the Docker network hostname `mongo` and the AI service via `ai`.
+**Network isolation:** MongoDB is not exposed to the host. Only the backend (port 3001) and frontend (port 3000) are published. The backend reaches MongoDB via the Docker network hostname `mongo`.
 
 **Startup order** (enforced by Docker Compose healthchecks):
 
 ```
-mongo (healthy) → mongo-init (completes) → ai (starts) → backend (healthy) → frontend
+mongo (healthy) → mongo-init (completes) → backend (healthy) → frontend
 ```
 
 ---
@@ -225,7 +226,7 @@ Express
   ├─ Rate limiter (sliding-window, byUser)
   ├─ Controller handler
   │    ├─ Reads/writes MongoDB via Mongoose
-  │    └─ (optional) calls AI service via internal HTTP
+  │    └─ (optional) calls services/ml in-process (synchronous, no network)
   └─ Response JSON
 ```
 
@@ -297,9 +298,9 @@ categoryClassifier.js
         ├─ 3. Substring match against override names → confidence 0.85
         ├─ 4. Shared-token match (word overlap >2 chars) → confidence 0.75
         │
-        └─ 5. If still unmatched → POST /classify to AI service
+        └─ 5. If still unmatched → services/ml.classifyBatch() (in-process)
                     │
-                    ├─ classifier.py
+                    ├─ services/ml/classifier.js
                     │    ├─ Exact keyword match     → confidence 1.0
                     │    ├─ Substring keyword match → confidence 0.9
                     │    └─ TF-IDF char-ngram cosine similarity → confidence if > 0.25
@@ -311,7 +312,7 @@ Category.updateOne({ group, groupConfidence })
    (skipped if result is still 'other')
 ```
 
-**User override learning:** When a user manually moves a category to a different group (`PATCH /api/category/:id/group`), `groupOverridden: true` is set. On the next classification run for that user, the overridden categories are loaded and used as learning hints — so future categories with similar names are matched to the user-defined group before the AI service is consulted.
+**User override learning:** When a user manually moves a category to a different group (`PATCH /api/category/:id/group`), `groupOverridden: true` is set. On the next classification run for that user, the overridden categories are loaded and used as learning hints — so future categories with similar names are matched to the user-defined group before the in-process classifier is consulted.
 
 **Default categories:** 28 expense + 9 income categories are seeded per-user from `categories.json` via `seedDefaultCategories()`. This runs fire-and-forget on new user registration (email/password and Google OAuth). For existing users with zero categories, `GET /api/transaction/category` triggers a passive seed before returning results — no manual migration needed.
 
@@ -331,9 +332,9 @@ GET /api/transaction/ml-insights
         │
         ├─ Fetch 6 months of expense transactions + daily totals + budget
         │
-        ├─ POST /analyze to AI service (8s timeout)
-        │    ├─ detect_anomalies()   → Isolation Forest / z-score per category
-        │    └─ forecast_month_spend() → Linear Regression on cumulative daily spend
+        ├─ services/ml.analyze({ transactions, daily_totals, current_day, days_in_month, budget }) — in-process, synchronous
+        │    ├─ detectAnomalies()        → per-category z-score (threshold 2.0, samples ≥ 3)
+        │    └─ forecastMonthSpend()     → closed-form least-squares on cumulative daily spend
         │
         ├─ Store result in MLInsight collection
         │   (auto-expires after 24h via TTL index)
@@ -344,7 +345,7 @@ POST /api/transaction/ml-insights/refresh
         Same flow but with txCountSnapshot check bypassed (?force=true equivalent)
 ```
 
-**Graceful degradation:** If the AI service is unreachable or times out, both endpoints return `{ anomalies: [], forecast: { available: false } }` with HTTP 200. The Insights page falls back to rule-based anomaly detection silently.
+**Graceful degradation:** Native ML is synchronous and never throws on well-formed input — the empty-payload paths return `{ anomalies: [], forecast: { available: false, reason: ... } }` directly. The legacy fallback (`USE_NATIVE_ML=false`) still applies HTTP timeout handling and returns the same shape on failure.
 
 ---
 
@@ -564,9 +565,9 @@ Collection: mlinsights
 | `yearMonth` | String | required, format `YYYY-MM` | |
 | `generatedAt` | Date | required | TTL base — auto-expires after 24h |
 | `txCountSnapshot` | Number | required | expense tx count at generation time; cache invalidated when this changes |
-| `anomalies` | Array | default `[]` | from AI service |
+| `anomalies` | Array | default `[]` | from `services/ml.analyze()` |
 | `anomalyCount` | Number | default 0 | |
-| `forecast` | Object | default null | from AI service |
+| `forecast` | Object | default null | from `services/ml.analyze()` |
 
 **Indexes:** `{ user: 1, yearMonth: 1 }` unique, `{ generatedAt: 1 }` TTL (expireAfterSeconds: 86400)
 
@@ -601,33 +602,34 @@ Collection: emailverifications
 
 ---
 
-## AI service models
+## ML modules (`services/ml/`)
 
-### Classifier (`models/classifier.py`)
+All ML now runs in-process inside the backend. The legacy Python service (`finance-management-ai/`) has been retired in Phase 2; the directory is kept for `USE_NATIVE_ML=false` rollback only.
 
-Classifies category names into semantic groups using a three-pass strategy:
+### Classifier (`services/ml/classifier.js`)
+
+Same three-pass strategy as the retired Python version, byte-accurate to 3-decimal confidence:
 
 | Pass | Method | Confidence |
 |------|--------|-----------|
 | 1 | Exact keyword match | 1.0 |
 | 2 | Substring / partial match | 0.9 |
-| 3 | TF-IDF char-ngram (2–4) cosine similarity vs. keyword corpus | score if > 0.25 |
+| 3 | TF-IDF char-ngram (2–4, `char_wb`) cosine similarity vs. keyword corpus | score if > 0.25 |
 | fallback | — | `other`, 0.0 |
 
-The TF-IDF vectorizer is fitted once at module load from `KEYWORD_RULES`. No per-request model training.
+The TF-IDF corpus + IDF + L2-normalised keyword vectors are precomputed once at module load. Every classify call is O(grams_in_input). No per-request model fitting.
 
-**Endpoint:** `POST /classify` — `{ categories: string[] }` → `{ results: [{ category, group, confidence }] }`
+**API:** `classifyBatch(names)` → `[{ category, group, confidence }, ...]`
 
 ---
 
-### Anomaly detection (`models/anomaly.py`)
+### Anomaly detection (`services/ml/anomaly.js`)
 
-Groups the last 6 months of expense transactions by category and scores current-month transactions:
+Per-category z-score detector. **Trade-off vs. the retired Python service:** the Python version used Isolation Forest for categories with ≥ 10 samples and z-score for 3–9. Reimplementing sklearn's IF in JS would add ~250 LOC and risk subtle scoring drift. Since user-visible behaviour is dominated by `multiple = amount / mean`, we use z-score for every category with ≥ 3 samples. Output shape is identical to the Python version.
 
 | Samples per category | Algorithm | Threshold |
 |----------------------|-----------|-----------|
-| ≥ 10 | Isolation Forest (`contamination=0.1`, 100 estimators) | `prediction == -1` |
-| 3–9 | Z-score | `|z| ≥ 2.0` |
+| ≥ 3 | Z-score (population stddev) | `|z| ≥ 2.0` |
 | < 3 | Skipped | insufficient context |
 
 Returns top 10 results sorted by anomaly score, each with `severity` (high/medium/low), `multiple` (Nx vs category average), and a plain-English `label`.
@@ -636,9 +638,9 @@ Returns top 10 results sorted by anomaly score, each with `severity` (high/mediu
 
 ---
 
-### Forecast (`models/forecast.py`)
+### Forecast (`services/ml/forecast.js`)
 
-Fits a Linear Regression on cumulative daily spend to predict month-end total:
+Closed-form least-squares linear regression on cumulative daily spend:
 
 ```
 X = [day_1, day_2, ..., current_day]
@@ -653,9 +655,9 @@ result = max(prediction, spent_so_far)  ← can't be less than already spent
 | ≥ 0.55 | medium |
 | < 0.55 | low |
 
-Requires ≥ 4 days of data. Returns `{ available: false }` otherwise.
+Requires ≥ 4 days of data. Returns `{ available: false, reason, days_tracked }` otherwise.
 
-**Endpoint:** `POST /analyze` — accepts `{ transactions, daily_totals, current_day, days_in_month, budget? }` → `{ anomalies, anomaly_count, forecast }`
+**API:** `analyze({ transactions, daily_totals, current_day, days_in_month, budget? })` → `{ anomalies, anomaly_count, forecast }`
 
 ---
 
@@ -679,7 +681,8 @@ Copy `.env.example` → `.env` and fill in values:
 | `FROM_EMAIL` | `noreply@lori.my.id` | | Sender address (must be on a verified Resend domain) |
 | `SENTRY_DSN` | — | | Backend Sentry DSN (runtime env var) |
 | `NEXT_PUBLIC_SENTRY_DSN` | — | | Frontend Sentry DSN (**build-time** — set as GitHub Actions variable) |
-| `AI_SERVICE_URL` | `http://ai:3002` | | Internal AI service URL — use `http://127.0.0.1:3002` for bare-metal |
+| `USE_NATIVE_ML` | `true` | | When `true` (default), ML runs in-process via `services/ml`. Set `false` to fall back to the legacy Python service (requires re-adding the `ai` block to `docker-compose.yml`) |
+| `AI_SERVICE_URL` | `http://127.0.0.1:3002` | | Only consulted when `USE_NATIVE_ML=false` — URL of the legacy Python service |
 
 ### Backend local dev (`finance-management/.env`)
 
@@ -691,7 +694,7 @@ DB_URI=mongodb://localhost:27017/finan
 SECRET_TOKEN=your_jwt_secret_here
 RESEND_API_KEY=re_your_api_key_here
 FROM_EMAIL=noreply@yourdomain.com
-AI_SERVICE_URL=http://127.0.0.1:3002
+# USE_NATIVE_ML=true is the default — no override needed unless you want to fall back to the legacy Python service
 ```
 
 ### Frontend local dev (`finance-management-fe/.env.local`)
@@ -713,8 +716,6 @@ NEXT_PUBLIC_SENTRY_DSN=<optional>
 | Bun | 1.3 | Backend runtime + package manager (`curl -fsSL https://bun.sh/install \| bash`) |
 | Node.js | 22 | Frontend (Next.js still uses Node) |
 | npm | 10 | Frontend |
-| Python | 3.12 | AI service |
-| pip | 24 | AI service |
 | MongoDB | 7 | Backend |
 | Docker | 24 | Container deployment |
 | Docker Compose | v2 | Container deployment |
@@ -734,20 +735,7 @@ mongod --replSet rs0 --dbpath /data/db
 mongosh --eval "rs.initiate()"
 ```
 
-### 2. AI service
-
-```bash
-cd finance-management-ai
-python3 -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --host 127.0.0.1 --port 3002 --reload
-# or: make dev-ai
-```
-
-Health check: `curl http://localhost:3002/health` → `{"status":"ok"}`
-
-### 3. Backend
+### 2. Backend
 
 ```bash
 cd finance-management
@@ -759,7 +747,7 @@ bun run dev                   # bun --watch, http://localhost:3000
 
 Swagger UI (non-production): `http://localhost:3000/api-docs`
 
-### 4. Frontend
+### 3. Frontend
 
 ```bash
 cd finance-management-fe
@@ -798,7 +786,7 @@ MongoDB is capped at 512 MB WiredTiger cache (`--wiredTigerCacheSizeGB 0.5`) to 
 
 ### Watchtower auto-deploy
 
-Watchtower polls GHCR every 30 seconds. Only containers with label `com.centurylinklabs.watchtower.enable=true` are watched (backend, frontend, AI service). On a new `:latest` image, Watchtower pulls and recreates the container in-place.
+Watchtower polls GHCR every 30 seconds. Only containers with label `com.centurylinklabs.watchtower.enable=true` are watched (backend, frontend). On a new `:latest` image, Watchtower pulls and recreates the container in-place.
 
 ---
 
@@ -1017,7 +1005,7 @@ Two workflows in `.github/workflows/`:
 
 **`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which subtree changed. Backend tests (`bun run test`) only run when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed. CI installs Bun via `oven-sh/setup-bun@v1`.
 
-**`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds changed images. Backend, frontend, and AI service build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 30s and redeploys automatically.
+**`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds changed images. Backend and frontend build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 30s and redeploys automatically.
 
 **Important:** Changing `docker-compose.yml` or other root-level files does **not** trigger an image rebuild — those changes require a manual `git pull` + `docker compose up -d` on the server.
 
