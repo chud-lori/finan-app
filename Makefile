@@ -23,10 +23,10 @@ help:
 	@echo "    $(GREEN)setup$(RESET)          Copy .env.example → .env (skips if .env already exists)"
 	@echo ""
 	@echo "  $(CYAN)Local dev (no Docker)$(RESET)"
-	@echo "    $(GREEN)dev-be$(RESET)         Start backend with nodemon  (http://localhost:3000)"
+	@echo "    $(GREEN)dev-be$(RESET)         Start backend with Bun --watch  (http://localhost:3000)"
 	@echo "    $(GREEN)dev-fe$(RESET)         Start frontend with next dev (http://localhost:3001)"
 	@echo "    $(GREEN)dev-ai$(RESET)         Start AI service with uvicorn (http://localhost:3002)"
-	@echo "    $(GREEN)install$(RESET)        npm install in both BE and FE"
+	@echo "    $(GREEN)install$(RESET)        bun install (BE) + npm install (FE)"
 	@echo ""
 	@echo "  $(CYAN)Docker$(RESET)"
 	@echo "    $(GREEN)build$(RESET)          Build all Docker images"
@@ -63,15 +63,15 @@ setup:
 
 # ── local dev ──────────────────────────────────────────────────────────────────
 install:
-	@echo "$(CYAN)→ Installing backend dependencies…$(RESET)"
-	cd $(BE_DIR) && npm install
-	@echo "$(CYAN)→ Installing frontend dependencies…$(RESET)"
+	@echo "$(CYAN)→ Installing backend dependencies (bun)…$(RESET)"
+	cd $(BE_DIR) && bun install
+	@echo "$(CYAN)→ Installing frontend dependencies (npm)…$(RESET)"
 	cd $(FE_DIR) && npm install
 	@echo "$(GREEN)✓ Done$(RESET)"
 
 dev-be:
-	@echo "$(CYAN)→ Starting backend (nodemon)…$(RESET)"
-	cd $(BE_DIR) && npm run dev
+	@echo "$(CYAN)→ Starting backend (bun --watch)…$(RESET)"
+	cd $(BE_DIR) && bun run dev
 
 dev-fe:
 	@echo "$(CYAN)→ Starting frontend (next dev)…$(RESET)"
@@ -132,7 +132,7 @@ logs-ai:
 # ── utilities ──────────────────────────────────────────────────────────────────
 test:
 	@echo "$(CYAN)→ Running backend tests…$(RESET)"
-	cd $(BE_DIR) && npm test
+	cd $(BE_DIR) && bun run test
 
 seed:
 ifndef TOKEN

@@ -35,13 +35,11 @@ jobs:
         working-directory: finance-management
     steps:
       - uses: actions/checkout@v4.2.2
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: finance-management/package-lock.json
-      - run: npm ci
-      - run: npm test
+          bun-version: '1.3'
+      - run: bun install --frozen-lockfile
+      - run: bun run test
 
   lint-ai:
     name: AI service — install & import check

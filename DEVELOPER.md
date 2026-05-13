@@ -33,7 +33,7 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Node.js 22, Express.js |
+| Backend | Bun 1.x runtime, Express.js (CommonJS via Bun's Node compat) |
 | Database | MongoDB 7 (Mongoose ODM, single-node replica set `rs0`) |
 | Auth | JWT (jsonwebtoken) in HttpOnly cookies + Google OAuth 2.0 (Passport.js) + stateful session store (MongoDB) |
 | Password hashing | bcrypt (salt 10) |
@@ -174,7 +174,7 @@ finan-app/                          ← monorepo root
 └──────────┬──────────────────────────────┬──────────────────────┘
            │ :3000                        │ :3001
 ┌──────────▼──────────────┐   ┌──────────▼──────────────────────┐
-│  Frontend               │   │  Backend (Express / Node.js)     │
+│  Frontend               │   │  Backend (Express / Bun runtime) │
 │  Next.js 14 App Router  │   │  container port 3000             │
 │  SSR + static assets    │   │  host port 3001                  │
 │  Tailwind CSS v4        │   │  JWT · rate limiting · REST API  │
@@ -710,8 +710,9 @@ NEXT_PUBLIC_SENTRY_DSN=<optional>
 
 | Tool | Min version | Required for |
 |------|-------------|-------------|
-| Node.js | 22 | Backend + frontend |
-| npm | 10 | Backend + frontend |
+| Bun | 1.3 | Backend runtime + package manager (`curl -fsSL https://bun.sh/install \| bash`) |
+| Node.js | 22 | Frontend (Next.js still uses Node) |
+| npm | 10 | Frontend |
 | Python | 3.12 | AI service |
 | pip | 24 | AI service |
 | MongoDB | 7 | Backend |
@@ -751,8 +752,8 @@ Health check: `curl http://localhost:3002/health` → `{"status":"ok"}`
 ```bash
 cd finance-management
 cp docker.env.template .env   # fill in values
-npm install
-npm run dev                   # nodemon, http://localhost:3000
+bun install
+bun run dev                   # bun --watch, http://localhost:3000
 # or: make dev-be
 ```
 
@@ -808,12 +809,12 @@ Watchtower polls GHCR every 30 seconds. Only containers with label `com.centuryl
 ```bash
 cd finance-management
 
-npm test               # all suites
-npm run test:auth
-npm run test:transaction
-npm run test:goal
-npm run test:e2e
-npm run test:app
+bun run test            # all suites (mocha runs via `bun x mocha` under the hood)
+bun run test:auth
+bun run test:transaction
+bun run test:goal
+bun run test:e2e
+bun run test:app
 ```
 
 | File | What it covers |
@@ -1014,7 +1015,7 @@ Regex escaping is still applied internally in `deleteCategory` and `renameCatego
 
 Two workflows in `.github/workflows/`:
 
-**`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which subtree changed. Backend tests (`npm test`) only run when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed.
+**`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which subtree changed. Backend tests (`bun run test`) only run when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed. CI installs Bun via `oven-sh/setup-bun@v1`.
 
 **`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds changed images. Backend, frontend, and AI service build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 30s and redeploys automatically.
 
@@ -1031,7 +1032,7 @@ Two separate Sentry projects:
 | Backend (Express) | `@sentry/node` | `SENTRY_DSN` | Runtime — add to `.env`, recreate container |
 | Frontend (Next.js) | `@sentry/nextjs` | `NEXT_PUBLIC_SENTRY_DSN` | **Build-time** — set as GitHub Actions variable, triggers on next image build |
 
-**Backend:** `Sentry.init()` runs before all other imports in `app.js`, guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` registered after all routes. `uncaughtException` also calls `Sentry.captureException()`.
+**Backend:** `Sentry.init()` runs before all other imports in `app.js`, guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` registered after all routes. `uncaughtException` also calls `Sentry.captureException()`. Bun runtime is supported by `@sentry/node` via its Node compatibility layer — verify AsyncLocalStorage-based request context still tags errors with `req.user.id` after any future SDK upgrade.
 
 **Frontend:** `sentry.client.config.js` initialises Session Replay (5% of sessions, 100% on error). `instrumentation.js` initialises the server SDK via the Next.js instrumentation hook.
 
@@ -1040,7 +1041,7 @@ Two separate Sentry projects:
 ## Contributing
 
 1. Fork the repo and create a branch from `main`.
-2. Run `npm test` inside `finance-management/` — all tests must pass.
+2. Run `bun run test` inside `finance-management/` — all tests must pass.
 3. Run `npm run test:e2e` inside `finance-management-fe/` against a running instance.
 4. Keep commits focused — one logical change per commit.
 5. Update this file if you add new routes, models, environment variables, or change service topology.

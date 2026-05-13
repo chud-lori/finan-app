@@ -142,7 +142,7 @@ const registerUser = async (req, res, next) => {
 
   } catch (error) {
     logger.error('Register user error:', error);
-    res.status(500).json(BaseResponseDTO.error('\1'));
+    res.status(500).json(BaseResponseDTO.error('Internal server error'));
   }
 }
 
@@ -203,7 +203,7 @@ const loginUser = async (req, res, next) => {
 
   } catch (error) {
     logger.error('Login user error:', error);
-    res.status(500).json(BaseResponseDTO.error('\1'));
+    res.status(500).json(BaseResponseDTO.error('Internal server error'));
   }
 }
 
@@ -270,7 +270,7 @@ const verifyGoogleToken = async (req, res) => {
     }));
   } catch (error) {
     logger.error(`Google verify error: ${error.message}`);
-    res.status(401).json(BaseResponseDTO.error('\1'));
+    res.status(401).json(BaseResponseDTO.error('Authentication failed'));
   }
 };
 
@@ -291,7 +291,7 @@ const deleteAccount = async (req, res) => {
         res.status(200).json(BaseResponseDTO.success('Account and all data deleted successfully'));
     } catch (error) {
         logger.error(`Delete account error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 };
 

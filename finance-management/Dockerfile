@@ -1,32 +1,31 @@
-# Use specific Node.js 22 Alpine version for smaller footprint
-FROM node:22.4.0-alpine
+# Bun 1.x on Alpine for the smallest production image.
+# Drop-in replacement for the previous Node 22 image — Bun runs Express/Mongoose/bcrypt
+# unchanged via its Node compatibility layer.
+FROM oven/bun:1-alpine
 
-# Set working directory
 WORKDIR /usr/src/app
 
-# Copy package files first to leverage Docker cache on dependency installs
-COPY package*.json ./
+# Copy manifest + lockfile first so Docker can cache the install layer.
+# bun.lock is Bun 1.3+ JSON lockfile (older builds used bun.lockb); we accept either.
+COPY package.json bun.lock* bun.lockb* package-lock.json* ./
 
-# Install production dependencies only
-RUN npm ci --only=production
+# --frozen-lockfile errors out if the lockfile is stale instead of silently mutating it.
+# --production skips devDependencies (mocha, chai, nodemon, mongodb-memory-server).
+RUN bun install --frozen-lockfile --production
 
-# Copy app source code
+# Copy app source after deps so source edits don't bust the install cache.
 COPY . .
 
-# Create non-root user and group for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Non-root user — the base image's default `bun` user has UID 1000; we use a named
+# system user to match the previous Node image's posture and own the logs dir.
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
+    && mkdir -p logs && chown -R appuser:appgroup logs
 
-# Ensure logs directory exists and is writable by container user (adjust if logs directory is different)
-RUN mkdir -p logs && chown -R appuser:appgroup logs
-
-# Use non-root user
 USER appuser
 
-# Set NODE_ENV to production for optimizations
 ENV NODE_ENV=production
 
-# Expose port that your Express app listens on
 EXPOSE 3000
 
-# Use npm start command from package.json to start app
-CMD ["npm", "start"]
+# `bun app.js` runs the entrypoint directly — no `bun run` indirection needed.
+CMD ["bun", "app.js"]

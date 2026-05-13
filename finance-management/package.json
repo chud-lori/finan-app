@@ -4,14 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js",
-    "test": "NODE_ENV=test mocha --timeout 100000 --exit",
-    "test:auth": "NODE_ENV=test mocha --timeout 100000 --exit test/auth.integration.test.js",
-    "test:transaction": "NODE_ENV=test mocha --timeout 100000 --exit test/transaction.integration.test.js",
-    "test:goal": "NODE_ENV=test mocha --timeout 100000 --exit test/goal.integration.test.js",
-    "test:e2e": "NODE_ENV=test mocha --timeout 100000 --exit test/end-to-end.test.js",
-    "test:app": "NODE_ENV=test mocha --timeout 100000 --exit test/app.integration.test.js"
+    "start": "bun app.js",
+    "dev": "bun --watch app.js",
+    "test": "NODE_ENV=test bun x mocha --timeout 100000 --exit",
+    "test:auth": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/auth.integration.test.js",
+    "test:transaction": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/transaction.integration.test.js",
+    "test:goal": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/goal.integration.test.js",
+    "test:e2e": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/end-to-end.test.js",
+    "test:app": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/app.integration.test.js"
   },
   "repository": {
     "type": "git",
@@ -56,7 +56,6 @@
     "chai-http": "^4.3.0",
     "mocha": "^10.4.0",
     "moment": "^2.30.1",
-    "mongodb-memory-server": "^10.2.1",
-    "nodemon": "^3.1.4"
+    "mongodb-memory-server": "^10.2.1"
   }
 }

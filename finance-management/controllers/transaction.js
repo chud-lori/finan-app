@@ -209,7 +209,7 @@ const addTransaction = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Add transaction ${req.user?.id} error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -292,7 +292,7 @@ const getUserTransaction = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get user transaction error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -316,7 +316,7 @@ const getByDate = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get by date error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -347,7 +347,7 @@ const getByTimeRange = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get by time range error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -394,7 +394,7 @@ const deleteTransaction = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Delete transaction error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -454,7 +454,7 @@ const getExpense = async (req, res, next) => {
         res.status(200).json(BaseResponseDTO.success('Total expense retrieved', { totalExpense: sum, transactions: responseDTO.transactions }));
     } catch (error) {
         logger.error(`Get expense error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -519,7 +519,7 @@ const getRecommendation = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get recommendation error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -531,7 +531,7 @@ const seedCategory = async (req, res, next) => {
         res.status(200).json(BaseResponseDTO.success('Categories seeded successfully', responseDTO));
     } catch (error) {
         logger.error("Seed category error", error);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -569,7 +569,7 @@ const getCategory = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Error fetching categories: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -625,7 +625,7 @@ const getSuggestedCategories = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Get suggested categories error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 }
 
@@ -798,7 +798,7 @@ const importCsv = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Import CSV error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 };
 
@@ -896,7 +896,7 @@ const getAnalytics = async (req, res) => {
         res.status(200).json(analyticsResponse);
     } catch (error) {
         logger.error(`Get analytics error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 };
 
@@ -963,7 +963,7 @@ const getAnomalies = async (req, res) => {
         res.status(200).json(anomalyResponse);
     } catch (error) {
         logger.error(`Get anomalies error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 };
 
@@ -1026,7 +1026,7 @@ const getExplainability = async (req, res) => {
         res.status(200).json(explainResponse);
     } catch (error) {
         logger.error(`Get explainability error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 };
 
@@ -1074,7 +1074,7 @@ const getTimeToZero = async (req, res) => {
         res.status(200).json(ttzResponse);
     } catch (error) {
         logger.error(`Get time to zero error: ${error.message}`);
-        res.status(500).json(BaseResponseDTO.error('\1'));
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
     }
 };
 
