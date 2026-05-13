@@ -30,6 +30,9 @@ node_modules/
 # Personal deployment notes
 DEPLOY.md
 
+# Backup tarballs — produced by scripts/backup.sh, contain redacted .env + mongodump
+backups/
+
 # Claude Code instructions (local only — not for repo)
 CLAUDE.md
 

@@ -777,7 +777,6 @@ make down    # stop everything
 |-----------|-------|--------------|-----------|-------------|
 | `finan-mongo` | `mongo:7` | 27017 | — | 1 GB |
 | `finan-mongo-init` | `mongo:7` | — | — | — (exits after init) |
-| `finan-ai` | `ghcr.io/.../finan-app-ai` | 3002 | — | 512 MB |
 | `finan-be` | `ghcr.io/.../finan-app-backend` | 3000 | **3001** | 512 MB |
 | `finan-fe` | `ghcr.io/.../finan-app-frontend` | 3000 | **3000** | 256 MB |
 | `finan-watchtower` | `containrrr/watchtower` | — | — | 64 MB |
@@ -787,6 +786,47 @@ MongoDB is capped at 512 MB WiredTiger cache (`--wiredTigerCacheSizeGB 0.5`) to 
 ### Watchtower auto-deploy
 
 Watchtower polls GHCR every 30 seconds. Only containers with label `com.centurylinklabs.watchtower.enable=true` are watched (backend, frontend). On a new `:latest` image, Watchtower pulls and recreates the container in-place.
+
+---
+
+## Backups & server migration
+
+`scripts/backup.sh` produces a single tarball with: a live `mongodump --archive --gzip` of the `finan` database, a **redacted** `.env`, and the current `docker-compose.yml`. The tarball lands in `./backups/` (gitignored).
+
+```bash
+# On the host finan-app is running on:
+./scripts/backup.sh
+# → ./backups/finan-YYYYMMDD-HHMMSSZ.tar.gz
+
+# Or pull from a remote server to your laptop in one shot:
+./scripts/backup.sh --from root@vps.example:/root/finan-app
+# Same output path, but on your laptop.
+```
+
+The script uses `mongodump`'s live archive stream — no container downtime needed. `.env` keys matching `SECRET|TOKEN|PASSWORD|KEY|CLIENT_ID|DSN` are replaced with `<redacted>` so the tarball is safe to `scp` around. Non-secret keys (`DB_URI`, URLs, `FROM_EMAIL`) are preserved.
+
+### Restoring on a new server
+
+The script header lists the exact commands; the flow is:
+
+1. Provision the new VPS, install Docker + Docker Compose, clone the repo.
+2. `tar -xzf finan-*.tar.gz -C /tmp/finan-restore`
+3. `cp /tmp/finan-restore/env.redacted .env` then hand-fill every `<redacted>` value (`SECRET_TOKEN`, `RESEND_API_KEY`, `GOOGLE_CLIENT_*`, `SENTRY_DSN`, etc.).
+4. `docker compose up -d mongo mongo-init` and wait for `finan-mongo` to be healthy.
+5. `docker exec -i finan-mongo mongorestore --archive --gzip --drop --nsInclude='finan.*' < /tmp/finan-restore/finan.archive.gz`
+6. `docker compose up -d`
+
+The `--drop` flag is destructive — it wipes existing `finan.*` collections before restoring. Safe on a fresh server, dangerous on a populated one. Run restore manually rather than wrapping it in a script for exactly this reason.
+
+### What's in the tarball
+
+```
+./env.redacted              ← secrets stripped, hand-fill on restore
+./docker-compose.yml        ← snapshot of compose at backup time (useful for diffing)
+./finan.archive.gz          ← mongodump --archive --gzip stream of the `finan` DB
+```
+
+The tarball is the only thing that needs to leave the host. Move it to encrypted storage (S3 with KMS, an encrypted external drive, your laptop's FileVault disk, etc.) — the redacted `.env` is safe, but the database dump still contains user PII and transaction history.
 
 ---
 
