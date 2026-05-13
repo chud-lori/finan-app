@@ -805,19 +805,6 @@ Watchtower polls GHCR every 30 seconds. Only containers with label `com.centuryl
 
 The script uses `mongodump`'s live archive stream — no container downtime needed. `.env` keys matching `SECRET|TOKEN|PASSWORD|KEY|CLIENT_ID|DSN` are replaced with `<redacted>` so the tarball is safe to `scp` around. Non-secret keys (`DB_URI`, URLs, `FROM_EMAIL`) are preserved.
 
-### Restoring on a new server
-
-The script header lists the exact commands; the flow is:
-
-1. Provision the new VPS, install Docker + Docker Compose, clone the repo.
-2. `tar -xzf finan-*.tar.gz -C /tmp/finan-restore`
-3. `cp /tmp/finan-restore/env.redacted .env` then hand-fill every `<redacted>` value (`SECRET_TOKEN`, `RESEND_API_KEY`, `GOOGLE_CLIENT_*`, `SENTRY_DSN`, etc.).
-4. `docker compose up -d mongo mongo-init` and wait for `finan-mongo` to be healthy.
-5. `docker exec -i finan-mongo mongorestore --archive --gzip --drop --nsInclude='finan.*' < /tmp/finan-restore/finan.archive.gz`
-6. `docker compose up -d`
-
-The `--drop` flag is destructive — it wipes existing `finan.*` collections before restoring. Safe on a fresh server, dangerous on a populated one. Run restore manually rather than wrapping it in a script for exactly this reason.
-
 ### What's in the tarball
 
 ```
@@ -827,6 +814,108 @@ The `--drop` flag is destructive — it wipes existing `finan.*` collections bef
 ```
 
 The tarball is the only thing that needs to leave the host. Move it to encrypted storage (S3 with KMS, an encrypted external drive, your laptop's FileVault disk, etc.) — the redacted `.env` is safe, but the database dump still contains user PII and transaction history.
+
+---
+
+### Full migration runbook — moving to a new VPS
+
+This is the end-to-end procedure to move finan-app from VPS A to VPS B. Plan for ~30 minutes of total downtime depending on your DNS TTL; the data window where new writes might be lost is the gap between the final backup and DNS cutover.
+
+#### Phase A — On VPS A (the host that's currently live)
+
+1. **Take a fresh backup just before the move:**
+   ```bash
+   ssh root@vpsA
+   cd /root/finan-app
+   ./scripts/backup.sh
+   exit
+   ```
+2. **Pull the tarball to your laptop:**
+   ```bash
+   # From your laptop
+   scp root@vpsA:/root/finan-app/backups/finan-*.tar.gz ~/finan-migration/
+   ```
+3. **(Optional) Stop accepting new writes** if data consistency matters more than uptime — `docker compose stop backend` on VPS A. Otherwise leave it running and accept that the few minutes of writes after the backup may be lost.
+
+#### Phase B — On VPS B (the fresh target)
+
+4. **Provision the VPS** with enough resources to match the [2 GB constraint](#docker-compose-full-stack) (mongo 1G + backend 512M + frontend 256M + watchtower 64M = ~2 GB stack ceiling). Ubuntu 22.04 LTS or 24.04 LTS works.
+5. **Install Docker + Compose:**
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   # Compose is bundled with the modern docker-ce package — verify:
+   docker compose version
+   ```
+6. **Authenticate to GHCR** so Docker (and Watchtower) can pull the private `ghcr.io/chud-lori/finan-app-*` images. Generate a GitHub PAT with `read:packages` scope at https://github.com/settings/tokens, then:
+   ```bash
+   echo "<your-pat>" | docker login ghcr.io -u <your-github-username> --password-stdin
+   # Watchtower reads /root/.docker/config.json (the file `docker login` just wrote)
+   # — the compose mount `/root/.docker/config.json:/config.json:ro` handles the rest.
+   ```
+7. **Clone the repo:**
+   ```bash
+   cd /root
+   git clone https://github.com/chud-lori/finance-management.git finan-app
+   cd finan-app
+   ```
+8. **Extract the backup and restore `.env`:**
+   ```bash
+   mkdir -p /tmp/finan-restore
+   tar -xzf ~/finan-migration/finan-YYYYMMDD-HHMMSSZ.tar.gz -C /tmp/finan-restore
+   cp /tmp/finan-restore/env.redacted .env
+   # Hand-fill every <redacted> value:
+   #   SECRET_TOKEN, RESEND_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+   #   NEXT_PUBLIC_GOOGLE_CLIENT_ID, SENTRY_DSN, NEXT_PUBLIC_SENTRY_DSN, GEMINI_API_KEY (if used)
+   nano .env
+   ```
+9. **Boot mongo only and wait for it to be healthy:**
+   ```bash
+   docker compose up -d mongo mongo-init
+   until docker exec finan-mongo mongosh --quiet --eval 'db.adminCommand("ping")' >/dev/null 2>&1; do sleep 1; done
+   ```
+10. **Restore the database:**
+    ```bash
+    docker exec -i finan-mongo mongorestore --archive --gzip --drop --nsInclude='finan.*' \
+      < /tmp/finan-restore/finan.archive.gz
+    ```
+    `--drop` is destructive — it wipes existing `finan.*` collections before restoring. On a fresh VPS there's nothing to drop, but if you're re-running the restore for any reason, double-check you're on the right host.
+11. **Bring up the rest of the stack:**
+    ```bash
+    docker compose up -d
+    ```
+12. **Smoke test locally on the VPS** (before touching DNS):
+    ```bash
+    curl -s http://localhost:3001/ -w '\n%{http_code}\n'        # backend health
+    curl -s http://localhost:3000/ -o /dev/null -w '%{http_code}\n'  # frontend
+    docker compose ps                                          # all services healthy
+    docker compose logs --tail 50 backend                      # no errors
+    ```
+
+#### Phase C — DNS cutover
+
+13. **Update DNS A-record(s)** at your registrar / Cloudflare to point `finance.lori.my.id` to VPS B's IP. If you use Cloudflare's proxy (orange cloud), the change propagates in seconds. If using raw DNS, propagation depends on your TTL — set TTL to 60s a day before the move to shorten the window.
+14. **Verify from outside the VPS:**
+    ```bash
+    # From your laptop
+    curl -s https://finance.lori.my.id/api/auth/login \
+      -H 'Content-Type: application/json' \
+      -d '{"identifier":"nobody","password":"wrong"}'
+    # → {"status":0,"message":"Username not found"} from the NEW server
+    ```
+    Confirm the response includes a recently-added user's name by logging in as yourself.
+15. **Watch Sentry** for ~30 minutes for any new error spikes — `@sentry/node` will tag events with the new server's hostname so you can tell old vs new.
+
+#### Phase D — Decommission VPS A
+
+16. Once VPS B has been serving traffic cleanly for 24 hours **and** you have a second backup on your laptop, stop services on VPS A: `docker compose down` then `docker volume rm finan-app_mongo_data` if you want to wipe the data. Keep the VPS itself for another week as an emergency rollback before destroying it.
+
+### Things the migration **doesn't** handle automatically
+
+- **Frontend env-var changes**: `NEXT_PUBLIC_API_URL` is baked into the frontend image at GitHub Actions build time (see `cd.yml` line ~110). If the new VPS uses a *different* domain, update the GitHub Actions variable `NEXT_PUBLIC_API_URL` and push any small change to `finance-management-fe/` to trigger a frontend rebuild. Same-domain migrations don't need this.
+- **Cloudflare WAF rules**: per-zone, follow the domain — no action needed.
+- **TLS certificates**: terminated at Cloudflare, also follows the domain.
+- **GHCR rate limits**: anonymous pulls are limited; the `docker login` in step 6 raises your quota.
+- **Watchtower's docker config**: the file at `/root/.docker/config.json` is created by `docker login` (step 6). If it's missing, Watchtower silently fails to pull and you'll never get auto-deploys.
 
 ---
 
