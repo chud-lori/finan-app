@@ -81,12 +81,15 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Passwords hashed with bcrypt** (salt 10) — never stored in plaintext
 - **HttpOnly cookie sessions** — JWT never touches JavaScript or localStorage; XSS cannot steal it
 - **Stateful session store** — every request validated against a live MongoDB Session document; revoke = instant, no waiting for token expiry
+- **All bearer-style tokens hashed in the database** — JWT session, password-reset, and email-verification tokens are stored as SHA-256 hashes. The raw token only lives in your cookie or your inbox, so a database leak cannot be replayed for account takeover
 - **Per-device session management** — see and revoke any active session from the profile page
 - **Logout all devices** — deletes every session and bumps `tokenVersion`; old tokens are dead immediately
 - **Password change / reset** — automatically deletes all sessions across all devices
+- **Account deletion revokes all sessions immediately** — no ghost-session window after you delete your account
 - **Google OAuth** — sign in without a password; server-side token verification
 - **Email verification** — new accounts must verify before full access
-- **Anti-enumeration** — forgot-password always returns 200 regardless of whether the email exists
+- **Anti-enumeration** — both login and forgot-password return generic, indistinguishable responses regardless of whether the email/username is registered
+- **CSRF-resistant API** — JSON-only body parser + CORS origin allow-list. Cross-site form posts can't reach the API
 - **CORS** — restricted to the frontend origin with `credentials: true`
 - **Security headers** — `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`
 - **Input sanitization** — HTML tags and null bytes stripped from all transaction fields
