@@ -73,9 +73,11 @@ app.use(helmet({
 app.use(morgan(morganJSONFormat(), {
     stream: logger.stream
 }));
-// Cap JSON and URL-encoded body size to prevent memory exhaustion from large payloads
+// JSON-only body parser. We intentionally do NOT mount express.urlencoded():
+// cross-site <form> POSTs (the only kind of CSRF that bypasses CORS preflight)
+// would be parsed if urlencoded were enabled. With JSON-only, any CSRF attempt
+// triggers a CORS preflight that gets rejected by the origin allow-list above.
 app.use(express.json({ limit: '100kb' }));
-app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 
 // swagger docs (only available if NODE_ENV is not 'production')
 if (process.env.NODE_ENV !== 'production') {

@@ -22,6 +22,11 @@ const {
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+// SHA-256 a reset/verify token before DB lookup or storage so a DB leak does
+// not yield replay-ready tokens. Pair every emit-site with a hash() at the
+// consume-site — the raw token only lives in the user's inbox.
+const hashToken = (raw) => crypto.createHash('sha256').update(raw).digest('hex');
+
 const COOKIE_OPTS = {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
@@ -123,7 +128,7 @@ const registerUser = async (req, res, next) => {
         const verifyToken = crypto.randomBytes(32).toString('hex');
         await EmailVerification.create({
           user:      savedUser._id,
-          token:     verifyToken,
+          tokenHash: hashToken(verifyToken),
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
         });
         const verifyUrl = `${FE_URL}/verify-email/${verifyToken}`;
@@ -157,32 +162,41 @@ const loginUser = async (req, res, next) => {
       return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
     }
 
-    // Find user by email or username (auto-detect by presence of @)
+    // Find user by email or username (auto-detect by presence of @).
+    // Anti-enumeration: a generic "Invalid credentials" is returned for both
+    // "no such user" and "wrong password" cases so callers can't distinguish
+    // them via timing or error text.
     const isEmail = loginDTO.identifier.includes('@');
     const user = isEmail
       ? await User.findOne({ email: loginDTO.identifier.toLowerCase() })
       : await User.findOne({ username: loginDTO.identifier });
-    if (!user) {
-      logger.error(`Auth Login: ${loginDTO.identifier} not found`);
-      return res.status(404).json(BaseResponseDTO.error(isEmail ? "Email not found" : "Username not found"));
-    }
 
-    // Block OAuth-only accounts from password login
+    const invalid = () => {
+      logger.error(`Auth Login: ${loginDTO.identifier} invalid`);
+      return res.status(401).json(BaseResponseDTO.error('Invalid credentials'));
+    };
+
+    if (!user) return invalid();
+
+    // OAuth-only accounts: surfacing this is a deliberate UX exception — without
+    // it the user has no signal to try the Google button instead of fighting
+    // their password manager. The enumeration cost is small and only applies
+    // to users who chose to sign up via Google.
     if (!user.password) {
-      return res.status(400).json(BaseResponseDTO.error("This account was created with Google. Please sign in with Google."));
+      return res.status(400).json(BaseResponseDTO.error('This account was created with Google. Please sign in with Google.'));
     }
 
-    // Block unverified email accounts
+    // Email-not-verified must remain distinguishable so the frontend can show
+    // a "resend verification" CTA. The `EMAIL_NOT_VERIFIED` code is what the
+    // frontend's apiFetch checks (see finance-management-fe/lib/api.js).
     if (user.emailVerified === false) {
       return res.status(403).json({ ...BaseResponseDTO.error('Please verify your email before signing in.'), code: 'EMAIL_NOT_VERIFIED' });
     }
 
-    // Check password
+    // Password check — wrong password falls into the same generic bucket as
+    // "no such user" above.
     const isMatch = await bcrypt.compare(loginDTO.password, user.password);
-    if (!isMatch) {
-      logger.error(`Auth Login: ${loginDTO.identifier} password incorrect`);
-      return res.status(400).json(BaseResponseDTO.error("Password incorrect"));
-    }
+    if (!isMatch) return invalid();
 
     // Create JWT Payload
     const payload = {
@@ -284,8 +298,14 @@ const deleteAccount = async (req, res) => {
             Transaction.deleteMany({ user: userId }),
             Balance.deleteOne({ user: userId }),
             Category.deleteMany({ user: userId }),
+            // Kill every active session — without this, the JWT cookie remains
+            // valid for up to 7 days and continues to authenticate against a
+            // ghost user record, letting controllers create orphan documents.
+            Session.deleteMany({ user: userId }),
         ]);
         await User.deleteOne({ _id: userId });
+
+        res.clearCookie('token', CLEAR_COOKIE_OPTS);
 
         logger.info(`Account deleted: ${userId}`);
         res.status(200).json(BaseResponseDTO.success('Account and all data deleted successfully'));
@@ -407,7 +427,7 @@ const forgotPassword = async (req, res) => {
 
     const token     = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    await PasswordReset.create({ user: user._id, token, expiresAt });
+    await PasswordReset.create({ user: user._id, tokenHash: hashToken(token), expiresAt });
 
     const resetUrl = `${FE_URL}/reset-password/${token}`;
     await sendPasswordResetEmail(user.email, resetUrl);
@@ -430,7 +450,7 @@ const resetPassword = async (req, res) => {
     }
 
     const record = await PasswordReset.findOne({
-      token,
+      tokenHash: hashToken(token),
       used:      false,
       expiresAt: { $gt: new Date() },
     });
@@ -463,7 +483,7 @@ const verifyEmail = async (req, res) => {
     const { token } = req.params;
     if (!token) return res.status(400).json(BaseResponseDTO.error('Verification token is required'));
 
-    const record = await EmailVerification.findOne({ token, expiresAt: { $gt: new Date() } });
+    const record = await EmailVerification.findOne({ tokenHash: hashToken(token), expiresAt: { $gt: new Date() } });
     if (!record) {
       return res.status(400).json(BaseResponseDTO.error('Invalid or expired verification link. Please request a new one.'));
     }
@@ -495,7 +515,7 @@ const resendVerification = async (req, res) => {
     const verifyToken = crypto.randomBytes(32).toString('hex');
     await EmailVerification.create({
       user:      user._id,
-      token:     verifyToken,
+      tokenHash: hashToken(verifyToken),
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     });
 

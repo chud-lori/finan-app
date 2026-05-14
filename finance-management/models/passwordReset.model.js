@@ -1,8 +1,11 @@
 const mongoose = require('mongoose');
 
+// Only the SHA-256 hash of the reset token is persisted. The raw token is
+// emailed once and never stored, so a database leak cannot be replayed to
+// take over accounts within the 1-hour validity window.
 const schema = new mongoose.Schema({
   user:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  token:     { type: String, required: true, unique: true },
+  tokenHash: { type: String, required: true, unique: true },
   expiresAt: { type: Date, required: true },
   used:      { type: Boolean, default: false },
 });

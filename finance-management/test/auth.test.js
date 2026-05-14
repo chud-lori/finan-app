@@ -52,8 +52,9 @@ describe('Auth', () => {
             done();
         });
 
-        // password incoreect
-        it('it should return 400 password incorect', (done) => {
+        // password incorrect — now 401 generic "Invalid credentials"
+        // (anti-enumeration: same response as user-not-found)
+        it('it should return 401 password incorect', (done) => {
 
             chai.request(server)
                 .post('/api/auth/login')
@@ -62,7 +63,7 @@ describe('Auth', () => {
                     password: 'errrrrrr'
                 })
                 .end((err, res) => {
-                    res.should.have.status(400)
+                    res.should.have.status(401)
                     res.should.have.property('status').eql(0);
                     res.should.be.a('object');
                 });

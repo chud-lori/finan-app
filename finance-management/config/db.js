@@ -11,7 +11,18 @@ const connectDB = async () => {
         serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
       })
-      .then((response) => console.log(`Mongo connected on ${response.connection.host} db: ${response.connection.name}`))
+      .then(async (response) => {
+        console.log(`Mongo connected on ${response.connection.host} db: ${response.connection.name}`);
+        // Run idempotent index migrations (see helpers/migrateTokenIndexes.js).
+        // Lazy-required here to avoid a circular import if logger transitively
+        // pulls in any model at module load.
+        try {
+          const { migrateTokenIndexes } = require('../helpers/migrateTokenIndexes');
+          await migrateTokenIndexes();
+        } catch (err) {
+          console.error(`Index migration error: ${err && err.message}`);
+        }
+      })
       .catch((error) => {
         console.error(`Mongo error: ${error}`);
         // process.exit(1);

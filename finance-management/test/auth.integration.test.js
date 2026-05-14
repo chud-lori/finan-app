@@ -116,7 +116,10 @@ describe('Auth Integration Tests', () => {
             authToken = res.body.data.token;
         });
 
-        it('should return 400 for invalid password', async () => {
+        // Anti-enumeration: both "wrong password" and "user does not exist"
+        // collapse into the same generic 401. Tests pinned on the old
+        // distinguishable responses were updated when the leak was closed.
+        it('should return 401 for invalid password', async () => {
             const res = await chai.request(server)
                 .post('/api/auth/login')
                 .send({
@@ -124,12 +127,12 @@ describe('Auth Integration Tests', () => {
                     password: 'wrongpassword'
                 });
 
-            expect(res).to.have.status(400);
+            expect(res).to.have.status(401);
             expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Password incorrect');
+            expect(res.body.message).to.equal('Invalid credentials');
         });
 
-        it('should return 404 for non-existent username', async () => {
+        it('should return 401 for non-existent username', async () => {
             const res = await chai.request(server)
                 .post('/api/auth/login')
                 .send({
@@ -137,9 +140,9 @@ describe('Auth Integration Tests', () => {
                     password: testUser.password
                 });
 
-            expect(res).to.have.status(404);
+            expect(res).to.have.status(401);
             expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Username not found');
+            expect(res.body.message).to.equal('Invalid credentials');
         });
 
         it('should return 400 for validation errors', async () => {

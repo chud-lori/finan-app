@@ -263,7 +263,26 @@ req.cookies.token
 | `POST /logout-all` | `Session.deleteMany({ user })` + bumps `tokenVersion` + clears cookie |
 | Password change | `Session.deleteMany({ user })` + clears cookie |
 | Password reset | `Session.deleteMany({ user })` + clears cookie |
+| `DELETE /account` | `Session.deleteMany({ user })` + clears cookie before user doc deletion — prevents a ~7-day ghost-session window where the JWT cookie would still authenticate against a removed user |
 | TTL expiry | MongoDB auto-deletes Session docs past `expiresAt` |
+
+**Anti-enumeration:**
+
+| Endpoint | Behavior |
+|----------|----------|
+| `POST /login` | Returns generic `401 Invalid credentials` for both "no such user" and "wrong password". `EMAIL_NOT_VERIFIED` (403) is distinguishable so the FE can show a resend-verification CTA. Google-only accounts get a distinct 400 (UX exception) |
+| `POST /forgot-password` | Always returns 200, regardless of whether the email is registered |
+| `POST /resend-verification` | Always returns 200, regardless of whether the email is registered or already verified |
+
+**Token hashing — all bearer-style tokens are stored as SHA-256 hashes:**
+
+| Token | Model | Raw lives in | Stored as |
+|-------|-------|--------------|-----------|
+| JWT session | `Session` | HttpOnly cookie | `tokenHash` |
+| Password reset | `PasswordReset` | Email body (1h TTL) | `tokenHash` |
+| Email verification | `EmailVerification` | Email body (24h TTL) | `tokenHash` |
+
+A database leak therefore cannot be replayed against the auth endpoints — every consumer-side handler SHA-256s the user-supplied token before `findOne`. The schema migration helper at `helpers/migrateTokenIndexes.js` drops the legacy `token_1` unique index on first startup after this change is deployed.
 
 ---
 
@@ -900,7 +919,7 @@ This is the end-to-end procedure to move finan-app from VPS A to VPS B. Plan for
     curl -s https://finance.lori.my.id/api/auth/login \
       -H 'Content-Type: application/json' \
       -d '{"identifier":"nobody","password":"wrong"}'
-    # → {"status":0,"message":"Username not found"} from the NEW server
+    # → {"status":0,"message":"Invalid credentials"} from the NEW server
     ```
     Confirm the response includes a recently-added user's name by logging in as yourself.
 15. **Watch Sentry** for ~30 minutes for any new error spikes — `@sentry/node` will tag events with the new server's hostname so you can tell old vs new.
