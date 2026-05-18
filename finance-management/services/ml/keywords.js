@@ -11,6 +11,9 @@ module.exports = {
     // Housing
     'rent', 'rental', 'housing', 'kost', 'kos', 'kontrakan', 'sewa rumah',
     'mortgage', 'cicilan rumah', 'ipl',
+    // Household services
+    'laundry', 'binatu', 'cuci baju', 'dry cleaning', 'cuci kering',
+    'cleaning service', 'pembantu', 'art', 'asisten rumah tangga',
     // Utilities
     'utilities', 'electricity', 'listrik', 'water', 'air', 'pam',
     'gas', 'internet', 'wifi', 'phone', 'pulsa', 'paket data', 'token listrik',
