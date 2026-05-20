@@ -12,6 +12,7 @@ const {USER_EMAIL:email, SECRET_TOKEN, FE_URL, GOOGLE_CLIENT_ID} = require('../c
 const logger = require("../helpers/logger");
 const { sendPasswordResetEmail, sendVerificationEmail } = require('../helpers/mailer');
 const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
+const limiter = require('../middleware/rateLimit');
 const {
     RegisterRequestDTO,
     LoginRequestDTO,
@@ -154,7 +155,10 @@ const registerUser = async (req, res, next) => {
 const loginUser = async (req, res, next) => {
   try {
     const loginDTO = new LoginRequestDTO(req.body);
-    logger.info(`Auth Login: ${loginDTO.identifier}`);
+    // Never log the raw identifier — failed-login attempts would otherwise
+    // dump attacker-supplied PII (or guessed customer emails) into rotating
+    // logs on disk. A successful login is logged with the resolved user id
+    // below where we know it's an actual account.
 
     // Validate request data
     const validationErrors = loginDTO.validate();
@@ -172,7 +176,7 @@ const loginUser = async (req, res, next) => {
       : await User.findOne({ username: loginDTO.identifier });
 
     const invalid = () => {
-      logger.error(`Auth Login: ${loginDTO.identifier} invalid`);
+      logger.warn('Auth Login: invalid credentials');
       return res.status(401).json(BaseResponseDTO.error('Invalid credentials'));
     };
 
@@ -209,6 +213,7 @@ const loginUser = async (req, res, next) => {
     const token = jwt.sign(payload, SECRET_TOKEN, { expiresIn: '7d' });
     await createSession(user._id, token, req, res);
 
+    logger.info(`Auth Login: user ${user._id} signed in`);
     User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
 
     res.status(200).json(BaseResponseDTO.success('Login successful', {
@@ -417,6 +422,13 @@ const forgotPassword = async (req, res) => {
   try {
     const rawEmail = (req.body.email || '').trim().toLowerCase();
     if (!rawEmail) return res.status(400).json(BaseResponseDTO.error('Email is required'));
+
+    // Per-email throttle (1 reset email per 10 minutes per address). Layered on
+    // top of the per-IP limit at the route; without this, one IP can spray 5
+    // distinct victims' inboxes per minute. The bucket is hit regardless of
+    // whether the email exists, so this also doesn't leak account presence.
+    const allowed = limiter.check(`forgot-pw:${rawEmail}`, 1, 10 * 60 * 1000);
+    if (!allowed) return OK();
 
     const user = await User.findOne({ email: rawEmail });
     // Only send email for password-based accounts (not Google-only accounts)
