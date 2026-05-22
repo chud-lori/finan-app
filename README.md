@@ -89,11 +89,14 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Google OAuth** — sign in without a password; server-side token verification
 - **Email verification** — new accounts must verify before full access
 - **Anti-enumeration** — both login and forgot-password return generic, indistinguishable responses regardless of whether the email/username is registered
+- **Per-address password-reset throttle** — at most one reset email per address every 10 minutes, on top of the per-IP cap, so a single attacker can't spam victim inboxes
 - **CSRF-resistant API** — JSON-only body parser + CORS origin allow-list. Cross-site form posts can't reach the API
 - **CORS** — restricted to the frontend origin with `credentials: true`
 - **Security headers** — `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`
 - **Input sanitization** — HTML tags and null bytes stripped from all transaction fields
-- **Rate limiting** — IP-based for auth endpoints, user-based for authenticated routes
+- **Rate limiting** — IP-based for auth endpoints, user-based for authenticated routes; correctly bound to the real client IP behind the reverse proxy
+- **PII-scrubbed error reporting** — Sentry events are filtered through a `beforeSend` hook that drops passwords, email addresses, identifiers, and auth headers before any payload leaves the process
+- **No PII in login logs** — the user-supplied email/username is never written to log files on failure; only the resolved user id is logged on success
 - **Ownership enforced** — every data query is scoped to the authenticated user; no cross-user data access possible
 
 ---

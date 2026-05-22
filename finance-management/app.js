@@ -4,6 +4,23 @@ const Sentry = require('@sentry/node');
 // @sentry/node v8+ uses OpenTelemetry internally — Sentry.init() sets up the
 // OTel SDK and registers Sentry as the exporter automatically.
 if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
+    // Strip credentials and PII from request bodies before they leave the process.
+    // Sentry's default scrubber covers obvious keys like "password" but not "email"
+    // or "identifier", both of which the login/register/forgot-password handlers
+    // accept and which we don't want sitting in error reports.
+    const SCRUB_KEYS = new Set([
+        'password', 'newpassword', 'currentpassword',
+        'token', 'tokenhash', 'secret',
+        'email', 'identifier',
+    ]);
+    const scrub = (obj) => {
+        if (!obj || typeof obj !== 'object') return obj;
+        for (const k of Object.keys(obj)) {
+            if (SCRUB_KEYS.has(k.toLowerCase())) obj[k] = '[redacted]';
+            else if (typeof obj[k] === 'object') scrub(obj[k]);
+        }
+        return obj;
+    };
     Sentry.init({
         dsn: process.env.SENTRY_DSN,
         // Sample 20% of transactions for performance/tracing data
@@ -14,6 +31,22 @@ if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
             // Instruments Mongoose queries → spans show collection + operation
             Sentry.mongooseIntegration(),
         ],
+        beforeSend(event) {
+            if (event.request) {
+                if (event.request.headers) {
+                    delete event.request.headers.authorization;
+                    delete event.request.headers.cookie;
+                    delete event.request.headers['set-cookie'];
+                }
+                if (event.request.data) scrub(event.request.data);
+                if (event.request.query_string) scrub(event.request.query_string);
+            }
+            if (event.user) {
+                delete event.user.email;
+                delete event.user.ip_address;
+            }
+            return event;
+        },
     });
 }
 
@@ -36,6 +69,11 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 const app = express();
+
+// Trust the first reverse-proxy hop (nginx in prod). Without this, req.ip is
+// the proxy address and the per-IP rate limiter buckets every request under a
+// single key, defeating brute-force protection. Single hop = "1".
+app.set('trust proxy', 1);
 
 logger.stream = {
     write: function(message, encoding){
