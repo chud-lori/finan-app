@@ -129,7 +129,10 @@ export const getTransactions = (params = {}) => {
   if (params.page)     qs.set('page',     params.page);
   if (params.limit)    qs.set('limit',    params.limit);
   qs.set('tz', browserTz());
-  return apiFetch(`/api/transaction${qs.toString() ? `?${qs}` : ''}`);
+  // Backend route is GET /api/transaction/:type? where type ∈ {income, expense}.
+  // Anything else is treated as "all" and the path stays bare.
+  const typePath = (params.type === 'income' || params.type === 'expense') ? `/${params.type}` : '';
+  return apiFetch(`/api/transaction${typePath}${qs.toString() ? `?${qs}` : ''}`);
 };
 
 export const addTransaction = (body) =>

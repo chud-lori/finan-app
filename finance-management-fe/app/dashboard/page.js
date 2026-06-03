@@ -225,6 +225,7 @@ export default function DashboardPage() {
   });
   const [search, setSearch]         = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'income' | 'expense'
   const [sortBy, setSortBy]   = useState('time');
   const [order, setOrder]     = useState('desc');
   const [page, setPage]       = useState(1);
@@ -240,8 +241,10 @@ export default function DashboardPage() {
     const params = new URLSearchParams(window.location.search);
     const cat = params.get('category');
     const mo  = params.get('month');
+    const ty  = params.get('type');
     if (cat) setCategoryFilter(decodeURIComponent(cat));
     if (mo && /^\d{4}-\d{2}$/.test(mo)) setMonth(mo);
+    if (ty === 'income' || ty === 'expense') setTypeFilter(ty);
   }, []);
 
   // Fetch active months + categories once on mount
@@ -298,14 +301,23 @@ export default function DashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await getTransactions({ month, search: debouncedSearch, sortBy, order, page, limit: LIMIT, category: categoryFilter || undefined });
+      const res = await getTransactions({
+        month,
+        search: debouncedSearch,
+        sortBy,
+        order,
+        page,
+        limit: LIMIT,
+        category: categoryFilter || undefined,
+        type: typeFilter === 'all' ? undefined : typeFilter,
+      });
       setData(res.data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [month, debouncedSearch, sortBy, order, page, categoryFilter]);
+  }, [month, debouncedSearch, sortBy, order, page, categoryFilter, typeFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -441,6 +453,21 @@ export default function DashboardPage() {
                     ✕
                   </button>
                 )}
+              </div>
+
+              {/* Type filter */}
+              <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl shrink-0">
+                {['all', 'income', 'expense'].map(f => (
+                  <button
+                    key={f}
+                    onClick={() => { setTypeFilter(f); setPage(1); }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all capitalize ${
+                      typeFilter === f ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
               </div>
 
               {/* Sort */}
