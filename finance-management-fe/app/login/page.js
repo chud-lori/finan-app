@@ -43,6 +43,13 @@ function LoginForm() {
   const googleBtnRef = useRef(null);
   const [googleBtnWidth, setGoogleBtnWidth] = useState(300);
 
+  const safeNext = () => {
+    const next = params.get('next');
+    if (!next || !next.startsWith('/') || next.startsWith('//')) return '/dashboard';
+    if (next === '/login' || next.startsWith('/login?') || next.startsWith('/auth/')) return '/dashboard';
+    return next;
+  };
+
   useEffect(() => {
     if (params.get('error') === 'oauth_failed') setError('Google sign-in failed. Please try again.');
   }, [params]);
@@ -63,7 +70,7 @@ function LoginForm() {
     try {
       const data = await login(form.identifier, form.password);
       try { localStorage.setItem('username', data.data.user?.name || form.identifier); } catch {}
-      router.replace('/dashboard');
+      router.replace(safeNext());
     } catch (err) {
       setError(err.message || 'Login failed');
       if (err.code === 'EMAIL_NOT_VERIFIED') {
@@ -90,7 +97,7 @@ function LoginForm() {
     try {
       const data = await verifyGoogleToken(credential);
       try { localStorage.setItem('username', data.data.user?.name || ''); } catch {}
-      router.replace('/dashboard');
+      router.replace(safeNext());
     } catch (err) {
       setError(err.message || 'Google sign-in failed');
     } finally {

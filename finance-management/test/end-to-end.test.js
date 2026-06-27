@@ -11,7 +11,7 @@ const Goal = require('../models/goal.model');
 chai.use(chaiHttp);
 
 describe('End-to-End Integration Tests', () => {
-    let authToken;
+    let authCookie;
     let userId;
     let testUser;
 
@@ -44,13 +44,13 @@ describe('End-to-End Integration Tests', () => {
                 });
 
             expect(loginRes).to.have.status(200);
-            authToken = loginRes.body.data.token;
+            authCookie = loginRes.headers['set-cookie'];
             userId = loginRes.body.data.user.id;
 
             // Step 3: Seed categories
             const seedRes = await chai.request(server)
                 .post('/api/transaction/category')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(seedRes).to.have.status(200);
 
@@ -67,7 +67,7 @@ describe('End-to-End Integration Tests', () => {
 
             const incomeRes = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(incomeTransaction);
 
             expect(incomeRes).to.have.status(201);
@@ -98,7 +98,7 @@ describe('End-to-End Integration Tests', () => {
             for (const transaction of expenseTransactions) {
                 const res = await chai.request(server)
                     .post('/api/transaction')
-                    .set('Authorization', `Bearer ${authToken}`)
+                    .set('Cookie', authCookie)
                     .send(transaction);
 
                 expect(res).to.have.status(201);
@@ -111,7 +111,7 @@ describe('End-to-End Integration Tests', () => {
             // Step 7: Get all transactions
             const transactionsRes = await chai.request(server)
                 .get('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(transactionsRes).to.have.status(200);
             expect(transactionsRes.body.data.transactions).to.have.length(3);
@@ -120,7 +120,7 @@ describe('End-to-End Integration Tests', () => {
             // Step 8: Get expense summary
             const expenseRes = await chai.request(server)
                 .get('/api/transaction/expense')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(expenseRes).to.have.status(200);
             expect(expenseRes.body.data.totalExpense).to.equal(350000);
@@ -133,26 +133,26 @@ describe('End-to-End Integration Tests', () => {
 
             const goalRes = await chai.request(server)
                 .post('/api/goal/add')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(goal);
 
             expect(goalRes).to.have.status(201);
             expect(goalRes.body.data.goal.description).to.equal(goal.description);
 
-            // Step 10: Get goal detail with savings calculation
+            // Step 10: Get goal detail with manual progress fields
             const goalDetailRes = await chai.request(server)
                 .get(`/api/goal/goal/${goalRes.body.data.goal.id}`)
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(goalDetailRes).to.have.status(200);
             expect(goalDetailRes.body.data.goal.price).to.equal(10000000);
-            expect(goalDetailRes.body.data.achieve.savings).to.equal(930000); // 20% of 4.65M
-            expect(goalDetailRes.body.data.achieve.need).to.equal(9070000); // 10M - 930K
+            expect(goalDetailRes.body.data.goal.savedAmount).to.equal(0);
+            expect(goalDetailRes.body.data.goal.progress).to.equal(0);
 
             // Step 11: Get budget recommendation
             const recommendationRes = await chai.request(server)
                 .get('/api/transaction/recommendation/20000000/500000')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(recommendationRes).to.have.status(200);
             expect(recommendationRes.body.data).to.have.property('resultRecommendation');
@@ -161,7 +161,7 @@ describe('End-to-End Integration Tests', () => {
             const transactionToDelete = transactionsRes.body.data.transactions.find(t => t.type === 'expense');
             const deleteRes = await chai.request(server)
                 .delete(`/api/transaction/${transactionToDelete.id}`)
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(deleteRes).to.have.status(200);
 
@@ -172,7 +172,7 @@ describe('End-to-End Integration Tests', () => {
             // Step 14: Check auth token still works
             const checkAuthRes = await chai.request(server)
                 .get('/api/auth/check')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(checkAuthRes).to.have.status(200);
             expect(checkAuthRes.body.data.authorized).to.be.true;
@@ -196,7 +196,7 @@ describe('End-to-End Integration Tests', () => {
                 }
             ];
 
-            const tokens = [];
+            const cookies = [];
             const userIds = [];
 
             // Register and login both users
@@ -212,7 +212,7 @@ describe('End-to-End Integration Tests', () => {
                         password: user.password
                     });
 
-                tokens.push(loginRes.body.data.token);
+                cookies.push(loginRes.headers['set-cookie']);
                 userIds.push(loginRes.body.data.user.id);
             }
 
@@ -229,7 +229,7 @@ describe('End-to-End Integration Tests', () => {
 
             const res1 = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${tokens[0]}`)
+                .set('Cookie', cookies[0])
                 .send(transaction1);
 
             expect(res1).to.have.status(201);
@@ -247,7 +247,7 @@ describe('End-to-End Integration Tests', () => {
 
             const res2 = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${tokens[1]}`)
+                .set('Cookie', cookies[1])
                 .send(transaction2);
 
             expect(res2).to.have.status(201);
@@ -262,11 +262,11 @@ describe('End-to-End Integration Tests', () => {
             // Verify users can only see their own transactions
             const transactions1 = await chai.request(server)
                 .get('/api/transaction')
-                .set('Authorization', `Bearer ${tokens[0]}`);
+                .set('Cookie', cookies[0]);
 
             const transactions2 = await chai.request(server)
                 .get('/api/transaction')
-                .set('Authorization', `Bearer ${tokens[1]}`);
+                .set('Cookie', cookies[1]);
 
             expect(transactions1.body.data.transactions).to.have.length(1);
             expect(transactions2.body.data.transactions).to.have.length(1);
@@ -289,7 +289,7 @@ describe('End-to-End Integration Tests', () => {
                     password: testUser.password
                 });
 
-            authToken = loginRes.body.data.token;
+            authCookie = loginRes.headers['set-cookie'];
 
             // Try to create transaction with missing category
             const invalidTransaction = {
@@ -304,7 +304,7 @@ describe('End-to-End Integration Tests', () => {
 
             const res = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(invalidTransaction);
 
             expect(res).to.have.status(422);
@@ -312,14 +312,14 @@ describe('End-to-End Integration Tests', () => {
             // Try to delete non-existent transaction
             const deleteRes = await chai.request(server)
                 .delete('/api/transaction/507f1f77bcf86cd799439011')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(deleteRes).to.have.status(404);
 
             // Try to get non-existent goal
             const goalRes = await chai.request(server)
                 .get('/api/goal/goal/507f1f77bcf86cd799439011')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(goalRes).to.have.status(404);
         });

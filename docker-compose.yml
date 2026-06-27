@@ -44,7 +44,7 @@ services:
 
   # ── Backend (Express) ───────────────────────────────────────
   backend:
-    image: ghcr.io/chud-lori/finan-app-backend:latest
+    image: ghcr.io/chud-lori/finan-app-backend:${IMAGE_TAG:-latest}
     build:
       context: ./finance-management
       dockerfile: Dockerfile
@@ -63,17 +63,14 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY}
       FROM_EMAIL: ${FROM_EMAIL:-noreply@lori.my.id}
       SENTRY_DSN: ${SENTRY_DSN}
-      # ML runs in-process as of Phase 2 (services/ml). Setting USE_NATIVE_ML=false
-      # re-enables the legacy Python service — also restore the `ai` service block
-      # above and add an AI_SERVICE_URL env if rolling back.
-      USE_NATIVE_ML: ${USE_NATIVE_ML:-true}
+      # Smart insights and category classification run in-process via services/ml.
     depends_on:
       mongo-init:
         condition: service_completed_successfully
     networks:
       - finan-net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/ready"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -86,7 +83,7 @@ services:
 
   # ── Frontend (Next.js) ──────────────────────────────────────
   frontend:
-    image: ghcr.io/chud-lori/finan-app-frontend:latest
+    image: ghcr.io/chud-lori/finan-app-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./finance-management-fe
       dockerfile: Dockerfile
@@ -119,7 +116,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /root/.docker/config.json:/config.json:ro
     environment:
-      WATCHTOWER_POLL_INTERVAL: 30
+      WATCHTOWER_POLL_INTERVAL: 300
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_CLEANUP: "true"
       DOCKER_CONFIG: /config.json

@@ -10,7 +10,7 @@ const Category = require('../models/category.model');
 chai.use(chaiHttp);
 
 describe('Transaction Integration Tests', () => {
-    let authToken;
+    let authCookie;
     let userId;
     let testUser;
     let testTransaction;
@@ -45,7 +45,7 @@ describe('Transaction Integration Tests', () => {
                 password: testUser.password
             });
 
-        authToken = loginRes.body.data.token;
+        authCookie = loginRes.headers['set-cookie'];
         userId = loginRes.body.data.user.id;
 
         // Seed categories for this user
@@ -58,7 +58,7 @@ describe('Transaction Integration Tests', () => {
         it('should create a new transaction successfully', async () => {
             const res = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(testTransaction);
 
             expect(res).to.have.status(201);
@@ -77,7 +77,7 @@ describe('Transaction Integration Tests', () => {
 
             const res = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(testTransaction);
 
             expect(res).to.have.status(201);
@@ -91,7 +91,7 @@ describe('Transaction Integration Tests', () => {
 
             const res = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(incomeTransaction);
 
             expect(res).to.have.status(201);
@@ -103,7 +103,7 @@ describe('Transaction Integration Tests', () => {
 
             const res = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(newCategoryTransaction);
 
             expect(res).to.have.status(201);
@@ -122,7 +122,7 @@ describe('Transaction Integration Tests', () => {
 
             const res = await chai.request(server)
                 .post('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(invalidTransaction);
 
             expect(res).to.have.status(422);
@@ -151,7 +151,7 @@ describe('Transaction Integration Tests', () => {
         it('should return total expense', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction/expense')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
@@ -171,7 +171,7 @@ describe('Transaction Integration Tests', () => {
         it('should return all categories', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction/category')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
@@ -184,7 +184,7 @@ describe('Transaction Integration Tests', () => {
         it('should filter categories by search term', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction/category?search=food')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body.data.categories).to.include('Food & Dining');
@@ -205,7 +205,7 @@ describe('Transaction Integration Tests', () => {
 
             const res = await chai.request(server)
                 .post('/api/transaction/category')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
@@ -234,7 +234,7 @@ describe('Transaction Integration Tests', () => {
         it('should return all transactions when no type specified', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
@@ -246,7 +246,7 @@ describe('Transaction Integration Tests', () => {
         it('should return only expense transactions', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction/expense')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body.data.transactions).to.be.an('array');
@@ -258,7 +258,7 @@ describe('Transaction Integration Tests', () => {
         it('should return only income transactions', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction/income')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body.data.transactions).to.be.an('array');
@@ -270,7 +270,7 @@ describe('Transaction Integration Tests', () => {
         it('should return 404 for invalid type', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction/invalid')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(404);
         });
@@ -304,7 +304,7 @@ describe('Transaction Integration Tests', () => {
         it('should delete transaction successfully', async () => {
             const res = await chai.request(server)
                 .delete(`/api/transaction/${transactionId}`)
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
@@ -318,7 +318,7 @@ describe('Transaction Integration Tests', () => {
 
             const res = await chai.request(server)
                 .delete(`/api/transaction/${transactionId}`)
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
 
@@ -355,7 +355,7 @@ describe('Transaction Integration Tests', () => {
         it('should return budget recommendation', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction/recommendation/10000000/500000')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);

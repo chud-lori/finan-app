@@ -12,7 +12,7 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
    - [Service topology](#service-topology)
    - [Request lifecycle](#request-lifecycle)
    - [Authentication flow](#authentication-flow)
-   - [Category taxonomy & AI classification](#category-taxonomy--ai-classification)
+   - [Category taxonomy & ML classification](#category-taxonomy--ml-classification)
    - [ML insights pipeline](#ml-insights-pipeline)
    - [Snapshot system](#snapshot-system)
 4. [Data schemas](#data-schemas)
@@ -43,11 +43,10 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
 | Rate limiting | Custom in-process sliding-window (no Redis dependency) |
 | Logging | Winston + Morgan (JSON access log + daily-rotate file) |
 | Testing | Mocha + Chai + mongodb-memory-server |
-| Frontend | Next.js 14 (App Router), React, Tailwind CSS v4 |
+| Frontend | Next.js 16 (App Router), React, Tailwind CSS v4 |
 | Charts | Recharts |
 | Frontend testing | Playwright E2E |
-| ML (in-process) | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, z-score anomaly detector, linear-regression forecast |
-| ML — legacy Python service (retired) | `finance-management-ai/` kept on disk for `USE_NATIVE_ML=false` rollback only; no longer in `docker-compose.yml` or CI/CD |
+| Smart insights | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, z-score anomaly detector, linear-regression forecast |
 | Container | Docker + Docker Compose |
 | CI/CD | GitHub Actions → GHCR → Watchtower (auto-deploy) |
 
@@ -62,8 +61,6 @@ finan-app/                          ← monorepo root
 ├── Makefile                        ← dev and ops shortcuts
 ├── README.md                       ← product overview
 ├── DEVELOPER.md                    ← this file
-│
-├── finance-management-ai/          ← retired Phase 2; kept for `USE_NATIVE_ML=false` rollback
 │
 ├── finance-management/             ← Backend (Bun + Express.js + MongoDB)
 │   ├── app.js                      ← Express entry point (CORS, Helmet, Sentry, routes)
@@ -107,14 +104,14 @@ finan-app/                          ← monorepo root
 │   │   ├── auth.dto.js
 │   │   └── goal.dto.js
 │   ├── services/
-│   │   └── ml/                     ← in-process ML — replaces the retired Python service
+│   │   └── ml/                     ← in-process JS smart insights and classification
 │   │       ├── index.js            ← facade: classifyBatch() + analyze()
 │   │       ├── classifier.js       ← keyword + TF-IDF char-ngram cosine
 │   │       ├── anomaly.js          ← per-category z-score detector
 │   │       ├── forecast.js         ← linear-regression month-end forecast
 │   │       └── keywords.js         ← bilingual EN/ID taxonomy
 │   ├── helpers/
-│   │   ├── categoryClassifier.js   ← user-override pre-resolver; delegates remaining names to services/ml or the legacy Python service (USE_NATIVE_ML flag)
+│   │   ├── categoryClassifier.js   ← user-override pre-resolver; delegates remaining names to services/ml
 │   │   ├── seedDefaultCategories.js ← idempotent per-user upsert of default categories from categories.json
 │   │   ├── validator.js            ← express-validator rule sets
 │   │   ├── mailer.js               ← Resend SDK (password reset + email verification)
@@ -135,7 +132,7 @@ finan-app/                          ← monorepo root
 │       ├── goal.integration.test.js
 │       └── end-to-end.test.js
 │
-└── finance-management-fe/          ← Frontend (Next.js 14 + Tailwind CSS v4)
+└── finance-management-fe/          ← Frontend (Next.js 16 + Tailwind CSS v4)
     ├── Dockerfile
     ├── playwright.config.js
     ├── app/
@@ -176,7 +173,7 @@ finan-app/                          ← monorepo root
            │ :3000                        │ :3001
 ┌──────────▼──────────────┐   ┌──────────▼──────────────────────┐
 │  Frontend               │   │  Backend (Express / Bun runtime) │
-│  Next.js 14 App Router  │   │  container port 3000             │
+│  Next.js 16 App Router  │   │  container port 3000             │
 │  SSR + static assets    │   │  host port 3001                  │
 │  Tailwind CSS v4        │   │  JWT · rate limiting · REST API  │
 └─────────────────────────┘   └─────────────┬────────────────────────┘
@@ -286,7 +283,7 @@ A database leak therefore cannot be replayed against the auth endpoints — ever
 
 ---
 
-### Category taxonomy & AI classification
+### Category taxonomy & ML classification
 
 Categories are stored per-user and classified into one of six semantic spending groups:
 
@@ -364,7 +361,7 @@ POST /api/transaction/ml-insights/refresh
         Same flow but with txCountSnapshot check bypassed (?force=true equivalent)
 ```
 
-**Graceful degradation:** Native ML is synchronous and never throws on well-formed input — the empty-payload paths return `{ anomalies: [], forecast: { available: false, reason: ... } }` directly. The legacy fallback (`USE_NATIVE_ML=false`) still applies HTTP timeout handling and returns the same shape on failure.
+**Graceful degradation:** Native ML is synchronous and never throws on well-formed input — the empty-payload paths return `{ anomalies: [], forecast: { available: false, reason: ... } }` directly.
 
 ---
 
@@ -484,8 +481,8 @@ Collection: categories
 | `user` | ObjectId | ref: User, required | scoped per user |
 | `name` | String | required, max 100 | stored lowercase |
 | `type` | String | enum: `income \| expense` | default `expense` |
-| `group` | String | enum: `essential \| discretionary \| savings \| social \| income \| other` | default `other`; set by AI classifier |
-| `groupConfidence` | Number | 0–1, default 0 | confidence score from AI |
+| `group` | String | enum: `essential \| discretionary \| savings \| social \| income \| other` | default `other`; set by ML classifier |
+| `groupConfidence` | Number | 0–1, default 0 | confidence score from ML classifier |
 | `groupOverridden` | Boolean | default false | when true, `classifyAll` skips this category; used as a learning hint for future classifications |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
@@ -623,11 +620,11 @@ Collection: emailverifications
 
 ## ML modules (`services/ml/`)
 
-All ML now runs in-process inside the backend. The legacy Python service (`finance-management-ai/`) has been retired in Phase 2; the directory is kept for `USE_NATIVE_ML=false` rollback only.
+All smart insights and category classification run in-process inside the backend via zero-dependency JS modules.
 
 ### Classifier (`services/ml/classifier.js`)
 
-Same three-pass strategy as the retired Python version, byte-accurate to 3-decimal confidence:
+Three-pass strategy with confidence rounded to 3 decimals:
 
 | Pass | Method | Confidence |
 |------|--------|-----------|
@@ -644,7 +641,7 @@ The TF-IDF corpus + IDF + L2-normalised keyword vectors are precomputed once at 
 
 ### Anomaly detection (`services/ml/anomaly.js`)
 
-Per-category z-score detector. **Trade-off vs. the retired Python service:** the Python version used Isolation Forest for categories with ≥ 10 samples and z-score for 3–9. Reimplementing sklearn's IF in JS would add ~250 LOC and risk subtle scoring drift. Since user-visible behaviour is dominated by `multiple = amount / mean`, we use z-score for every category with ≥ 3 samples. Output shape is identical to the Python version.
+Per-category z-score detector. Categories with at least 3 samples are scored by how far the latest transaction is from that category's normal spending pattern. User-visible severity is driven by `multiple = amount / mean` plus the z-score.
 
 | Samples per category | Algorithm | Threshold |
 |----------------------|-----------|-----------|
@@ -700,8 +697,6 @@ Copy `.env.example` → `.env` and fill in values:
 | `FROM_EMAIL` | `noreply@lori.my.id` | | Sender address (must be on a verified Resend domain) |
 | `SENTRY_DSN` | — | | Backend Sentry DSN (runtime env var) |
 | `NEXT_PUBLIC_SENTRY_DSN` | — | | Frontend Sentry DSN (**build-time** — set as GitHub Actions variable) |
-| `USE_NATIVE_ML` | `true` | | When `true` (default), ML runs in-process via `services/ml`. Set `false` to fall back to the legacy Python service (requires re-adding the `ai` block to `docker-compose.yml`) |
-| `AI_SERVICE_URL` | `http://127.0.0.1:3002` | | Only consulted when `USE_NATIVE_ML=false` — URL of the legacy Python service |
 
 ### Backend local dev (`finance-management/.env`)
 
@@ -713,7 +708,6 @@ DB_URI=mongodb://localhost:27017/finan
 SECRET_TOKEN=your_jwt_secret_here
 RESEND_API_KEY=re_your_api_key_here
 FROM_EMAIL=noreply@yourdomain.com
-# USE_NATIVE_ML=true is the default — no override needed unless you want to fall back to the legacy Python service
 ```
 
 ### Frontend local dev (`finance-management-fe/.env.local`)

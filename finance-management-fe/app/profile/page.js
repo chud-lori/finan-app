@@ -1377,7 +1377,7 @@ export default function ProfilePage() {
               {/* Manage Categories */}
               <Card title="Categories" subtitle="Rename or delete your spending and income categories">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-gray-500">Organise your categories — rename or remove ones you don't need.</p>
+                  <p className="text-sm text-gray-500">Organise your categories — rename or remove ones you don&apos;t need.</p>
                   <button
                     onClick={() => setShowCategoryModal(true)}
                     className="shrink-0 px-4 py-1.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors"

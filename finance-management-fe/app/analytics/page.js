@@ -339,7 +339,7 @@ export default function AnalyticsPage() {
     const monthParam = tab === 'Monthly'
       ? `${year}-${String(month).padStart(2, '0')}`
       : `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    router.push(`/?category=${encodeURIComponent(cat)}&month=${monthParam}`);
+    router.push(`/dashboard?category=${encodeURIComponent(cat)}&month=${monthParam}`);
   };
 
   // Yearly bar click → fetch transactions for that month

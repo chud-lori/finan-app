@@ -321,7 +321,7 @@ router.post('', transactionValidatorRules(), validate, authenticateJWT, limiter.
  *       500:
  *         description: Server error
  */
-router.post('/category', authenticateJWT, seedCategory)
+router.post('/category', authenticateJWT, limiter.byUser(10), seedCategory)
 
 /**
  * @openapi
@@ -366,8 +366,12 @@ router.post('/category', authenticateJWT, seedCategory)
  *       500:
  *         description: Server error
  */
-router.get('/category/suggestions', authenticateJWT, getSuggestedCategories);
-router.get(`/category`, authenticateJWT, getCategory);
+router.get('/category/suggestions', authenticateJWT, limiter.byUser(60), getSuggestedCategories);
+router.get(`/category`, authenticateJWT, limiter.byUser(60), getCategory);
+
+router.get('/date/:date', authenticateJWT, limiter.byUser(60), getByDate);
+router.get('/range/:start/:end', authenticateJWT, limiter.byUser(60), getByTimeRange);
+router.get('/recommendation/:monthly/:spend', authenticateJWT, limiter.byUser(30), getRecommendation);
 
 /**
  * @openapi
@@ -455,7 +459,7 @@ router.get(`/category`, authenticateJWT, getCategory);
  *       500:
  *         description: Server error.
  */
-router.get('/:type?', authenticateJWT, getUserTransaction);
+router.get('/:type?', authenticateJWT, limiter.byUser(60), getUserTransaction);
 
 /**
  * @openapi
@@ -513,7 +517,6 @@ router.get('/:type?', authenticateJWT, getUserTransaction);
  *       500:
  *         description: Server error
  */
-router.get('/date/:date', authenticateJWT, getByDate);
 
 /**
  * @openapi
@@ -590,7 +593,6 @@ router.get('/date/:date', authenticateJWT, getByDate);
  *       500:
  *         description: Server error
  */
-router.get('/range/:start/:end', authenticateJWT, getByTimeRange);
 
 /**
  * @openapi
@@ -648,7 +650,7 @@ router.get('/range/:start/:end', authenticateJWT, getByTimeRange);
  *         description: Server error
  */
 router.patch('/:id', authenticateJWT, limiter.byUser(30), patchTransaction);
-router.delete('/:id', authenticateJWT, deleteTransaction);
+router.delete('/:id', authenticateJWT, limiter.byUser(20), deleteTransaction);
 
 /**
  * @openapi
@@ -712,6 +714,4 @@ router.delete('/:id', authenticateJWT, deleteTransaction);
  *       500:
  *         description: Server error
  */
-router.get('/recommendation/:monthly/:spend', authenticateJWT, getRecommendation);
-
 module.exports = router;

@@ -1,5 +1,4 @@
-// Linear-regression month-end spending forecast — JS port of
-// finance-management-ai/models/forecast.py.
+// Linear-regression month-end spending forecast.
 //
 // Algorithm: fit a least-squares line on (day_number → cumulative_spend) for
 // the elapsed days of the current month, then evaluate at days_in_month.
@@ -42,7 +41,7 @@ const fitLinear = (xs, ys) => {
 
 /**
  * @param {{daily_totals: Array<{day:number, amount:number}>, current_day:number, days_in_month:number, budget?:number|null}} payload
- * @returns {object} forecast — shape matches Python service exactly
+ * @returns {object} forecast
  */
 const forecastMonthSpend = ({ daily_totals, current_day, days_in_month, budget = null }) => {
   if (!Array.isArray(daily_totals) || daily_totals.length === 0 || current_day < MIN_DAYS) {

@@ -1,5 +1,4 @@
 // Bilingual (English + Indonesian) keyword taxonomy.
-// Ported byte-for-byte from finance-management-ai/models/classifier.py.
 // Groups: essential | discretionary | savings | social | income | other
 module.exports = {
   essential: [

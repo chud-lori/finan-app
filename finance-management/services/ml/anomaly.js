@@ -1,11 +1,8 @@
-// Per-category transaction anomaly detection — JS port of
-// finance-management-ai/models/anomaly.py.
+// Per-category transaction anomaly detection.
 //
-// Trade-off: the Python service uses Isolation Forest for categories with ≥10
-// samples and z-score for 3–9. Reimplementing sklearn's IsolationForest in JS
-// would add ~250 lines and risk subtle scoring differences. The realistic
-// user-visible behaviour (top-10 outliers, severity bins by `multiple`) is
-// dominated by the magnitude of `amount / mean_amount`, not the algorithm.
+// Trade-off: heavier models such as Isolation Forest would add a larger
+// runtime footprint. The realistic user-visible behaviour (top-10 outliers,
+// severity bins by `multiple`) is dominated by `amount / mean_amount`.
 // We use z-score for every category with ≥3 samples; large-sample categories
 // get the same threshold (z ≥ 2.0). This flags slightly more transactions than
 // IF on large categories, but the top-10 + severity sort keeps results sensible

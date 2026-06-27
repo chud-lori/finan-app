@@ -8,7 +8,7 @@ const Balance = require('../models/balance.model');
 chai.use(chaiHttp);
 
 describe('Auth Integration Tests', () => {
-    let authToken;
+    let authCookie;
     let testUser;
 
     beforeEach(() => {
@@ -107,13 +107,11 @@ describe('Auth Integration Tests', () => {
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
             expect(res.body).to.have.property('message', 'Login successful');
-            expect(res.body.data).to.have.property('token');
-            expect(res.body.data).to.have.property('token_type', 'bearer');
             expect(res.body.data).to.have.property('user');
             expect(res.body.data.user).to.have.property('name', testUser.name);
+            expect(res).to.have.header('set-cookie');
 
-            // Store token for other tests
-            authToken = res.body.data.token;
+            authCookie = res.headers['set-cookie'];
         });
 
         // Anti-enumeration: both "wrong password" and "user does not exist"
@@ -172,13 +170,13 @@ describe('Auth Integration Tests', () => {
                     password: testUser.password
                 });
 
-            authToken = loginRes.body.data.token;
+            authCookie = loginRes.headers['set-cookie'];
         });
 
-        it('should return 200 for valid token', async () => {
+        it('should return 200 for a valid session cookie', async () => {
             const res = await chai.request(server)
                 .get('/api/auth/check')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
@@ -186,33 +184,30 @@ describe('Auth Integration Tests', () => {
             expect(res.body.data).to.have.property('authorized', true);
         });
 
-        it('should return 401 for missing token', async () => {
+        it('should return 401 for a missing session cookie', async () => {
             const res = await chai.request(server)
                 .get('/api/auth/check');
 
             expect(res).to.have.status(401);
-            expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('No token provided');
+            expect(res.body).to.have.property('message', 'Unauthorized');
         });
 
-        it('should return 401 for invalid token format', async () => {
+        it('should return 401 for invalid session cookie format', async () => {
             const res = await chai.request(server)
                 .get('/api/auth/check')
-                .set('Authorization', 'InvalidFormat');
+                .set('Cookie', 'token=invalid-format');
 
-            expect(res).to.have.status(401);
-            expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Invalid token format');
+            expect(res).to.have.status(403);
+            expect(res.body).to.have.property('message', 'Forbidden');
         });
 
-        it('should return 403 for invalid token', async () => {
+        it('should ignore bearer headers when no session cookie exists', async () => {
             const res = await chai.request(server)
                 .get('/api/auth/check')
                 .set('Authorization', 'Bearer invalidtoken');
 
-            expect(res).to.have.status(403);
-            expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Invalid token');
+            expect(res).to.have.status(401);
+            expect(res.body).to.have.property('message', 'Unauthorized');
         });
     });
 });

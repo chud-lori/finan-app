@@ -13,7 +13,10 @@ Sentry.init({
   integrations: [
     // Instruments page loads, client-side navigations, and fetch/XHR calls
     Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(),
+    Sentry.replayIntegration({
+      maskAllText: true,
+      blockAllMedia: true,
+    }),
   ],
 
   // Don't report errors in development

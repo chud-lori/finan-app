@@ -60,13 +60,11 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const connectDB = require("./config/db");
 const logMiddleware = require('./middleware/log');
+const csrfGuard = require('./middleware/csrfGuard');
 const {PORT: port, HOST: host, FE_URL} = require("./config/keys");
 const logger = require("./helpers/logger");
 const { verifyMailer } = require('./helpers/mailer');
-// connect database (skip in test environment)
-if (process.env.NODE_ENV !== 'test') {
-    connectDB();
-}
+const mongoose = require('mongoose');
 
 const app = express();
 
@@ -101,6 +99,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type'],
 }));
 app.use(cookieParser());
+app.use(csrfGuard);
 app.use(helmet({
   // API-only server — no HTML is rendered, so CSP is not useful here.
   // HSTS is handled by the nginx reverse proxy in front of this service.
@@ -132,6 +131,19 @@ const recommendationRoutes = require('./routers/recommendation');
 const categoryRoutes = require('./routers/category');
 // Routes
 app.get("/", (req, res) => res.json("HEHHHH"));
+app.get('/health', (_req, res) => {
+    res.json({ status: 1, message: 'alive' });
+});
+app.get('/ready', (_req, res) => {
+    const ready = mongoose.connection.readyState === 1;
+    res.status(ready ? 200 : 503).json({
+        status: ready ? 1 : 0,
+        message: ready ? 'ready' : 'database not ready',
+        data: {
+            db: ready ? 'connected' : 'disconnected',
+        },
+    });
+});
 app.use('/api/auth', authRoutes);
 app.use('/api/transaction', transactionRoutes);
 app.use('/api/goal', goalRoutes);
@@ -153,12 +165,26 @@ process.on('uncaughtException', (e) => {
     process.exit(10);
 });
 
-app.listen(port, () => {
-    const baseUrl = `http://${host}:${port}`;
-    logger.info(`App started on ${baseUrl}`);
-    logger.info(`Swagger UI: ${baseUrl}/api-docs`);
-    console.log(`Swagger UI: ${baseUrl}/api-docs`);
-    if (process.env.NODE_ENV !== 'test') verifyMailer();
-});
+const start = async () => {
+    if (process.env.NODE_ENV !== 'test') {
+        await connectDB();
+    }
+
+    return app.listen(port, () => {
+        const baseUrl = `http://${host}:${port}`;
+        logger.info(`App started on ${baseUrl}`);
+        logger.info(`Swagger UI: ${baseUrl}/api-docs`);
+        console.log(`Swagger UI: ${baseUrl}/api-docs`);
+        if (process.env.NODE_ENV !== 'test') verifyMailer();
+    });
+};
+
+if (require.main === module) {
+    start().catch((error) => {
+        logger.error(`Startup failed: ${error.message}`);
+        process.exit(1);
+    });
+}
 
 module.exports = app; // for testing
+module.exports.start = start;

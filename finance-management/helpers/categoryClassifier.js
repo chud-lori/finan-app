@@ -1,15 +1,14 @@
 /**
- * Calls the AI service to classify category names into semantic groups.
+ * Classifies category names into semantic groups using in-process ML.
  * When a userId is provided, the user's manually-overridden categories are
  * used as learning hints: exact and substring matches against overridden names
- * are resolved locally before the AI service is called.
+ * are resolved locally before the classifier is called.
  *
  * Returns a map of { categoryName: { group, confidence } }.
  * Silently returns partial/empty results on any failure — classification is best-effort.
  */
 const logger = require('./logger');
 const Category = require('../models/category.model');
-const { USE_NATIVE_ML, AI_SERVICE_URL } = require('../config/keys');
 const nativeMl = require('../services/ml');
 
 /**
@@ -31,7 +30,7 @@ const classifyCategories = async (names, userId = null) => {
             }).select('name group').lean();
             overrides = Object.fromEntries(overriddenCats.map(c => [c.name.toLowerCase(), c.group]));
         } catch {
-            // non-fatal — fall through to AI classification
+            // non-fatal — fall through to ML classification
         }
     }
 
@@ -78,31 +77,14 @@ const classifyCategories = async (names, userId = null) => {
 
     if (toClassify.length === 0) return preClassified;
 
-    // Native path — synchronous in-process, no network, no timeout to worry about
-    if (USE_NATIVE_ML) {
+    try {
         const results = nativeMl.classifyBatch(toClassify);
-        const aiResults = Object.fromEntries(
+        const mlResults = Object.fromEntries(
             results.map(r => [r.category, { group: r.group, confidence: r.confidence }])
         );
-        return { ...preClassified, ...aiResults };
-    }
-
-    // Fallback path — Python AI service
-    try {
-        const res = await fetch(`${AI_SERVICE_URL}/classify`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ categories: toClassify }),
-            signal:  AbortSignal.timeout(5000),
-        });
-        if (!res.ok) return preClassified;
-        const data = await res.json();
-        const aiResults = Object.fromEntries(
-            (data.results || []).map(r => [r.category, { group: r.group, confidence: r.confidence }])
-        );
-        return { ...preClassified, ...aiResults };
+        return { ...preClassified, ...mlResults };
     } catch (err) {
-        logger.warn(`Category classifier unavailable: ${err.message}`);
+        logger.warn(`Category classifier failed: ${err.message}`);
         return preClassified;
     }
 };

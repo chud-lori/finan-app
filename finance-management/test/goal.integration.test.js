@@ -3,13 +3,12 @@ const chaiHttp = require('chai-http');
 const { expect } = require('chai');
 const server = require('../app');
 const User = require('../models/user.model');
-const Balance = require('../models/balance.model');
 const Goal = require('../models/goal.model');
 
 chai.use(chaiHttp);
 
 describe('Goal Integration Tests', () => {
-    let authToken;
+    let authCookie;
     let userId;
     let testUser;
     let testGoal;
@@ -40,7 +39,7 @@ describe('Goal Integration Tests', () => {
                 password: testUser.password
             });
 
-        authToken = loginRes.body.data.token;
+        authCookie = loginRes.headers['set-cookie'];
         userId = loginRes.body.data.user.id;
     });
 
@@ -48,7 +47,7 @@ describe('Goal Integration Tests', () => {
         it('should create a new goal successfully', async () => {
             const res = await chai.request(server)
                 .post('/api/goal/add')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(testGoal);
 
             expect(res).to.have.status(201);
@@ -68,7 +67,7 @@ describe('Goal Integration Tests', () => {
 
             const res = await chai.request(server)
                 .post('/api/goal/add')
-                .set('Authorization', `Bearer ${authToken}`)
+                .set('Cookie', authCookie)
                 .send(invalidGoal);
 
             expect(res).to.have.status(400);
@@ -104,7 +103,7 @@ describe('Goal Integration Tests', () => {
         it('should return all user goals', async () => {
             const res = await chai.request(server)
                 .get('/api/goal/goals')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
@@ -120,7 +119,7 @@ describe('Goal Integration Tests', () => {
 
             const res = await chai.request(server)
                 .get('/api/goal/goals')
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body.data.goals).to.be.an('array');
@@ -147,34 +146,22 @@ describe('Goal Integration Tests', () => {
             });
             goalId = goal._id;
 
-            // Update user balance for testing
-            await Balance.findOneAndUpdate(
-                { user: userId },
-                { amount: 5000000 },
-                { upsert: true }
-            );
+            await Goal.findByIdAndUpdate(goalId, { savedAmount: 3000000 });
         });
 
-        it('should return goal detail with savings calculation', async () => {
+        it('should return goal detail with progress calculation', async () => {
             const res = await chai.request(server)
                 .get(`/api/goal/goal/${goalId}`)
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(200);
             expect(res.body).to.have.property('status', 1);
             expect(res.body).to.have.property('message', 'Goal detail retrieved');
             expect(res.body.data).to.have.property('goal');
-            expect(res.body.data).to.have.property('balance');
-            expect(res.body.data).to.have.property('achieve');
             expect(res.body.data.goal).to.have.property('description', 'Buy a new laptop');
             expect(res.body.data.goal).to.have.property('price', 15000000);
-            expect(res.body.data.achieve).to.have.property('savings');
-            expect(res.body.data.achieve).to.have.property('need');
-            
-            // Verify savings calculation (20% of balance)
-            expect(res.body.data.achieve.savings).to.equal(1000000);
-            // Verify need calculation (price - savings)
-            expect(res.body.data.achieve.need).to.equal(14000000);
+            expect(res.body.data.goal).to.have.property('savedAmount', 3000000);
+            expect(res.body.data.goal).to.have.property('progress', 20);
         });
 
         it('should return 404 for non-existent goal', async () => {
@@ -182,24 +169,11 @@ describe('Goal Integration Tests', () => {
             
             const res = await chai.request(server)
                 .get(`/api/goal/goal/${nonExistentId}`)
-                .set('Authorization', `Bearer ${authToken}`);
+                .set('Cookie', authCookie);
 
             expect(res).to.have.status(404);
             expect(res.body).to.have.property('status', 0);
             expect(res.body.message).to.include('Goal not found');
-        });
-
-        it('should return 404 when user balance not found', async () => {
-            // Delete user balance
-            await Balance.deleteMany({ user: userId });
-
-            const res = await chai.request(server)
-                .get(`/api/goal/goal/${goalId}`)
-                .set('Authorization', `Bearer ${authToken}`);
-
-            expect(res).to.have.status(404);
-            expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('User balance not found');
         });
 
         it('should return 401 for unauthorized access', async () => {
@@ -211,7 +185,7 @@ describe('Goal Integration Tests', () => {
     });
 
     describe('Goal Business Logic Tests', () => {
-        it('should calculate savings correctly with different balance amounts', async () => {
+        it('should calculate progress correctly with different saved amounts', async () => {
             // Create goal
             const goal = await Goal.create({
                 user: userId,
@@ -219,28 +193,23 @@ describe('Goal Integration Tests', () => {
                 price: 10000000
             });
 
-            // Test with different balance amounts
             const testCases = [
-                { balance: 0, expectedSavings: 0, expectedNeed: 10000000 },
-                { balance: 1000000, expectedSavings: 200000, expectedNeed: 9800000 },
-                { balance: 5000000, expectedSavings: 1000000, expectedNeed: 9000000 },
-                { balance: 50000000, expectedSavings: 10000000, expectedNeed: 0 }
+                { savedAmount: 0, expectedProgress: 0 },
+                { savedAmount: 1000000, expectedProgress: 10 },
+                { savedAmount: 5000000, expectedProgress: 50 },
+                { savedAmount: 50000000, expectedProgress: 100 }
             ];
 
             for (const testCase of testCases) {
-                // Update balance
-                await Balance.findOneAndUpdate(
-                    { user: userId },
-                    { amount: testCase.balance }
-                );
+                await Goal.findByIdAndUpdate(goal._id, { savedAmount: testCase.savedAmount });
 
                 const res = await chai.request(server)
                     .get(`/api/goal/goal/${goal._id}`)
-                    .set('Authorization', `Bearer ${authToken}`);
+                    .set('Cookie', authCookie);
 
                 expect(res).to.have.status(200);
-                expect(res.body.data.achieve.savings).to.equal(testCase.expectedSavings);
-                expect(res.body.data.achieve.need).to.equal(testCase.expectedNeed);
+                expect(res.body.data.goal.savedAmount).to.equal(testCase.savedAmount);
+                expect(res.body.data.goal.progress).to.equal(testCase.expectedProgress);
             }
         });
 
@@ -259,22 +228,16 @@ describe('Goal Integration Tests', () => {
                 }
             ]);
 
-            // Set balance
-            await Balance.findOneAndUpdate(
-                { user: userId },
-                { amount: 1000000 }
-            );
-
             // Test each goal
             for (const goal of goals) {
                 const res = await chai.request(server)
                     .get(`/api/goal/goal/${goal._id}`)
-                    .set('Authorization', `Bearer ${authToken}`);
+                    .set('Cookie', authCookie);
 
                 expect(res).to.have.status(200);
                 expect(res.body.data.goal).to.have.property('description', goal.description);
                 expect(res.body.data.goal).to.have.property('price', goal.price);
-                expect(res.body.data.achieve.savings).to.equal(200000); // 20% of 1M
+                expect(res.body.data.goal).to.have.property('progress', 0);
             }
         });
     });

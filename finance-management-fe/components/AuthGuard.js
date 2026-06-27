@@ -63,7 +63,11 @@ export default function AuthGuard({ children }) {
         setReady(true);
       })
       .catch(() => {
-        router.replace('/login');
+        try { localStorage.removeItem('username'); } catch {}
+        const next = typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+          : '/dashboard';
+        router.replace(`/login?next=${encodeURIComponent(next)}`);
       });
   }, [router]);
 

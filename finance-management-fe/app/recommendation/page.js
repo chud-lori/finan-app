@@ -151,7 +151,7 @@ function AffordTool({ savedBudget }) {
           </div>
 
           <ToolCard>
-            <h4 className="text-sm font-semibold text-gray-700 mb-4">This month's snapshot</h4>
+            <h4 className="text-sm font-semibold text-gray-700 mb-4">This month&apos;s snapshot</h4>
             <div className="mb-3">
               <div className="flex justify-between text-xs text-gray-500 mb-1.5">
                 <span>Spent so far</span>
