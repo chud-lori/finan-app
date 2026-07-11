@@ -19,7 +19,6 @@ const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
 const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
-const { USE_NATIVE_ML, AI_SERVICE_URL } = require('../config/keys');
 const nativeMl = require('../services/ml');
 
 // Fire-and-forget: delete cached ML insight for a specific month so next read regenerates
@@ -1134,9 +1133,9 @@ const setBudget = async (req, res) => {
     }
 };
 
-// ── ML Insights (Isolation Forest + Linear Regression via AI service) ──────────
+// ── ML Insights (z-score anomaly detection + linear-regression forecast) ─────
 
-// Shared: build payload and call AI service. Returns raw aiData or throws.
+// Shared: build payload and run the in-process analyzer. Returns raw aiData or throws.
 const _runMLPipeline = async (userId, tz) => {
     const now          = moment.tz(tz);
     const yearMonth    = now.format('YYYY-MM');
@@ -1179,20 +1178,7 @@ const _runMLPipeline = async (userId, tz) => {
         budget:        budgetDoc?.amount ?? null,
     };
 
-    let aiData;
-    if (USE_NATIVE_ML) {
-        // In-process — no network, no timeout, deterministic
-        aiData = nativeMl.analyze(analyzePayload);
-    } else {
-        const aiRes = await fetch(`${AI_SERVICE_URL}/analyze`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify(analyzePayload),
-            signal:  AbortSignal.timeout(8000),
-        });
-        if (!aiRes.ok) throw new Error(`AI service responded ${aiRes.status}`);
-        aiData = await aiRes.json();
-    }
+    const aiData = nativeMl.analyze(analyzePayload);
     return { aiData, yearMonth, currentMonthTxCount };
 };
 
@@ -1231,7 +1217,7 @@ const getMLInsights = async (req, res) => {
             return res.status(200).json(BaseResponseDTO.success('ML insights (cached)', _serveCache(cached, false)));
         }
 
-        // Cache stale or missing — try AI service
+        // Cache stale or missing — regenerate in-process
         try {
             const { aiData, currentMonthTxCount } = await _runMLPipeline(userId, tz);
 
@@ -1254,8 +1240,8 @@ const getMLInsights = async (req, res) => {
                 stale:       false,
             }));
         } catch (aiErr) {
-            logger.error(`ML insights AI error: ${aiErr.message}`);
-            // AI is down — serve stale cache if available rather than showing an error
+            logger.error(`ML insights analyzer error: ${aiErr.message}`);
+            // Analyzer failed — serve stale cache if available rather than showing an error
             if (cached) {
                 return res.status(200).json(BaseResponseDTO.success('ML insights (stale)', _serveCache(cached, true)));
             }
@@ -1272,7 +1258,7 @@ const getMLInsights = async (req, res) => {
     }
 };
 
-// Refresh: serve cache if still fresh; call AI only when txCount changed or ?force=true
+// Refresh: serve cache if still fresh; rerun analyzer only when txCount changed or ?force=true
 const refreshMLInsights = async (req, res) => {
     const userId = req.user.id;
     const tz     = validTz(req.query.tz);
@@ -1294,12 +1280,12 @@ const refreshMLInsights = async (req, res) => {
             }),
         ]);
 
-        // Cache still fresh and not forcing — no need to hit AI service
+        // Cache still fresh and not forcing — no need to rerun the analyzer
         if (!force && cached && currentCount === cached.txCountSnapshot) {
             return res.status(200).json(BaseResponseDTO.success('ML insights (already up to date)', _serveCache(cached, false)));
         }
 
-        // Call AI service
+        // Rerun analyzer
         try {
             const { aiData, currentMonthTxCount } = await _runMLPipeline(userId, tz);
 

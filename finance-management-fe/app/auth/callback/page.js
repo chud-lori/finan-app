@@ -9,21 +9,25 @@ function CallbackHandler() {
   const [status, setStatus] = useState('Processing…');
 
   useEffect(() => {
-    const token = params.get('token');
     const username = params.get('username');
     const error = params.get('error');
+    const nextParam = params.get('next');
+    const next = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.startsWith('/auth/') && nextParam !== '/login'
+      ? nextParam
+      : '/dashboard';
 
     if (error) {
       setStatus('Sign-in failed. Redirecting…');
-      setTimeout(() => router.replace('/login?error=oauth_failed'), 1500);
+      const loginParams = new URLSearchParams({ error: 'oauth_failed', next });
+      setTimeout(() => router.replace(`/login?${loginParams}`), 1500);
       return;
     }
 
     if (username) {
       try { localStorage.setItem('username', decodeURIComponent(username)); } catch {}
     }
-    setStatus('Signed in! Redirecting to dashboard…');
-    router.replace('/');
+    setStatus('Signed in! Redirecting…');
+    router.replace(next);
   }, [params, router]);
 
   return (

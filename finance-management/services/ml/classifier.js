@@ -1,4 +1,4 @@
-// Category semantic classifier — JS port of finance-management-ai/models/classifier.py.
+// Category semantic classifier for smart grouping and suggestions.
 //
 // Stages:
 //   1. Exact match against KEYWORD_RULES → confidence 1.0

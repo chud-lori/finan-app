@@ -1,11 +1,4 @@
-// Native ML facade — drop-in replacement for the Python AI service.
-//
-// Exposes:
-//   classifyBatch(names)            ↔ POST /classify  on Python service
-//   analyze(payload)                ↔ POST /analyze   on Python service
-//
-// Response shapes match the Python service exactly so call sites can switch
-// between native and HTTP without conditional shape handling downstream.
+// In-process ML facade for category classification and smart insights.
 
 const { classifyBatch } = require('./classifier');
 const { detectAnomalies } = require('./anomaly');

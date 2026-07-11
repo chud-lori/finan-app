@@ -359,7 +359,7 @@ function ExplainCard({ data }) {
   const maxPct = Math.max(...data.topCategories.map(c => c.pct), 1);
   return (
     <div className="p-5">
-      <p className="text-sm text-gray-500 dark:text-slate-400 mb-5 italic leading-relaxed">"{data.summary}"</p>
+      <p className="text-sm text-gray-500 dark:text-slate-400 mb-5 italic leading-relaxed">&ldquo;{data.summary}&rdquo;</p>
       <div className="space-y-4">
         {data.topCategories.map((c, i) => (
           <div key={c.category}>

@@ -58,12 +58,12 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="5. Security">
-          <p>Passwords are hashed with bcrypt (never stored in plaintext). API access requires a signed JWT token. Sessions can be invalidated remotely via the &ldquo;Log out all devices&rdquo; feature.</p>
+          <p>Passwords are hashed with bcrypt (never stored in plaintext). API access requires a signed session token delivered in a secure, HttpOnly cookie. Sessions can be invalidated remotely via the &ldquo;Log out all devices&rdquo; feature.</p>
           <p>While we take reasonable security precautions, no system is 100% secure. Do not store information here that you would not want exposed in a worst-case breach.</p>
         </Section>
 
         <Section title="6. Cookies and local storage">
-          <p>Finan App stores your session token in <strong>browser local storage</strong> — not in a cookie. We also store your theme preference (light/dark) in local storage. No tracking cookies are set.</p>
+          <p>Finan App stores your session in an <strong>HttpOnly cookie</strong> set by our backend, so client-side scripts cannot read the session token. We use local storage only for non-sensitive preferences such as theme, currency, number format, and display name. No tracking cookies are set.</p>
         </Section>
 
         <Section title="7. Your rights">
