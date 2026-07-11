@@ -279,3 +279,16 @@ export const deleteCategoryApi = (categoryId) =>
 
 export const repairCategoryTypes = () =>
   apiFetch('/api/category/repair-types', { method: 'POST' });
+
+// ── Email ingestion (forward-to-inbox) ────────────────────────────────────────
+
+export const getPendingEmailTransactions = () =>
+  apiFetch('/api/email-ingest/pending');
+
+// Called on explicit dismiss AND after a confirmed item is created through
+// the normal addTransaction path — the pending doc is review state only.
+export const dismissPendingEmailTransaction = (id) =>
+  apiFetch(`/api/email-ingest/pending/${id}`, { method: 'DELETE' });
+
+export const getEmailIngestAddress = () =>
+  apiFetch('/api/email-ingest/address');

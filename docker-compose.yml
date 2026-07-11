@@ -67,6 +67,13 @@ services:
       # re-enables the legacy Python service — also restore the `ai` service block
       # above and add an AI_SERVICE_URL env if rolling back.
       USE_NATIVE_ML: ${USE_NATIVE_ML:-true}
+      # Forward-to-inbox email import (optional — feature is a no-op when unset)
+      EMAIL_INGEST_ADDRESS: ${EMAIL_INGEST_ADDRESS:-}
+      EMAIL_INGEST_IMAP_HOST: ${EMAIL_INGEST_IMAP_HOST:-}
+      EMAIL_INGEST_IMAP_PORT: ${EMAIL_INGEST_IMAP_PORT:-993}
+      EMAIL_INGEST_IMAP_USER: ${EMAIL_INGEST_IMAP_USER:-}
+      EMAIL_INGEST_IMAP_PASS: ${EMAIL_INGEST_IMAP_PASS:-}
+      EMAIL_INGEST_POLL_MS: ${EMAIL_INGEST_POLL_MS:-300000}
     depends_on:
       mongo-init:
         condition: service_completed_successfully

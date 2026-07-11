@@ -19,6 +19,7 @@ import {
   renameCategoryApi,
   deleteCategoryApi,
   repairCategoryTypes,
+  getEmailIngestAddress,
 } from '@/lib/api';
 import { toTitleCase } from '@/lib/format';
 import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
@@ -581,6 +582,64 @@ function Card({ title, subtitle, danger = false, children }) {
       </div>
       <div className="p-4">{children}</div>
     </div>
+  );
+}
+
+// ─── Email import card ────────────────────────────────────────────────────────
+// Shows the user's personal forwarding address for bank-email ingestion.
+// Renders nothing when the feature isn't configured on the server (503).
+function EmailImportCard() {
+  const [address, setAddress] = useState(null);
+  const [copied,  setCopied]  = useState(false);
+  const [showSteps, setShowSteps] = useState(false);
+
+  useEffect(() => {
+    getEmailIngestAddress()
+      .then(res => setAddress(res.data?.address || null))
+      .catch(() => {});
+  }, []);
+
+  if (!address) return null;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable */ }
+  };
+
+  return (
+    <Card title="Email Import" subtitle="Auto-detect transactions from BCA & Bank Jago emails">
+      <div className="space-y-3">
+        <p className="text-sm text-gray-500">
+          Forward your bank notification emails to your personal address below and they'll
+          show up on the dashboard as pending transactions for you to review.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-xl truncate">{address}</code>
+          <button onClick={copy}
+            className="shrink-0 px-3 py-2 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition-colors">
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+        <button onClick={() => setShowSteps(v => !v)}
+          className="w-full flex items-center justify-between text-xs text-gray-500 hover:text-gray-700 transition-colors">
+          <span className="font-medium">How to set up auto-forwarding in Gmail</span>
+          <svg className={`w-4 h-4 transition-transform ${showSteps ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showSteps && (
+          <ol className="list-decimal list-inside space-y-1.5 text-xs text-gray-500 rounded-xl border border-gray-200 p-3">
+            <li>In Gmail, open <span className="font-medium">Settings → Forwarding and POP/IMAP</span> and add the address above as a forwarding address.</li>
+            <li>Gmail sends a confirmation email — within a few minutes a <span className="font-medium">"Confirm Gmail auto-forwarding"</span> item appears on your dashboard. Click it to verify.</li>
+            <li>Create a filter: <span className="font-medium">From</span> → <code className="bg-gray-100 px-1 py-0.5 rounded">bca.co.id OR jago.com</code>, action → <span className="font-medium">Forward to</span> the address above.</li>
+            <li>New BCA / Jago transaction emails will now appear on your dashboard for review — nothing is added to your ledger until you confirm it.</li>
+          </ol>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -1373,6 +1432,9 @@ export default function ProfilePage() {
                   </form>
                 </div>
               </Card>
+
+              {/* Email import */}
+              <EmailImportCard />
 
               {/* Manage Categories */}
               <Card title="Categories" subtitle="Rename or delete your spending and income categories">

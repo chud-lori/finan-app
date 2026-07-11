@@ -130,6 +130,7 @@ const profileRoutes = require('./routers/profile');
 const gamificationRoutes = require('./routers/gamification');
 const recommendationRoutes = require('./routers/recommendation');
 const categoryRoutes = require('./routers/category');
+const emailIngestRoutes = require('./routers/emailIngest');
 // Routes
 app.get("/", (req, res) => res.json("HEHHHH"));
 app.use('/api/auth', authRoutes);
@@ -139,6 +140,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/gamification', gamificationRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/category', categoryRoutes);
+app.use('/api/email-ingest', emailIngestRoutes);
 // views
 // app.get('/', (req, res, next) => {
 //     res.render('./public/index');
@@ -158,7 +160,12 @@ app.listen(port, () => {
     logger.info(`App started on ${baseUrl}`);
     logger.info(`Swagger UI: ${baseUrl}/api-docs`);
     console.log(`Swagger UI: ${baseUrl}/api-docs`);
-    if (process.env.NODE_ENV !== 'test') verifyMailer();
+    if (process.env.NODE_ENV !== 'test') {
+        verifyMailer();
+        // Forward-to-inbox email ingestion — no-op unless EMAIL_INGEST_* env vars are set
+        const { startEmailIngestPoller } = require('./services/emailIngest/imapPoller');
+        startEmailIngestPoller();
+    }
 });
 
 module.exports = app; // for testing

@@ -380,6 +380,21 @@ POST /api/transaction/ml-insights/refresh
 
 `refreshSnapshot()` never throws to the caller. If it fails, it logs and swallows the error — snapshots are advisory, not canonical. The `POST /api/profile/reconcile-balance` endpoint recomputes the balance from the raw transaction ledger if snapshots drift.
 
+### Email transaction ingestion (forward-to-inbox)
+
+Transactions announced in bank notification emails (BCA, Bank Jago) can be captured without any bank API or Gmail OAuth scope. The design deliberately avoids Google's restricted `gmail.readonly` scope (which requires an annual CASA security assessment for published apps, or 7-day refresh tokens in testing mode):
+
+1. Each user gets a personal forwarding address `finan+<token>@domain` (`GET /api/email-ingest/address`; token is a random 16-hex string stored on `User.emailIngestToken`).
+2. The user sets a Gmail filter (`from: bca.co.id OR jago.com` → forward) to that address. Gmail's forward-confirmation email is recognized (`services/emailIngest/ingest.js#gmailConfirmation`) and surfaced as a pending item carrying the verification link.
+3. `services/emailIngest/imapPoller.js` polls the single app-owned mailbox for unseen messages on an interval (`EMAIL_INGEST_POLL_MS`, default 5 min). Messages are routed to users by the plus-token in `Delivered-To` / `X-Forwarded-To` headers, parsed by the zero-dependency template parser (`services/emailIngest/parser.js`), and stored as `PendingTransaction` docs. Every message is marked `\Seen` regardless of outcome so poison messages can't wedge the loop; dedupe safety lives in the `(user, emailMessageId)` unique index.
+4. **Pending items never touch the ledger.** The dashboard review UI (`components/PendingEmailTransactions.js`) confirms an item through the normal `POST /api/transaction` path (the single atomic `$inc` balance writer), then deletes the pending doc. Unparseable bank emails become "add manually" stubs. Unreviewed items expire after 30 days (TTL index).
+
+Parsing is conservative: amount extraction prefers labeled values (`Jumlah:`, `Total:`, `Amount:`) over the largest `Rp`-prefixed number, income requires an explicit inbound keyword (`transfer masuk`, `received`, …), and anything ambiguous is stored as `parsed: false` rather than guessed.
+
+Dependency note: `imapflow` + `mailparser` (both Nodemailer-team packages) were added for the IMAP/MIME transport only — RFC 3501 + multipart/quoted-printable decoding is not worth hand-rolling. The parser itself has zero dependencies.
+
+The whole feature is a no-op unless `EMAIL_INGEST_ADDRESS` + `EMAIL_INGEST_IMAP_*` are set (mirrors the Google OAuth guard).
+
 ---
 
 ## Data schemas
@@ -405,6 +420,7 @@ Collection: users
 | `streakDays` | Number | default 0 | current consecutive days with a transaction |
 | `streakLastDate` | String | `YYYY-MM-DD` | last day a transaction was logged |
 | `longestStreak` | Number | default 0 | all-time best streak |
+| `emailIngestToken` | String | unique, sparse | 16-hex token in the user's forwarding address (`finan+<token>@domain`); created on first `GET /api/email-ingest/address` |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
 
@@ -621,6 +637,31 @@ Collection: emailverifications
 
 ---
 
+### PendingTransaction
+
+```
+Collection: pendingtransactions
+```
+
+Transaction candidates extracted from forwarded bank emails, awaiting user review. Never written to the ledger directly — confirm goes through `POST /api/transaction`.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required | |
+| `source` | String | enum: `bca`, `jago`, `gmail`, required | `gmail` = forward-confirmation email carrying the verification link |
+| `emailMessageId` | String | required, unique with `user` | RFC 5322 Message-ID — dedupe key against re-polls/re-forwards |
+| `parsed` | Boolean | default false | false = "needs manual entry" stub |
+| `description` | String | | recipient/merchant when parsed |
+| `amount` | Number | | |
+| `currency` | String | default `idr` | |
+| `type` | String | enum: income, expense | income requires explicit inbound keyword |
+| `time` | Date | | from the email's Date header |
+| `subject` / `snippet` | String | | review context shown in the UI (snippet = verification URL for `gmail` items) |
+| `receivedAt` | Date | indexed with `user` | |
+| `expiresAt` | Date | TTL index | unreviewed items auto-expire after 30 days |
+
+---
+
 ## ML modules (`services/ml/`)
 
 All ML now runs in-process inside the backend. The legacy Python service (`finance-management-ai/`) has been retired in Phase 2; the directory is kept for `USE_NATIVE_ML=false` rollback only.
@@ -702,6 +743,12 @@ Copy `.env.example` → `.env` and fill in values:
 | `NEXT_PUBLIC_SENTRY_DSN` | — | | Frontend Sentry DSN (**build-time** — set as GitHub Actions variable) |
 | `USE_NATIVE_ML` | `true` | | When `true` (default), ML runs in-process via `services/ml`. Set `false` to fall back to the legacy Python service (requires re-adding the `ai` block to `docker-compose.yml`) |
 | `AI_SERVICE_URL` | `http://127.0.0.1:3002` | | Only consulted when `USE_NATIVE_ML=false` — URL of the legacy Python service |
+| `EMAIL_INGEST_ADDRESS` | — | | Base mailbox for forward-to-inbox email import (e.g. `finan@lori.my.id`); feature disabled when unset |
+| `EMAIL_INGEST_IMAP_HOST` | — | | IMAP host of that mailbox |
+| `EMAIL_INGEST_IMAP_PORT` | `993` | | IMAP port (TLS) |
+| `EMAIL_INGEST_IMAP_USER` | — | | IMAP login |
+| `EMAIL_INGEST_IMAP_PASS` | — | | IMAP password — use an app password |
+| `EMAIL_INGEST_POLL_MS` | `300000` | | Mailbox poll interval (5 min) |
 
 ### Backend local dev (`finance-management/.env`)
 
@@ -1082,6 +1129,14 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
 | GET | `/api/recommendations` | 20/min | ✓ | 1–5 personalised rule-based nudges; query: `?tz=IANA` |
+
+### Email ingestion
+
+| Method | Path | Rate limit | Auth | Description |
+|--------|------|-----------|------|-------------|
+| GET | `/api/email-ingest/pending` | 30/min | ✓ | Pending email-detected transactions awaiting review (newest first, max 100) |
+| DELETE | `/api/email-ingest/pending/:id` | 30/min | ✓ | Dismiss a pending item — called on explicit dismiss and after the FE confirms via `POST /api/transaction` |
+| GET | `/api/email-ingest/address` | 10/min | ✓ | Get (or lazily create) the user's personal forwarding address; `503` when the feature isn't configured |
 
 ---
 

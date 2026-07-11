@@ -24,6 +24,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Smart category suggestions** — predicts your most likely category based on time of day and past habits
 - **Inline editing** — fix transaction description or category directly in the dashboard table
 - **Multi-file CSV import** — bulk-import months of history from Excel or Google Sheets exports; select or drag multiple files at once
+- **Email import (optional)** — forward BCA / Bank Jago notification emails to your personal `finan+token@…` address and they appear on the dashboard as pending transactions to confirm — no bank API or Gmail permission needed
 - **CSV export** — download your full transaction history at any time
 - **Full timezone support** — records each transaction in the timezone it was made
 
@@ -63,13 +64,13 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 
 | Page | Description |
 |------|-------------|
-| Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category |
+| Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category; review queue for email-detected transactions |
 | Add transaction | Income or expense with smart category suggestions |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
 | Insights | Anomaly detection, spending explainability, time-to-zero runway, AI category classification, category management (rename / delete) |
 | Recommendation | 10 built-in financial planning calculators |
 | Range report | Custom date range with income/expense summary |
-| Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |
+| Profile | Financial identity, currency & format preferences, CSV import/export, email import setup, danger zone |
 | Settings | Theme toggle, change password, logout all devices, delete account |
 | Password reset | Email-based reset link via Resend (1-hour expiry) |
 | Privacy & Terms | Full Privacy Policy and Terms of Service |

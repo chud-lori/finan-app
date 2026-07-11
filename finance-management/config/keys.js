@@ -25,6 +25,18 @@ module.exports = {
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   FROM_EMAIL:     process.env.FROM_EMAIL || 'noreply@lori.my.id',
 
+  // ── Email transaction ingestion (forward-to-inbox) ──────────────────────
+  // Users auto-forward bank notification emails (BCA / Bank Jago) to
+  // EMAIL_INGEST_ADDRESS with a per-user plus tag (finan+<token>@domain).
+  // The IMAP poller (services/emailIngest/imapPoller.js) reads that one
+  // mailbox. Feature is a no-op unless all IMAP_* vars are set.
+  EMAIL_INGEST_ADDRESS:   process.env.EMAIL_INGEST_ADDRESS,
+  EMAIL_INGEST_IMAP_HOST: process.env.EMAIL_INGEST_IMAP_HOST,
+  EMAIL_INGEST_IMAP_PORT: Number(process.env.EMAIL_INGEST_IMAP_PORT || 993),
+  EMAIL_INGEST_IMAP_USER: process.env.EMAIL_INGEST_IMAP_USER,
+  EMAIL_INGEST_IMAP_PASS: process.env.EMAIL_INGEST_IMAP_PASS,
+  EMAIL_INGEST_POLL_MS:   Number(process.env.EMAIL_INGEST_POLL_MS || 5 * 60_000),
+
   // ── ML routing ───────────────────────────────────────────────────────────
   // USE_NATIVE_ML=true  → classifier/anomaly/forecast run in-process (services/ml)
   // USE_NATIVE_ML=false → backend calls the external Python AI service at AI_SERVICE_URL

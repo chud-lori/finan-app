@@ -28,6 +28,14 @@ const UserSchema = new Schema({
         sparse: true, // allows multiple null values while keeping uniqueness for non-null
         unique: true,
     },
+    // Token embedded in the user's email-forwarding address
+    // (finan+<token>@domain) — routes forwarded bank emails to this user.
+    // Generated on first GET /api/email-ingest/address.
+    emailIngestToken: {
+        type: String,
+        sparse: true,
+        unique: true,
+    },
     lastLoginAt: { type: Date },
     lastActivityAt: { type: Date },
     lastActivityType: { type: String },
