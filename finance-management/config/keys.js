@@ -36,6 +36,12 @@ module.exports = {
   EMAIL_INGEST_IMAP_USER: process.env.EMAIL_INGEST_IMAP_USER,
   EMAIL_INGEST_IMAP_PASS: process.env.EMAIL_INGEST_IMAP_PASS,
   EMAIL_INGEST_POLL_MS:   Number(process.env.EMAIL_INGEST_POLL_MS || 5 * 60_000),
+  // Gmail-connector variant of ingestion: users grant gmail.readonly via a
+  // separate "Connect Gmail" consent. Requires GOOGLE_CLIENT_ID/SECRET plus
+  // this 64-hex-char key (openssl rand -hex 32) to encrypt refresh tokens.
+  EMAIL_INGEST_ENCRYPTION_KEY:    process.env.EMAIL_INGEST_ENCRYPTION_KEY,
+  EMAIL_INGEST_GMAIL_REDIRECT_URL: process.env.EMAIL_INGEST_GMAIL_REDIRECT_URL
+    || 'http://localhost:3001/api/email-ingest/gmail/callback',
 
   // ── ML routing ───────────────────────────────────────────────────────────
   // USE_NATIVE_ML=true  → classifier/anomaly/forecast run in-process (services/ml)

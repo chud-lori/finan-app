@@ -36,6 +36,16 @@ const UserSchema = new Schema({
         sparse: true,
         unique: true,
     },
+    // Gmail ingestion connection (incremental OAuth, gmail.readonly scope).
+    // refreshTokenEnc is AES-256-GCM encrypted (helpers/cryptoVault.js) — the
+    // raw refresh token never touches the database or logs.
+    gmailIngest: {
+        refreshTokenEnc: { type: String },
+        email:           { type: String },  // the Gmail address that was connected
+        status:          { type: String, enum: ['connected', 'expired'] },
+        connectedAt:     { type: Date },
+        lastSyncAt:      { type: Date },
+    },
     lastLoginAt: { type: Date },
     lastActivityAt: { type: Date },
     lastActivityType: { type: String },

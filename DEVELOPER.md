@@ -380,9 +380,24 @@ POST /api/transaction/ml-insights/refresh
 
 `refreshSnapshot()` never throws to the caller. If it fails, it logs and swallows the error — snapshots are advisory, not canonical. The `POST /api/profile/reconcile-balance` endpoint recomputes the balance from the raw transaction ledger if snapshots drift.
 
-### Email transaction ingestion (forward-to-inbox)
+### Email transaction ingestion
 
-Transactions announced in bank notification emails (BCA, Bank Jago) can be captured without any bank API or Gmail OAuth scope. The design deliberately avoids Google's restricted `gmail.readonly` scope (which requires an annual CASA security assessment for published apps, or 7-day refresh tokens in testing mode):
+Transactions announced in bank notification emails (BCA, Bank Jago) are captured by two interchangeable transports feeding one pipeline (`storePendingCandidate` in `services/emailIngest/ingest.js`): the **Gmail connector** (one-click OAuth, primary UX) and **forward-to-inbox** (works with any provider, no Google verification requirements).
+
+#### Gmail connector (`services/emailIngest/gmailSync.js`)
+
+Users click "Connect Gmail" on the profile page → separate incremental-OAuth consent for `gmail.readonly` (never bundled into login — Google policy requires restricted scopes to be requested in context). Flow:
+
+1. `GET /api/email-ingest/gmail/connect` returns the consent URL; `state` is a 10-min JWT (signed with `SECRET_TOKEN`, purpose-bound) that authenticates the callback.
+2. `GET /api/email-ingest/gmail/callback` exchanges the code, encrypts the refresh token with AES-256-GCM (`helpers/cryptoVault.js`, key = `EMAIL_INGEST_ENCRYPTION_KEY`), stores it on `User.gmailIngest`, and redirects to `/profile?gmail=connected`. An initial sync fires immediately.
+3. The poller refreshes an access token per connected user and queries the Gmail REST API with `from:(bca.co.id OR klikbca.com OR jago.com)` — only bank notification emails are ever listed or read. Plain `fetch`; the `googleapis` package is deliberately not used.
+4. `invalid_grant` (user revoked, or Google's 7-day refresh-token expiry for apps in **testing mode**) flips `gmailIngest.status` to `'expired'` — the UI shows a Reconnect button instead of failing silently.
+
+**Google Cloud setup required:** enable the Gmail API, add the `gmail.readonly` scope to the OAuth consent screen, register `EMAIL_INGEST_GMAIL_REDIRECT_URL` as an authorized redirect URI, and (while the app is unverified) add each user's Gmail as a test user (max 100). Publishing to unlimited users requires Google's restricted-scope verification incl. an annual CASA assessment.
+
+#### Forward-to-inbox
+
+Zero Google requirements — kept as the fallback for non-Gmail users and as the path that avoids the testing-mode 7-day reconnect:
 
 1. Each user gets a personal forwarding address `finan+<token>@domain` (`GET /api/email-ingest/address`; token is a random 16-hex string stored on `User.emailIngestToken`).
 2. The user sets a Gmail filter (`from: bca.co.id OR jago.com` → forward) to that address. Gmail's forward-confirmation email is recognized (`services/emailIngest/ingest.js#gmailConfirmation`) and surfaced as a pending item carrying the verification link.
@@ -393,7 +408,7 @@ Parsing is conservative: amount extraction prefers labeled values (`Jumlah:`, `T
 
 Dependency note: `imapflow` + `mailparser` (both Nodemailer-team packages) were added for the IMAP/MIME transport only — RFC 3501 + multipart/quoted-printable decoding is not worth hand-rolling. The parser itself has zero dependencies.
 
-The whole feature is a no-op unless `EMAIL_INGEST_ADDRESS` + `EMAIL_INGEST_IMAP_*` are set (mirrors the Google OAuth guard).
+Each transport is independently env-gated: forwarding needs `EMAIL_INGEST_ADDRESS` + `EMAIL_INGEST_IMAP_*`; the Gmail connector needs `GOOGLE_CLIENT_ID/SECRET` + `EMAIL_INGEST_ENCRYPTION_KEY`. With neither set the feature is invisible (pollers off, endpoints 503, FE hides the card).
 
 ---
 
@@ -421,6 +436,10 @@ Collection: users
 | `streakLastDate` | String | `YYYY-MM-DD` | last day a transaction was logged |
 | `longestStreak` | Number | default 0 | all-time best streak |
 | `emailIngestToken` | String | unique, sparse | 16-hex token in the user's forwarding address (`finan+<token>@domain`); created on first `GET /api/email-ingest/address` |
+| `gmailIngest.refreshTokenEnc` | String | | AES-256-GCM encrypted Gmail refresh token (`helpers/cryptoVault.js`) — raw token never stored |
+| `gmailIngest.email` | String | | connected Gmail address (shown in the UI) |
+| `gmailIngest.status` | String | enum: connected, expired | `expired` = revoked or 7-day testing-mode expiry → UI shows Reconnect |
+| `gmailIngest.connectedAt` / `lastSyncAt` | Date | | |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
 
@@ -748,7 +767,9 @@ Copy `.env.example` → `.env` and fill in values:
 | `EMAIL_INGEST_IMAP_PORT` | `993` | | IMAP port (TLS) |
 | `EMAIL_INGEST_IMAP_USER` | — | | IMAP login |
 | `EMAIL_INGEST_IMAP_PASS` | — | | IMAP password — use an app password |
-| `EMAIL_INGEST_POLL_MS` | `300000` | | Mailbox poll interval (5 min) |
+| `EMAIL_INGEST_POLL_MS` | `300000` | | Poll interval for both ingestion transports (5 min) |
+| `EMAIL_INGEST_ENCRYPTION_KEY` | — | | 64 hex chars (`openssl rand -hex 32`) — encrypts Gmail refresh tokens at rest; Gmail connector disabled when unset |
+| `EMAIL_INGEST_GMAIL_REDIRECT_URL` | `http://localhost:3001/api/email-ingest/gmail/callback` | | Must be registered as an authorized redirect URI in Google Cloud Console |
 
 ### Backend local dev (`finance-management/.env`)
 
@@ -1137,6 +1158,10 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/email-ingest/pending` | 30/min | ✓ | Pending email-detected transactions awaiting review (newest first, max 100) |
 | DELETE | `/api/email-ingest/pending/:id` | 30/min | ✓ | Dismiss a pending item — called on explicit dismiss and after the FE confirms via `POST /api/transaction` |
 | GET | `/api/email-ingest/address` | 10/min | ✓ | Get (or lazily create) the user's personal forwarding address; `503` when the feature isn't configured |
+| GET | `/api/email-ingest/status` | 30/min | ✓ | Availability + connection state of both transports: `{ forwarding: { available, address }, gmail: { available, status, email } }` |
+| GET | `/api/email-ingest/gmail/connect` | 10/min | ✓ | Returns the Google consent URL (`gmail.readonly`, offline access, signed `state`) |
+| GET | `/api/email-ingest/gmail/callback` | 10/min per IP | state JWT | Google OAuth redirect target — browser navigation; redirects to `/profile?gmail=connected\|error` |
+| DELETE | `/api/email-ingest/gmail` | 10/min | ✓ | Disconnect Gmail; best-effort token revoke at Google |
 
 ---
 

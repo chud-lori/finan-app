@@ -12,6 +12,8 @@ if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
         'password', 'newpassword', 'currentpassword',
         'token', 'tokenhash', 'secret',
         'email', 'identifier',
+        // Gmail OAuth flow — never let grant material reach Sentry
+        'code', 'state', 'refresh_token', 'access_token', 'refreshtokenenc',
     ]);
     const scrub = (obj) => {
         if (!obj || typeof obj !== 'object') return obj;
@@ -162,9 +164,11 @@ app.listen(port, () => {
     console.log(`Swagger UI: ${baseUrl}/api-docs`);
     if (process.env.NODE_ENV !== 'test') {
         verifyMailer();
-        // Forward-to-inbox email ingestion — no-op unless EMAIL_INGEST_* env vars are set
+        // Email ingestion transports — each is a no-op unless its env vars are set
         const { startEmailIngestPoller } = require('./services/emailIngest/imapPoller');
         startEmailIngestPoller();
+        const { startGmailIngestPoller } = require('./services/emailIngest/gmailSync');
+        startGmailIngestPoller();
     }
 });
 

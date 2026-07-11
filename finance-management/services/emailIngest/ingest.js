@@ -60,13 +60,13 @@ const gmailConfirmation = (email) => {
   };
 };
 
-const ingestEmail = async (email) => {
-  const token = extractIngestToken(email.recipients);
-  if (!token) return 'no-token';
-
-  const user = await User.findOne({ emailIngestToken: token }).select('_id').exec();
-  if (!user) return 'no-user';
-
+/**
+ * Parse an email and store it as a PendingTransaction for a known user.
+ * Shared by both transports (IMAP forwarding + Gmail connector) — the user
+ * is already resolved by the caller. Returns the same status strings as
+ * ingestEmail.
+ */
+const storePendingCandidate = async (userId, email) => {
   const candidate = gmailConfirmation(email) || parseBankEmail(email);
   if (!candidate) return 'not-bank';
 
@@ -75,7 +75,7 @@ const ingestEmail = async (email) => {
 
   try {
     await PendingTransaction.create({
-      user: user._id,
+      user: userId,
       source: candidate.source,
       emailMessageId: messageId,
       parsed: candidate.parsed,
@@ -92,8 +92,18 @@ const ingestEmail = async (email) => {
     if (e.code === 11000) return 'duplicate'; // (user, emailMessageId) already ingested
     throw e;
   }
-  logger.info(`Email ingest: pending transaction created for user ${user._id} (${candidate.source}, parsed=${candidate.parsed})`);
+  logger.info(`Email ingest: pending transaction created for user ${userId} (${candidate.source}, parsed=${candidate.parsed})`);
   return 'created';
 };
 
-module.exports = { ingestEmail, extractIngestToken };
+const ingestEmail = async (email) => {
+  const token = extractIngestToken(email.recipients);
+  if (!token) return 'no-token';
+
+  const user = await User.findOne({ emailIngestToken: token }).select('_id').exec();
+  if (!user) return 'no-user';
+
+  return storePendingCandidate(user._id, email);
+};
+
+module.exports = { ingestEmail, storePendingCandidate, extractIngestToken };

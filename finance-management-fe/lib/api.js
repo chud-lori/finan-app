@@ -292,3 +292,14 @@ export const dismissPendingEmailTransaction = (id) =>
 
 export const getEmailIngestAddress = () =>
   apiFetch('/api/email-ingest/address');
+
+// Availability + connection state of both transports (forwarding + Gmail)
+export const getEmailIngestStatus = () =>
+  apiFetch('/api/email-ingest/status');
+
+// Returns { url } — redirect the browser there for the gmail.readonly consent
+export const getGmailConnectUrl = () =>
+  apiFetch('/api/email-ingest/gmail/connect');
+
+export const disconnectGmail = () =>
+  apiFetch('/api/email-ingest/gmail', { method: 'DELETE' });

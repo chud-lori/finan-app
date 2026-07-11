@@ -74,6 +74,8 @@ services:
       EMAIL_INGEST_IMAP_USER: ${EMAIL_INGEST_IMAP_USER:-}
       EMAIL_INGEST_IMAP_PASS: ${EMAIL_INGEST_IMAP_PASS:-}
       EMAIL_INGEST_POLL_MS: ${EMAIL_INGEST_POLL_MS:-300000}
+      EMAIL_INGEST_ENCRYPTION_KEY: ${EMAIL_INGEST_ENCRYPTION_KEY:-}
+      EMAIL_INGEST_GMAIL_REDIRECT_URL: ${EMAIL_INGEST_GMAIL_REDIRECT_URL:-http://localhost:3001/api/email-ingest/gmail/callback}
     depends_on:
       mongo-init:
         condition: service_completed_successfully

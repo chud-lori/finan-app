@@ -24,7 +24,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Smart category suggestions** — predicts your most likely category based on time of day and past habits
 - **Inline editing** — fix transaction description or category directly in the dashboard table
 - **Multi-file CSV import** — bulk-import months of history from Excel or Google Sheets exports; select or drag multiple files at once
-- **Email import (optional)** — forward BCA / Bank Jago notification emails to your personal `finan+token@…` address and they appear on the dashboard as pending transactions to confirm — no bank API or Gmail permission needed
+- **Email import (optional)** — connect your Gmail with one click (only BCA / Bank Jago notification emails are read) or forward bank emails to your personal `finan+token@…` address; detected transactions appear on the dashboard as pending items you confirm before they touch your ledger
 - **CSV export** — download your full transaction history at any time
 - **Full timezone support** — records each transaction in the timezone it was made
 

@@ -19,7 +19,9 @@ import {
   renameCategoryApi,
   deleteCategoryApi,
   repairCategoryTypes,
-  getEmailIngestAddress,
+  getEmailIngestStatus,
+  getGmailConnectUrl,
+  disconnectGmail,
 } from '@/lib/api';
 import { toTitleCase } from '@/lib/format';
 import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
@@ -586,20 +588,41 @@ function Card({ title, subtitle, danger = false, children }) {
 }
 
 // ─── Email import card ────────────────────────────────────────────────────────
-// Shows the user's personal forwarding address for bank-email ingestion.
-// Renders nothing when the feature isn't configured on the server (503).
+// Two ways to auto-detect bank transactions: connect Gmail (one click, reads
+// only BCA/Jago notification emails) or forward emails to a personal address.
+// Renders nothing when neither transport is configured on the server.
 function EmailImportCard() {
-  const [address, setAddress] = useState(null);
+  const [status, setStatus] = useState(null); // { forwarding, gmail }
   const [copied,  setCopied]  = useState(false);
   const [showSteps, setShowSteps] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    getEmailIngestAddress()
-      .then(res => setAddress(res.data?.address || null))
+  const loadStatus = () =>
+    getEmailIngestStatus()
+      .then(res => setStatus(res.data || null))
       .catch(() => {});
-  }, []);
 
-  if (!address) return null;
+  useEffect(() => { loadStatus(); }, []);
+
+  if (!status || (!status.gmail?.available && !status.forwarding?.available)) return null;
+
+  const { gmail, forwarding } = status;
+  const address = forwarding?.address;
+
+  const connectGmail = async () => {
+    setBusy(true);
+    try {
+      const res = await getGmailConnectUrl();
+      if (res.data?.url) window.location.href = res.data.url;
+    } catch { setBusy(false); }
+  };
+
+  const handleDisconnect = async () => {
+    setBusy(true);
+    try { await disconnectGmail(); await loadStatus(); }
+    catch { /* stays connected — next status load reflects reality */ }
+    finally { setBusy(false); }
+  };
 
   const copy = async () => {
     try {
@@ -611,32 +634,80 @@ function EmailImportCard() {
 
   return (
     <Card title="Email Import" subtitle="Auto-detect transactions from BCA & Bank Jago emails">
-      <div className="space-y-3">
-        <p className="text-sm text-gray-500">
-          Forward your bank notification emails to your personal address below and they'll
-          show up on the dashboard as pending transactions for you to review.
-        </p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-xl truncate">{address}</code>
-          <button onClick={copy}
-            className="shrink-0 px-3 py-2 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition-colors">
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
-        </div>
-        <button onClick={() => setShowSteps(v => !v)}
-          className="w-full flex items-center justify-between text-xs text-gray-500 hover:text-gray-700 transition-colors">
-          <span className="font-medium">How to set up auto-forwarding in Gmail</span>
-          <svg className={`w-4 h-4 transition-transform ${showSteps ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {showSteps && (
-          <ol className="list-decimal list-inside space-y-1.5 text-xs text-gray-500 rounded-xl border border-gray-200 p-3">
-            <li>In Gmail, open <span className="font-medium">Settings → Forwarding and POP/IMAP</span> and add the address above as a forwarding address.</li>
-            <li>Gmail sends a confirmation email — within a few minutes a <span className="font-medium">"Confirm Gmail auto-forwarding"</span> item appears on your dashboard. Click it to verify.</li>
-            <li>Create a filter: <span className="font-medium">From</span> → <code className="bg-gray-100 px-1 py-0.5 rounded">bca.co.id OR jago.com</code>, action → <span className="font-medium">Forward to</span> the address above.</li>
-            <li>New BCA / Jago transaction emails will now appear on your dashboard for review — nothing is added to your ledger until you confirm it.</li>
-          </ol>
+      <div className="space-y-4">
+
+        {/* Gmail connector */}
+        {gmail?.available && (
+          <div className="space-y-2">
+            {gmail.status === 'connected' ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-teal-800">Gmail connected</p>
+                  <p className="text-xs text-teal-600 truncate">{gmail.email} — new bank emails are checked every few minutes</p>
+                </div>
+                <button onClick={handleDisconnect} disabled={busy}
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50 transition-colors">
+                  Disconnect
+                </button>
+              </div>
+            ) : gmail.status === 'expired' ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-amber-800">Gmail connection expired</p>
+                  <p className="text-xs text-amber-600 truncate">{gmail.email} — Google requires reconnecting periodically</p>
+                </div>
+                <button onClick={connectGmail} disabled={busy}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors">
+                  Reconnect
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500">
+                  Connect your Gmail and BCA / Bank Jago transaction emails show up on the
+                  dashboard automatically as pending transactions for you to review.
+                  Only bank notification emails are read.
+                </p>
+                <button onClick={connectGmail} disabled={busy}
+                  className="w-full py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 transition-colors">
+                  {busy ? 'Opening Google…' : 'Connect Gmail'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Forwarding fallback */}
+        {forwarding?.available && address && (
+          <div className="space-y-3">
+            {gmail?.available && (
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 pt-1">
+                Or forward emails instead {gmail.status ? '' : '(works with any email provider)'}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <code className="flex-1 px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-xl truncate">{address}</code>
+              <button onClick={copy}
+                className="shrink-0 px-3 py-2 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition-colors">
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <button onClick={() => setShowSteps(v => !v)}
+              className="w-full flex items-center justify-between text-xs text-gray-500 hover:text-gray-700 transition-colors">
+              <span className="font-medium">How to set up auto-forwarding in Gmail</span>
+              <svg className={`w-4 h-4 transition-transform ${showSteps ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showSteps && (
+              <ol className="list-decimal list-inside space-y-1.5 text-xs text-gray-500 rounded-xl border border-gray-200 p-3">
+                <li>In Gmail, open <span className="font-medium">Settings → Forwarding and POP/IMAP</span> and add the address above as a forwarding address.</li>
+                <li>Gmail sends a confirmation email — within a few minutes a <span className="font-medium">"Confirm Gmail auto-forwarding"</span> item appears on your dashboard. Click it to verify.</li>
+                <li>Create a filter: <span className="font-medium">From</span> → <code className="bg-gray-100 px-1 py-0.5 rounded">bca.co.id OR jago.com</code>, action → <span className="font-medium">Forward to</span> the address above.</li>
+                <li>New BCA / Jago transaction emails will now appear on your dashboard for review — nothing is added to your ledger until you confirm it.</li>
+              </ol>
+            )}
+          </div>
         )}
       </div>
     </Card>
