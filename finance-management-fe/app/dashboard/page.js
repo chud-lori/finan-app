@@ -233,7 +233,7 @@ export default function DashboardPage() {
   const [activeMonths, setActiveMonths] = useState([]);
   const [categories,   setCategories]   = useState([]);
   const [editingId,    setEditingId]     = useState(null);
-  const [editValues,   setEditValues]    = useState({ description: '', category: '' });
+  const [editValues,   setEditValues]    = useState({ description: '', category: '', amount: '' });
   const [editSaving,   setEditSaving]    = useState(false);
 
   // Bootstrap from URL params (e.g. navigated here from Analytics)
@@ -259,23 +259,37 @@ export default function DashboardPage() {
 
   const startEdit = (t) => {
     setEditingId(t.id || t._id);
-    setEditValues({ description: t.description, category: t.category });
+    setEditValues({ description: t.description, category: t.category, amount: String(t.amount ?? '') });
   };
 
   const cancelEdit = () => { setEditingId(null); };
 
   const saveEdit = async (id) => {
+    const original = data?.transactions?.find(t => (t.id || t._id) === id);
+    const amount   = Number(editValues.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast('Enter a valid amount', 'error');
+      return;
+    }
+    const amountChanged = original && Number(original.amount) !== amount;
+
     setEditSaving(true);
     try {
-      await updateTransaction(id, editValues);
-      setData(prev => ({
-        ...prev,
-        transactions: prev.transactions.map(t =>
-          (t.id || t._id) === id ? { ...t, ...editValues } : t
-        ),
-      }));
+      await updateTransaction(id, { ...editValues, amount });
       setEditingId(null);
       toast('Transaction updated', 'success');
+      // An amount change moves the balance and the summary cards — refetch rather
+      // than patching the row locally, which would leave the stat cards stale.
+      if (amountChanged) {
+        load();
+      } else {
+        setData(prev => ({
+          ...prev,
+          transactions: prev.transactions.map(t =>
+            (t.id || t._id) === id ? { ...t, ...editValues, amount } : t
+          ),
+        }));
+      }
     } catch (err) {
       toast(err.message || 'Failed to update transaction', 'error');
     } finally {
@@ -533,18 +547,22 @@ export default function DashboardPage() {
                           placeholder="Description"
                           className="w-full text-sm border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
                         />
+                        {/* min-w-0 on both children: form controls have an intrinsic
+                            min-width, so without it a long category name pushes the
+                            select past the card's right edge. */}
                         <div className="flex gap-2">
                           <input
                             type="number"
+                            inputMode="decimal"
                             value={editValues.amount}
                             onChange={e => setEditValues(v => ({ ...v, amount: e.target.value }))}
                             placeholder="Amount"
-                            className="flex-1 text-sm border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            className="flex-1 min-w-0 text-sm border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
                           />
                           <select
                             value={editValues.category}
                             onChange={e => setEditValues(v => ({ ...v, category: e.target.value }))}
-                            className="flex-1 text-sm border border-teal-300 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                            className="flex-1 min-w-0 truncate text-sm border border-teal-300 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                           >
                             {categories.map(c => (
                               <option key={c} value={c.toLowerCase()}>{toTitleCase(c)}</option>
@@ -605,8 +623,7 @@ export default function DashboardPage() {
                       <th className="hidden sm:table-cell px-5 py-3 text-left font-medium w-8">#</th>
                       <th className="px-3 sm:px-5 py-3 text-left font-medium">Description</th>
                       <th className="px-3 sm:px-5 py-3 text-left font-medium hidden sm:table-cell">Category</th>
-                      <th className="px-3 sm:px-5 py-3 text-right font-medium">Amount</th>
-                      <th className="px-3 sm:px-5 py-3 text-left font-medium">Type</th>
+                      <th className="px-3 sm:px-5 py-3 text-right font-medium whitespace-nowrap">Amount</th>
                       <th className="px-5 py-3 text-left font-medium hidden md:table-cell">Time</th>
                       <th className="px-3 sm:px-5 py-3 text-center font-medium w-10"></th>
                     </tr>
@@ -662,8 +679,27 @@ export default function DashboardPage() {
                             )}
                           </td>
 
-                          <td className="px-3 sm:px-5 py-3 text-right font-semibold text-gray-800 text-xs sm:text-sm tabular-nums whitespace-nowrap">{formatAmount(t.amount)}</td>
-                          <td className="px-3 sm:px-5 py-3"><TypeBadge type={t.type} /></td>
+                          {/* Type is encoded by the sign + colour rather than a
+                              separate badge column — same convention as the mobile
+                              cards and the Reports table. */}
+                          <td className={`px-3 sm:px-5 py-3 text-right font-semibold text-xs sm:text-sm tabular-nums whitespace-nowrap ${
+                            isEditing ? 'text-gray-800' : t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'
+                          }`}>
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                value={editValues.amount}
+                                onChange={e => setEditValues(v => ({ ...v, amount: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') saveEdit(tid); if (e.key === 'Escape') cancelEdit(); }}
+                                className="w-24 text-right text-sm border border-teal-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                              />
+                            ) : (
+                              <span title={t.type === 'income' ? 'Income' : 'Expense'}>
+                                {t.type === 'income' ? '+' : '−'}{formatAmount(t.amount)}
+                              </span>
+                            )}
+                          </td>
                           <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
                             {formatDate(t.time, t.transaction_timezone)}
                           </td>
@@ -867,17 +903,3 @@ function BudgetCard({ expense, budget, month, onSaved }) {
   );
 }
 
-function TypeBadge({ type }) {
-  if (type === 'income') {
-    return (
-      <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-        ↑<span className="hidden sm:inline"> Income</span>
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
-      ↓<span className="hidden sm:inline"> Expense</span>
-    </span>
-  );
-}

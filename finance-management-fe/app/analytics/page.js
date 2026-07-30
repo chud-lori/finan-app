@@ -162,28 +162,68 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
       </div>
 
       <ChartCard title="Category details">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        {/* ── Mobile: one stacked row per category. A 4-column money table cannot fit
+               390px without either colliding the values or clipping a column
+               mid-number, which reads as a rendering bug rather than "swipe me". ── */}
+        <ul className="sm:hidden divide-y divide-gray-100">
+          {categories.map((c, i) => {
+            const share = grandTotal > 0 ? Math.round((c.total / grandTotal) * 100) : 0;
+            const delta = getDelta(c);
+            return (
+              <li key={c.category} className="py-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <button
+                    onClick={() => onCategoryClick?.(c.category)}
+                    className="flex items-center gap-2 min-w-0 text-left"
+                    title="View transactions in this category"
+                  >
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span className="font-medium text-gray-700 capitalize truncate">{c.category}</span>
+                  </button>
+                  <span className="text-sm font-semibold text-rose-600 tabular-nums shrink-0">{formatAmount(c.total)}</span>
+                </div>
+                <div className="flex items-center gap-2 mt-1 pl-4">
+                  <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div className="h-1.5 rounded-full" style={{ width: `${share}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                  </div>
+                  <span className="text-xs text-gray-500 tabular-nums shrink-0">{share}%</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1 pl-4 flex items-center gap-2 flex-wrap">
+                  {showAvg
+                    ? <span>{formatAmount(c.avgMonthly)}/mo · {c.activeMonths} active {c.activeMonths === 1 ? 'month' : 'months'}</span>
+                    : <span>{c.count} {c.count === 1 ? 'transaction' : 'transactions'}</span>}
+                  {showCompare && delta !== null && (
+                    <span className="inline-flex items-center gap-1">vs {compLabel} <DeltaBadge delta={delta} /></span>
+                  )}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* ── sm+ : full table, still scrollable with a pinned Category column ── */}
+        <div className="hidden sm:block overflow-x-auto scroll-x-hint -mx-5 px-5">
+          <table className="w-full min-w-[440px] text-sm">
             <thead>
               <tr className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
-                <th className="py-2 text-left font-medium">Category</th>
-                <th className="py-2 text-right font-medium">Total</th>
+                <th className="sticky left-0 z-10 bg-white py-2 pr-4 text-left font-medium whitespace-nowrap">Category</th>
+                <th className="py-2 px-3 text-right font-medium whitespace-nowrap">Total</th>
                 {showAvg  && (
-                  <th className="py-2 text-right font-medium">
+                  <th className="py-2 px-3 text-right font-medium whitespace-nowrap">
                     <span className="inline-flex items-center gap-1 justify-end">
                       Avg / Mo.
                       <Tooltip text="Average monthly spend in this category, counted only across months where you had activity." position="top" align="right" fixed />
                     </span>
                   </th>
                 )}
-                {showAvg  && <th className="py-2 text-right font-medium hidden sm:table-cell">
+                {showAvg  && <th className="py-2 px-3 text-right font-medium whitespace-nowrap hidden sm:table-cell">
                   <span className="inline-flex items-center gap-1 justify-end">
                     Months
                     <Tooltip text="Number of months in this year where you had at least one transaction in this category." position="top" align="right" fixed />
                   </span>
                 </th>}
                 {!showAvg && (
-                  <th className="py-2 text-right font-medium">
+                  <th className="py-2 px-3 text-right font-medium whitespace-nowrap">
                     <span className="inline-flex items-center gap-1 justify-end">
                       Txns
                       <Tooltip text="Number of individual transactions in this category during the selected period." position="top" align="right" fixed />
@@ -191,14 +231,14 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                   </th>
                 )}
                 {showCompare && (
-                  <th className="py-2 text-right font-medium">
+                  <th className="py-2 px-3 text-right font-medium whitespace-nowrap">
                     <span className="inline-flex items-center gap-1 justify-end">
                       vs {compLabel}
                       <Tooltip text={compareMode === 'last_month' ? 'Change vs the previous month. Red = spending more, green = spending less.' : 'Change vs your average monthly spend this year.'} position="top" align="right" fixed />
                     </span>
                   </th>
                 )}
-                <th className="py-2 text-right font-medium">
+                <th className="py-2 pl-3 text-right font-medium whitespace-nowrap">
                   <span className="inline-flex items-center gap-1 justify-end">
                     Share
                     <Tooltip text="What percentage of your total spending this category represents." position="top" align="right" fixed />
@@ -211,8 +251,8 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                 const share = grandTotal > 0 ? Math.round((c.total / grandTotal) * 100) : 0;
                 const delta = getDelta(c);
                 return (
-                  <tr key={c.category} className="hover:bg-gray-50">
-                    <td className="py-2">
+                  <tr key={c.category} className="group hover:bg-gray-50">
+                    <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 py-2 pr-4">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                         <button
@@ -224,14 +264,14 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                         </button>
                       </div>
                     </td>
-                    <td className="py-2 text-right text-rose-600">{formatAmount(c.total)}</td>
-                    {showAvg  && <td className="py-2 text-right text-gray-600">{formatAmount(c.avgMonthly)}</td>}
-                    {showAvg  && <td className="py-2 text-right text-gray-500 hidden sm:table-cell">{c.activeMonths}</td>}
-                    {!showAvg && <td className="py-2 text-right text-gray-500">{c.count}</td>}
+                    <td className="py-2 px-3 text-right text-rose-600 tabular-nums whitespace-nowrap">{formatAmount(c.total)}</td>
+                    {showAvg  && <td className="py-2 px-3 text-right text-gray-600 tabular-nums whitespace-nowrap">{formatAmount(c.avgMonthly)}</td>}
+                    {showAvg  && <td className="py-2 px-3 text-right text-gray-500 tabular-nums hidden sm:table-cell">{c.activeMonths}</td>}
+                    {!showAvg && <td className="py-2 px-3 text-right text-gray-500 tabular-nums">{c.count}</td>}
                     {showCompare && (
-                      <td className="py-2 text-right"><DeltaBadge delta={delta} /></td>
+                      <td className="py-2 px-3 text-right whitespace-nowrap"><DeltaBadge delta={delta} /></td>
                     )}
-                    <td className="py-2 text-right">
+                    <td className="py-2 pl-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-14 bg-gray-100 rounded-full h-1.5 overflow-hidden hidden sm:block">
                           <div className="h-1.5 rounded-full" style={{ width: `${share}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
@@ -560,14 +600,41 @@ export default function AnalyticsPage() {
                   </ChartCard>
 
                   <ChartCard title="Month-by-month breakdown">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                    {/* ── Mobile: Net leads, income/expense as a subline. Three IDR
+                           columns plus a month label do not fit 390px. ── */}
+                    <ul className="sm:hidden divide-y divide-gray-100">
+                      {monthlyBars.map(m => {
+                        const net     = m.Income - m.Expense;
+                        const hasData = m.Income > 0 || m.Expense > 0;
+                        return (
+                          <li key={m.name} className={`py-2.5 ${hasData ? '' : 'opacity-50'}`}>
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="font-medium text-gray-700">{m.name}</span>
+                              <span className={`text-sm font-semibold tabular-nums ${!hasData ? 'text-gray-300' : net >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
+                                {hasData ? `${net >= 0 ? '+' : '−'}${formatAmount(Math.abs(net))}` : '—'}
+                              </span>
+                            </div>
+                            {hasData && (
+                              <p className="text-xs mt-0.5 flex items-center gap-2">
+                                <span className="text-emerald-700 tabular-nums">In {m.Income ? formatAmount(m.Income) : '—'}</span>
+                                <span className="text-gray-300">·</span>
+                                <span className="text-rose-600 tabular-nums">Out {m.Expense ? formatAmount(m.Expense) : '—'}</span>
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+
+                    {/* ── sm+ : table with a pinned Month column ── */}
+                    <div className="hidden sm:block overflow-x-auto scroll-x-hint -mx-5 px-5">
+                      <table className="w-full min-w-[420px] text-sm">
                         <thead>
                           <tr className="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
-                            <th className="py-2 text-left font-medium">Month</th>
-                            <th className="py-2 text-right font-medium text-emerald-600">Income</th>
-                            <th className="py-2 text-right font-medium text-rose-500">Expense</th>
-                            <th className="py-2 text-right font-medium text-teal-600">Net</th>
+                            <th className="sticky left-0 z-10 bg-white py-2 pr-4 text-left font-medium">Month</th>
+                            <th className="py-2 px-3 text-right font-medium text-emerald-600 whitespace-nowrap">Income</th>
+                            <th className="py-2 px-3 text-right font-medium text-rose-500 whitespace-nowrap">Expense</th>
+                            <th className="py-2 pl-3 text-right font-medium text-teal-600 whitespace-nowrap">Net</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -575,11 +642,11 @@ export default function AnalyticsPage() {
                             const net     = m.Income - m.Expense;
                             const hasData = m.Income > 0 || m.Expense > 0;
                             return (
-                              <tr key={m.name} className="hover:bg-gray-50">
-                                <td className="py-2 font-medium text-gray-700">{m.name}</td>
-                                <td className="py-2 text-right text-emerald-700">{m.Income  ? formatAmount(m.Income)  : '—'}</td>
-                                <td className="py-2 text-right text-rose-600">{m.Expense ? formatAmount(m.Expense) : '—'}</td>
-                                <td className={`py-2 text-right font-semibold ${!hasData ? 'text-gray-300' : net >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
+                              <tr key={m.name} className="group hover:bg-gray-50">
+                                <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 py-2 pr-4 font-medium text-gray-700">{m.name}</td>
+                                <td className="py-2 px-3 text-right text-emerald-700 tabular-nums whitespace-nowrap">{m.Income  ? formatAmount(m.Income)  : '—'}</td>
+                                <td className="py-2 px-3 text-right text-rose-600 tabular-nums whitespace-nowrap">{m.Expense ? formatAmount(m.Expense) : '—'}</td>
+                                <td className={`py-2 pl-3 text-right font-semibold tabular-nums whitespace-nowrap ${!hasData ? 'text-gray-300' : net >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
                                   {hasData ? formatAmount(net) : '—'}
                                 </td>
                               </tr>

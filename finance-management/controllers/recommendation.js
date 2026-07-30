@@ -23,7 +23,9 @@ const getSmartRecommendations = async (req, res) => {
             Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } })
                 .select('amount type category').lean(),
             Transaction.findOne({ user: userId }).sort({ time: -1 }).select('time').lean(),
-            Goal.find({ user: userId, achieve: 0 }).select('description price savedAmount createdAt').lean(),
+            // All goals — the emergency-fund check must also see achieved ones,
+            // otherwise completing the goal makes the nudge reappear.
+            Goal.find({ user: userId }).select('description price savedAmount achieve createdAt').lean(),
             Balance.findOne({ user: userId }).select('amount').lean(),
             MLInsight.findOne({ user: userId }).sort({ createdAt: -1 }).select('anomalyCount').lean(),
         ]);
@@ -101,6 +103,10 @@ const getSmartRecommendations = async (req, res) => {
         }
 
         // ── 4. Emergency fund nudge ───────────────────────────────────────────
+        // Suppressed once the user has *any* emergency-fund goal (achieved or not) —
+        // the goal is the persistent record, so the nudge must be dismissible by
+        // creating one. The CTA carries the computed monthly figure so the tool can
+        // prefill and offer a one-click "save as goal".
         const hasEmergencyGoal = goals.some(g => /emergency/i.test(g.description));
         if (!hasEmergencyGoal) {
             const totalExp3       = last3MonthsTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
@@ -108,19 +114,24 @@ const getSmartRecommendations = async (req, res) => {
             const balanceAmt      = balance?.amount ?? 0;
             const monthsCovered   = avgMonthlyExp > 0 ? balanceAmt / avgMonthlyExp : null;
             if (monthsCovered !== null && monthsCovered < 3) {
+                const params = new URLSearchParams({
+                    tool:    'emergency',
+                    monthly: String(Math.round(avgMonthlyExp)),
+                    saved:   String(Math.max(Math.round(balanceAmt), 0)),
+                });
                 recs.push({
                     id:   'emergency_fund',
                     type: 'tip',
                     icon: '🛡️',
-                    title: 'No emergency fund detected',
+                    title: 'Emergency fund under 3 months',
                     body:  `Your balance covers ~${monthsCovered.toFixed(1)} months of expenses. Experts recommend 3–6 months as a safety net.`,
-                    cta:  { label: 'Set an Emergency Fund Goal', href: '/recommendation?tool=emergency' },
+                    cta:  { label: 'Plan & save this goal', href: `/recommendation?${params.toString()}` },
                 });
             }
         }
 
         // ── 5. Goal behind schedule ───────────────────────────────────────────
-        for (const goal of goals) {
+        for (const goal of goals.filter(g => g.achieve !== 1)) {
             const daysSince   = moment().diff(moment(goal.createdAt), 'days');
             // Assume 90-day default window; clamp at 1.0
             const expected    = goal.price * Math.min(daysSince / 90, 1);

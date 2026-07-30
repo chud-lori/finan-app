@@ -1077,6 +1077,14 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 |--------|------|-----------|------|-------------|
 | GET | `/api/recommendations` | 20/min | ✓ | 1–5 personalised rule-based nudges; query: `?tz=IANA` |
 
+**Every nudge CTA must lead to a persistent action.** A nudge is only suppressed by
+state stored in the database, so its CTA has to be able to create that state — a link
+into a pure calculator is a dead end and the nudge reappears forever. The
+emergency-fund nudge is the reference case: it is suppressed by any `Goal` whose
+description matches `/emergency/i` (achieved or not — hence the goal query is
+unfiltered on `achieve`), and its CTA carries `?tool=emergency&monthly=&saved=` so the
+Emergency Fund tool prefills and offers a one-click "Track this as a goal".
+
 ---
 
 ## Architecture decision notes

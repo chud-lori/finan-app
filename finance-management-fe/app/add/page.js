@@ -324,7 +324,7 @@ export default function AddPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
           <h1 className="text-xl font-bold text-gray-900 mb-6">Add Transaction</h1>
 
-          <div className="flex flex-col lg:flex-row gap-6 items-start">
+          <div className="flex flex-col lg:flex-row gap-6 items-stretch lg:items-start">
 
             {/* ── Left: form ── */}
             <div className="flex-1 min-w-0">

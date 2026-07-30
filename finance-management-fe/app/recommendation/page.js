@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
@@ -676,10 +676,53 @@ function DailyBudgetTool({ savedBudget }) {
 // ─── Tool 5: Emergency Fund Check ────────────────────────────────────────────
 function EmergencyFundTool() {
   const { formatAmount, currency } = useCurrency();
+  const searchParams = useSearchParams();
   const [expenses, setExpenses] = useState('');
   const [current,  setCurrent]  = useState('');
   const [saving,   setSaving]   = useState('');
   const [result,   setResult]   = useState(null);
+
+  // Persisted emergency-fund goal — the calculator alone stores nothing, so the
+  // dashboard nudge would never clear. Saving writes a real Goal via addGoal().
+  const [goal,      setGoal]      = useState(null);
+  const [goalsLoaded, setGoalsLoaded] = useState(false);
+  const [savingGoal, setSavingGoal]   = useState(null); // 3 | 6 | null
+  const [goalError, setGoalError] = useState('');
+
+  const loadGoal = useCallback(() => {
+    return getAllGoals()
+      .then(res => {
+        const found = (res.data?.goals ?? []).find(g => /emergency/i.test(g.description));
+        setGoal(found ?? null);
+      })
+      .catch(() => {})
+      .finally(() => setGoalsLoaded(true));
+  }, []);
+
+  useEffect(() => { loadGoal(); }, [loadGoal]);
+
+  // Prefill from the dashboard nudge CTA (?monthly=&saved=)
+  useEffect(() => {
+    const monthly = parseNum(searchParams.get('monthly') || '');
+    const saved   = parseNum(searchParams.get('saved') || '');
+    if (monthly) setExpenses(fmtInput(String(monthly)));
+    if (saved)   setCurrent(fmtInput(String(saved)));
+  }, [searchParams]);
+
+  const handleSaveGoal = async (months, target) => {
+    setSavingGoal(months); setGoalError('');
+    try {
+      await addGoal(`Emergency fund (${months} months)`, Math.round(target));
+      await loadGoal();
+      // The save buttons disappear once a goal exists, so bring the confirmation
+      // into view — otherwise the action reads as "nothing happened".
+      document.getElementById('emergency-goal-banner')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (err) {
+      setGoalError(err.message || 'Failed to save goal');
+    } finally {
+      setSavingGoal(null);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -701,6 +744,25 @@ function EmergencyFundTool() {
 
   return (
     <div className="space-y-4">
+      {/* Saved goal state — makes the dashboard nudge explainable and clearable */}
+      {goalsLoaded && goal && (
+        <div id="emergency-goal-banner" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex items-start gap-2.5">
+            <span className="text-base shrink-0">✅</span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-emerald-800">Emergency fund goal is being tracked</p>
+              <p className="text-xs text-emerald-700 mt-0.5 break-words">
+                “{goal.description}” — {formatAmount(goal.savedAmount || 0)} of {formatAmount(goal.price)} saved
+              </p>
+              <ProgressBar value={goal.savedAmount || 0} max={goal.price} color="emerald" />
+              <p className="text-xs text-emerald-600 mt-1.5">
+                Update the saved amount in the <strong>Savings Goal</strong> tool.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ToolCard>
         <p className="text-xs text-gray-500 mb-4">
           A 3–6 month emergency fund protects you against job loss, medical bills, or unexpected costs. See where you stand.
@@ -716,9 +778,9 @@ function EmergencyFundTool() {
       {result && (
         <div className="space-y-3">
           {[
-            { label: '3-Month Fund', sublabel: 'Minimum recommended', target: result.target3, gap: result.gap3, months: result.months3, pct: result.pct3, color: 'amber' },
-            { label: '6-Month Fund', sublabel: 'Ideal safety net',    target: result.target6, gap: result.gap6, months: result.months6, pct: result.pct6, color: 'teal'  },
-          ].map(({ label, sublabel, target, gap, months, pct, color }) => {
+            { label: '3-Month Fund', sublabel: 'Minimum recommended', months_n: 3, target: result.target3, gap: result.gap3, months: result.months3, pct: result.pct3, color: 'amber' },
+            { label: '6-Month Fund', sublabel: 'Ideal safety net',    months_n: 6, target: result.target6, gap: result.gap6, months: result.months6, pct: result.pct6, color: 'teal'  },
+          ].map(({ label, sublabel, months_n, target, gap, months, pct, color }) => {
             const reached = gap === 0;
             return (
               <ToolCard key={label}>
@@ -753,9 +815,22 @@ function EmergencyFundTool() {
                     )}
                   </div>
                 )}
+
+                {/* Persist as a real goal so the dashboard nudge clears */}
+                {!goal && (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveGoal(months_n, target)}
+                    disabled={savingGoal !== null}
+                    className="mt-3 w-full py-2 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 text-xs font-semibold hover:bg-teal-100 transition-colors disabled:opacity-60"
+                  >
+                    {savingGoal === months_n ? 'Saving…' : `Track this as a goal (${formatAmount(target)})`}
+                  </button>
+                )}
               </ToolCard>
             );
           })}
+          {goalError && <p className="text-xs text-red-500">{goalError}</p>}
           <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
             <p className="text-xs text-gray-500">Based on {formatAmount(result.monthlyExp)}/month in essential expenses</p>
           </div>
@@ -1542,7 +1617,9 @@ function PlannerInner() {
           <h1 className="text-xl font-bold text-gray-900 mb-1">Planner</h1>
           <p className="text-sm text-gray-500 mb-6">Financial tools to help you plan, save, and spend smarter</p>
 
-          <div className="flex gap-6 items-start flex-col lg:flex-row">
+          {/* items-stretch while stacked — items-start is the cross axis in a flex
+              column and would shrink-wrap children, causing page-wide side scroll. */}
+          <div className="flex gap-6 items-stretch lg:items-start flex-col lg:flex-row">
             {/* Sidebar — desktop */}
             <div className="hidden lg:flex flex-col gap-1.5 w-52 shrink-0">
               {TOOLS.map(t => (

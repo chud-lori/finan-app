@@ -32,15 +32,6 @@ const PRESETS = [
   },
 ];
 
-// ─── Type badge ───────────────────────────────────────────────────────────────
-function TypeBadge({ type }) {
-  return type === 'income' ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">↑ Income</span>
-  ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">↓ Expense</span>
-  );
-}
-
 // ─── Category breakdown ───────────────────────────────────────────────────────
 function CategoryBreakdown({ transactions }) {
   const formatAmount = useFormatAmount();
@@ -201,8 +192,11 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* Breakdown + table side by side on lg */}
-              <div className="flex flex-col lg:flex-row gap-5 items-start">
+              {/* Breakdown + table side by side on lg.
+                  items-stretch on mobile is required: in a flex *column*, items-start
+                  is the cross axis, so children shrink-wrap to the table's intrinsic
+                  width and push the whole page into horizontal scroll. */}
+              <div className="flex flex-col lg:flex-row gap-5 items-stretch lg:items-start">
                 {/* Category breakdown */}
                 {result.transactions.some(t => t.type === 'expense') && (
                   <div className="w-full lg:w-64 shrink-0">
@@ -236,53 +230,102 @@ export default function ReportsPage() {
                       <p className="text-sm">No transactions in this range</p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                            <th className="px-5 py-3 text-left font-medium w-8">#</th>
-                            <th className="px-5 py-3 text-left font-medium">Description</th>
-                            <th className="px-5 py-3 text-left font-medium hidden sm:table-cell">Category</th>
-                            <th className="px-5 py-3 text-right font-medium">Amount</th>
-                            <th className="px-5 py-3 text-left font-medium">Type</th>
-                            <th className="px-5 py-3 text-left font-medium hidden md:table-cell">Date</th>
-                            <th className="px-5 py-3 text-center font-medium w-12"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {txns.map((t, i) => (
-                            <tr key={t.id || t._id} className="hover:bg-gray-50 transition-colors">
-                              <td className="px-5 py-3 text-gray-400">{i + 1}</td>
-                              <td className="px-5 py-3 font-medium text-gray-900 max-w-xs truncate">{t.description}</td>
-                              <td className="px-5 py-3 hidden sm:table-cell">
-                                <span className="px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-600 capitalize">
-                                  {toTitleCase(t.category)}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatAmount(t.amount)}</td>
-                              <td className="px-5 py-3"><TypeBadge type={t.type} /></td>
-                              <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
-                                {formatDate(t.time, t.transaction_timezone)}
-                              </td>
-                              <td className="px-5 py-3 text-center">
-                                <button onClick={() => handleDelete(t.id || t._id)}
-                                  disabled={deleting === (t.id || t._id)}
-                                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40">
-                                  {deleting === (t.id || t._id) ? (
-                                    <span className="w-4 h-4 bg-gray-200 rounded animate-pulse inline-block" />
-                                  ) : (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                  )}
-                                </button>
-                              </td>
+                    <>
+                      {/* ── Mobile: stacked card list — no horizontal scroll ── */}
+                      <ul className="sm:hidden divide-y divide-gray-100">
+                        {txns.map((t) => {
+                          const tid = t.id || t._id;
+                          const income = t.type === 'income';
+                          return (
+                            <li key={tid} className="flex items-center gap-3 px-4 py-3">
+                              <span className={`w-1 self-stretch rounded-full shrink-0 ${income ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="font-medium text-gray-900 text-sm truncate">{t.description}</span>
+                                  <span className={`text-sm font-semibold tabular-nums shrink-0 ${income ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {income ? '+' : '−'}{formatAmount(t.amount)}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-400 truncate mt-0.5">
+                                  {toTitleCase(t.category)} · {formatDate(t.time, t.transaction_timezone)}
+                                </p>
+                              </div>
+                              <button onClick={() => handleDelete(tid)}
+                                disabled={deleting === tid}
+                                aria-label={`Delete ${t.description}`}
+                                className="p-2 shrink-0 rounded-lg text-gray-300 hover:text-red-500 active:text-red-600 transition-colors disabled:opacity-40">
+                                {deleting === tid ? (
+                                  <span className="w-4 h-4 bg-gray-200 rounded animate-pulse inline-block" />
+                                ) : (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                )}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+
+                      {/* ── sm+ : table. Type is encoded by the signed, coloured amount
+                             instead of its own column — a separate badge duplicated the
+                             information and wrapped in the narrow column. ── */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                              <th className="px-5 py-3 text-left font-medium w-8">#</th>
+                              <th className="px-5 py-3 text-left font-medium">Description</th>
+                              <th className="px-5 py-3 text-left font-medium">Category</th>
+                              <th className="px-5 py-3 text-right font-medium whitespace-nowrap">Amount</th>
+                              <th className="px-5 py-3 text-left font-medium hidden md:table-cell">Date</th>
+                              <th className="px-5 py-3 text-center font-medium w-12"></th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {txns.map((t, i) => {
+                              const tid = t.id || t._id;
+                              const income = t.type === 'income';
+                              return (
+                                <tr key={tid} className="hover:bg-gray-50 transition-colors">
+                                  <td className="px-5 py-3 text-gray-400">{i + 1}</td>
+                                  <td className="px-5 py-3 font-medium text-gray-900 max-w-xs truncate">{t.description}</td>
+                                  <td className="px-5 py-3">
+                                    <span className="px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-600 capitalize whitespace-nowrap">
+                                      {toTitleCase(t.category)}
+                                    </span>
+                                  </td>
+                                  <td className={`px-5 py-3 text-right font-semibold tabular-nums whitespace-nowrap ${income ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    <span title={income ? 'Income' : 'Expense'}>
+                                      {income ? '+' : '−'}{formatAmount(t.amount)}
+                                    </span>
+                                  </td>
+                                  <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
+                                    {formatDate(t.time, t.transaction_timezone)}
+                                  </td>
+                                  <td className="px-5 py-3 text-center">
+                                    <button onClick={() => handleDelete(tid)}
+                                      disabled={deleting === tid}
+                                      aria-label={`Delete ${t.description}`}
+                                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40">
+                                      {deleting === tid ? (
+                                        <span className="w-4 h-4 bg-gray-200 rounded animate-pulse inline-block" />
+                                      ) : (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

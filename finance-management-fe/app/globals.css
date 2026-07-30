@@ -283,3 +283,23 @@ body {
   gap: 4px;
   align-items: center;
 }
+
+/* ── Horizontal-scroll affordance for wide data tables ────────────────────────
+   Analytics grids keep 3-4 currency columns, which cannot fit a 390px viewport
+   without collapsing the numbers into each other. They scroll instead, and this
+   paints an inner shadow on whichever edge still has content off-screen — so a
+   table that already fits shows nothing at all, and one that doesn't looks
+   obviously swipeable. `background-attachment: local` is what ties the cover
+   gradients to the scrolled content. */
+.scroll-x-hint {
+  --scroll-surface: #ffffff;
+  background:
+    linear-gradient(to right, var(--scroll-surface) 40%, rgba(255, 255, 255, 0)) left center,
+    linear-gradient(to left,  var(--scroll-surface) 40%, rgba(255, 255, 255, 0)) right center,
+    radial-gradient(farthest-side at 0    50%, rgba(15, 23, 42, 0.13), rgba(15, 23, 42, 0)) left center,
+    radial-gradient(farthest-side at 100% 50%, rgba(15, 23, 42, 0.13), rgba(15, 23, 42, 0)) right center;
+  background-repeat: no-repeat;
+  background-size: 36px 100%, 36px 100%, 12px 100%, 12px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+.dark .scroll-x-hint { --scroll-surface: #1e293b; }

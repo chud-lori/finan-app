@@ -44,7 +44,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | 50/30/20 Rule | How should I split my income? |
 | Savings Goal | How long until I reach my target? |
 | Daily Budget | How much can I safely spend per day for the rest of this month? |
-| Emergency Fund | How much should I keep in reserve? |
+| Emergency Fund | How much should I keep in reserve? Saves the 3- or 6-month target as a tracked goal |
 | Debt Payoff | Snowball vs avalanche — which saves more interest? |
 | FIRE Calculator | What's my financial independence number? |
 | Inflation Impact | How much is purchasing power eroding over time? |
