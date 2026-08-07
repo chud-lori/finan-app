@@ -447,6 +447,12 @@ function MLAnomalyList({ data }) {
             </div>
 
             <p className="text-xs text-gray-500 dark:text-slate-400">{a.label}</p>
+            {/* State the comparison, so the alert can be judged rather than just trusted. */}
+            {a.baseline_count > 0 && a.category_avg > 0 && (
+              <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
+                Compared with {a.baseline_count} other {a.category} transaction{a.baseline_count > 1 ? 's' : ''} · typically {formatAmount(a.category_avg)}
+              </p>
+            )}
           </div>
         );
       })}

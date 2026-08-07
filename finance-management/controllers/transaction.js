@@ -21,9 +21,18 @@ const { classifyCategories } = require('../helpers/categoryClassifier');
 const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
 const nativeMl = require('../services/ml');
 
-// Fire-and-forget: delete cached ML insight for a specific month so next read regenerates
-const invalidateMLInsight = (userId, yearMonth) => {
-    MLInsight.deleteOne({ user: userId, yearMonth }).catch(() => {});
+// Fire-and-forget: drop the cached insight for the mutated month, and — when that month is inside
+// the 6-month window the anomaly baselines are built from — the current month too.
+// Anomaly means/stddevs are computed across 6 months, so editing a prior-month
+// expense changes the current month's verdicts even though its own doc is untouched.
+const invalidateMLInsight = (userId, yearMonth, tz = 'UTC') => {
+    const months = new Set([yearMonth]);
+    const current = moment.tz(tz).format('YYYY-MM');
+    if (yearMonth !== current) {
+        const cutoff = moment.tz(tz).subtract(6, 'months').format('YYYY-MM');
+        if (yearMonth >= cutoff) months.add(current);
+    }
+    MLInsight.deleteMany({ user: userId, yearMonth: { $in: [...months] } }).catch(() => {});
 };
 
 // Fire-and-forget: update streak fields on the User document when a transaction is logged
@@ -206,7 +215,7 @@ const addTransaction = async (req, res, next) => {
             category:     transactionDTO.type === 'expense' ? resolvedCategory : null,
             tz:           transactionDTO.transaction_timezone,
         }); // fire-and-forget
-        invalidateMLInsight(user.id, txYearMonth); // fire-and-forget
+        invalidateMLInsight(user.id, txYearMonth, transactionDTO.transaction_timezone); // fire-and-forget
         updateStreak(user.id, transactionTime, transactionDTO.transaction_timezone); // fire-and-forget
         User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {});
         logger.info(`Add transaction response: ${user.id} success`);
@@ -394,7 +403,7 @@ const deleteTransaction = async (req, res, next) => {
         const delYearMonth = moment(deletedTransaction.time).tz(delTxTz).format('YYYY-MM');
         // Full recompute on delete — incremental reversal risks inconsistency if snapshot was already stale
         refreshSnapshot(req.user.id, delYearMonth, delTxTz); // fire-and-forget
-        invalidateMLInsight(req.user.id, delYearMonth); // fire-and-forget
+        invalidateMLInsight(req.user.id, delYearMonth, delTxTz); // fire-and-forget
         User.findByIdAndUpdate(req.user.id, { lastActivityAt: new Date(), lastActivityType: 'Deleted transaction' }).catch(() => {});
 
         const responseDTO = new DeleteTransactionResponseDTO(deletedTransaction);
@@ -505,10 +514,10 @@ const patchTransaction = async (req, res) => {
         const newYearMonth = moment(txn.time).tz(txn.transaction_timezone || 'UTC').format('YYYY-MM');
 
         refreshSnapshot(req.user.id, oldYearMonth, oldTz); // fire-and-forget
-        invalidateMLInsight(req.user.id, oldYearMonth);
+        invalidateMLInsight(req.user.id, oldYearMonth, oldTz);
         if (newYearMonth !== oldYearMonth) {
             refreshSnapshot(req.user.id, newYearMonth, txn.transaction_timezone || 'UTC');
-            invalidateMLInsight(req.user.id, newYearMonth);
+            invalidateMLInsight(req.user.id, newYearMonth, txn.transaction_timezone || 'UTC');
         }
 
         logger.info(`Transaction patched: id=${id} user=${req.user.id}`);
@@ -862,7 +871,7 @@ const importCsv = async (req, res, next) => {
             // Refresh snapshots and invalidate ML cache for every affected month (fire-and-forget)
             for (const [ym, tz] of affectedMonths) {
                 refreshSnapshot(user.id, ym, tz);
-                invalidateMLInsight(user.id, ym);
+                invalidateMLInsight(user.id, ym, tz);
             }
             User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Imported CSV' }).catch(() => {});
         }

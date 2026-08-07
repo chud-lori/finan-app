@@ -46,7 +46,7 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
 | Frontend | Next.js 16 (App Router), React, Tailwind CSS v4 |
 | Charts | Recharts |
 | Frontend testing | Playwright E2E |
-| Smart insights | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, z-score anomaly detector, linear-regression forecast |
+| Smart insights | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, median/MAD anomaly detector, linear-regression forecast |
 | Container | Docker + Docker Compose |
 | CI/CD | GitHub Actions → GHCR → Watchtower (auto-deploy) |
 
@@ -107,7 +107,7 @@ finan-app/                          ← monorepo root
 │   │   └── ml/                     ← in-process JS smart insights and classification
 │   │       ├── index.js            ← facade: classifyBatch() + analyze()
 │   │       ├── classifier.js       ← keyword + TF-IDF char-ngram cosine
-│   │       ├── anomaly.js          ← per-category z-score detector
+│   │       ├── anomaly.js          ← per-category median/MAD outlier detector
 │   │       ├── forecast.js         ← linear-regression month-end forecast
 │   │       └── keywords.js         ← bilingual EN/ID taxonomy
 │   ├── helpers/
@@ -130,6 +130,7 @@ finan-app/                          ← monorepo root
 │       ├── auth.integration.test.js
 │       ├── transaction.integration.test.js
 │       ├── goal.integration.test.js
+│       ├── ml.anomaly.test.js
 │       └── end-to-end.test.js
 │
 └── finance-management-fe/          ← Frontend (Next.js 16 + Tailwind CSS v4)
@@ -349,7 +350,7 @@ GET /api/transaction/ml-insights
         ├─ Fetch 6 months of expense transactions + daily totals + budget
         │
         ├─ services/ml.analyze({ transactions, daily_totals, current_day, days_in_month, budget }) — in-process, synchronous
-        │    ├─ detectAnomalies()        → per-category z-score (threshold 2.0, samples ≥ 3)
+        │    ├─ detectAnomalies()        → per-category median/MAD (modified z ≥ 3.5, samples ≥ 3)
         │    └─ forecastMonthSpend()     → closed-form least-squares on cumulative daily spend
         │
         ├─ Store result in MLInsight collection
@@ -641,7 +642,14 @@ The TF-IDF corpus + IDF + L2-normalised keyword vectors are precomputed once at 
 
 ### Anomaly detection (`services/ml/anomaly.js`)
 
-Per-category z-score detector. Categories with at least 3 samples are scored by how far the latest transaction is from that category's normal spending pattern. User-visible severity is driven by `multiple = amount / mean` plus the z-score.
+Per-category outlier detector. Each current-month transaction is scored against a **leave-one-out** baseline — the other transactions in the same category — using the median and MAD (median absolute deviation), via the Iglewicz–Hoaglin modified z-score `M = 0.6745 · (x − median) / MAD` with the conventional 3.5 cutoff. User-visible severity is driven by `multiple = amount / median` plus that score, and each result carries `baseline_count` so the UI can state what the comparison was made against.
+
+Two properties this design exists for:
+
+- **Small categories can fire.** The earlier implementation scored a transaction against a population that included itself using population stddev, which caps the attainable z at `(n−1)/√n` — 1.15 at n=3, 1.50 at n=4, 1.79 at n=5, all below the old 2.0 threshold. A category with fewer than 6 transactions could therefore never produce an anomaly regardless of amount.
+- **Outliers don't mask each other.** Mean and stddev are dragged by extreme values, so two large purchases in one category each inflated the baseline the other was measured against and neither was flagged. Median and MAD have a 50% breakdown point, so a minority of extremes cannot move them.
+
+Guards: only over-spending is reported (`multiple ≥ 1.3`), and a baseline with no spread at all (`MAD = 0`, e.g. fixed rent) falls back to a pure ratio test at `multiple ≥ 2.0`. Covered by `test/ml.anomaly.test.js`.
 
 | Samples per category | Algorithm | Threshold |
 |----------------------|-----------|-----------|
