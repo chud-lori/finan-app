@@ -1006,7 +1006,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 |--------|------|-----------|------|-------------|
 | POST | `/api/transaction` | 30/min | ✓ | Add transaction; body: `{ description, amount, category, type, time, transaction_timezone, currency? }` |
 | GET | `/api/transaction/:type?` | — | ✓ | List transactions; query: `?month=YYYY-MM&category=X&search=X&page=N&limit=N&type=income\|expense` |
-| PATCH | `/api/transaction/:id` | 30/min | ✓ | Update description and/or category (at least one required) |
+| PATCH | `/api/transaction/:id` | 30/min | ✓ | Update `description`, `category`, `amount` and/or `time` (at least one required; optional `transaction_timezone` alongside `time`). An `amount` change adjusts Balance by the signed difference inside the same atomic transaction; a `time` change can move the row to another month, so both the old and new month's snapshot and ML-insight cache are refreshed. `type` and `currency` are immutable — delete and re-add instead |
 | DELETE | `/api/transaction/:id` | — | ✓ | Delete transaction; balance updated atomically |
 | GET | `/api/transaction/expense` | 60/min | ✓ | Total expense summary (all time) |
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M` |

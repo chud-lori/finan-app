@@ -224,11 +224,14 @@ function ForecastCard({ data }) {
 
   return (
     <div className="p-5">
-      {/* Main forecast number */}
-      <div className="flex items-end justify-between mb-5 gap-3">
-        <div>
+      {/* Main forecast number.
+          Stacked under sm: a 3xl currency figure plus the trend pill and the
+          confidence label cannot share one row on a 390px card — the card has
+          overflow-hidden, so they were being clipped at the right edge. */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-5 gap-2 sm:gap-3">
+        <div className="min-w-0">
           <p className="text-xs text-gray-400 mb-1">Projected month-end spend</p>
-          <p className={`text-3xl font-black tabular-nums ${data.over_budget ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-slate-100'}`}>
+          <p className={`text-2xl sm:text-3xl font-black tabular-nums ${data.over_budget ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-slate-100'}`}>
             {formatAmount(data.forecast)}
           </p>
           {hasBudget && (
@@ -239,11 +242,11 @@ function ForecastCard({ data }) {
             </p>
           )}
         </div>
-        <div className="text-right shrink-0">
-          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${trend.bg} ${trend.color}`}>
+        <div className="flex items-center gap-2 sm:block sm:text-right shrink-0">
+          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${trend.bg} ${trend.color}`}>
             {trend.icon} {trend.label}
           </span>
-          <p className={`text-xs mt-1.5 ${CONF_COLOR[data.confidence]}`}>
+          <p className={`text-xs sm:mt-1.5 whitespace-nowrap ${CONF_COLOR[data.confidence]}`}>
             {data.confidence} confidence
           </p>
         </div>

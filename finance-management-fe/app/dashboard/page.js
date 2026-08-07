@@ -257,9 +257,30 @@ export default function DashboardPage() {
       .catch(() => {});
   }, []);
 
+  // <input type="datetime-local"> wants 'YYYY-MM-DDTHH:mm' in the transaction's own
+  // timezone, not the browser's — otherwise editing a Jakarta transaction from a
+  // UTC browser silently shifts it.
+  const toLocalInput = (iso, tz) => {
+    if (!iso) return '';
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz || undefined, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(new Date(iso)).reduce((a, p) => ({ ...a, [p.type]: p.value }), {});
+      return `${parts.year}-${parts.month}-${parts.day}T${parts.hour === '24' ? '00' : parts.hour}:${parts.minute}`;
+    } catch {
+      return '';
+    }
+  };
+
   const startEdit = (t) => {
     setEditingId(t.id || t._id);
-    setEditValues({ description: t.description, category: t.category, amount: String(t.amount ?? '') });
+    setEditValues({
+      description: t.description,
+      category:    t.category,
+      amount:      String(t.amount ?? ''),
+      time:        toLocalInput(t.time, t.transaction_timezone),
+    });
   };
 
   const cancelEdit = () => { setEditingId(null); };
@@ -271,22 +292,33 @@ export default function DashboardPage() {
       toast('Enter a valid amount', 'error');
       return;
     }
+    if (!editValues.description?.trim()) {
+      toast('Description cannot be empty', 'error');
+      return;
+    }
     const amountChanged = original && Number(original.amount) !== amount;
+    const timeChanged   = original && editValues.time &&
+      editValues.time !== toLocalInput(original.time, original.transaction_timezone);
+
+    const patch = { description: editValues.description, category: editValues.category, amount };
+    // Send seconds so the backend's strict-mode parser matches 'YYYY-MM-DD HH:mm:ss'.
+    if (timeChanged) patch.time = `${editValues.time.replace('T', ' ')}:00`;
 
     setEditSaving(true);
     try {
-      await updateTransaction(id, { ...editValues, amount });
+      await updateTransaction(id, patch);
       setEditingId(null);
       toast('Transaction updated', 'success');
-      // An amount change moves the balance and the summary cards — refetch rather
-      // than patching the row locally, which would leave the stat cards stale.
-      if (amountChanged) {
+      // Amount moves the balance; time can move the row into another month or
+      // reorder the list. Either way refetch — patching locally would leave the
+      // summary cards and ordering stale.
+      if (amountChanged || timeChanged) {
         load();
       } else {
         setData(prev => ({
           ...prev,
           transactions: prev.transactions.map(t =>
-            (t.id || t._id) === id ? { ...t, ...editValues, amount } : t
+            (t.id || t._id) === id ? { ...t, description: patch.description, category: patch.category, amount } : t
           ),
         }));
       }
@@ -538,6 +570,9 @@ export default function DashboardPage() {
                   const tid = t.id || t._id;
                   const isEditing = editingId === tid;
                   if (isEditing) {
+                    // text-base (16px) on every control: iOS Safari auto-zooms the
+                    // viewport when a focused input's font-size is under 16px, which
+                    // is why the add-transaction form (already 16px) doesn't jump.
                     return (
                       <div key={tid} className="px-4 py-3 bg-teal-50 space-y-2">
                         <input
@@ -545,11 +580,17 @@ export default function DashboardPage() {
                           value={editValues.description}
                           onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
                           placeholder="Description"
-                          className="w-full text-sm border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          className="w-full text-base border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
                         />
                         {/* min-w-0 on both children: form controls have an intrinsic
                             min-width, so without it a long category name pushes the
                             select past the card's right edge. */}
+                        <input
+                          type="datetime-local"
+                          value={editValues.time || ''}
+                          onChange={e => setEditValues(v => ({ ...v, time: e.target.value }))}
+                          className="w-full text-base border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                        />
                         <div className="flex gap-2">
                           <input
                             type="number"
@@ -557,12 +598,12 @@ export default function DashboardPage() {
                             value={editValues.amount}
                             onChange={e => setEditValues(v => ({ ...v, amount: e.target.value }))}
                             placeholder="Amount"
-                            className="flex-1 min-w-0 text-sm border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            className="flex-1 min-w-0 text-base border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
                           />
                           <select
                             value={editValues.category}
                             onChange={e => setEditValues(v => ({ ...v, category: e.target.value }))}
-                            className="flex-1 min-w-0 truncate text-sm border border-teal-300 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                            className="flex-1 min-w-0 truncate text-base border border-teal-300 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                           >
                             {categories.map(c => (
                               <option key={c} value={c.toLowerCase()}>{toTitleCase(c)}</option>
@@ -701,7 +742,15 @@ export default function DashboardPage() {
                             )}
                           </td>
                           <td className="px-5 py-3 text-gray-400 text-xs hidden md:table-cell whitespace-nowrap">
-                            {formatDate(t.time, t.transaction_timezone)}
+                            {isEditing ? (
+                              <input
+                                type="datetime-local"
+                                value={editValues.time || ''}
+                                onChange={e => setEditValues(v => ({ ...v, time: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') saveEdit(tid); if (e.key === 'Escape') cancelEdit(); }}
+                                className="text-sm border border-teal-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                              />
+                            ) : formatDate(t.time, t.transaction_timezone)}
                           </td>
 
                           {/* Actions */}

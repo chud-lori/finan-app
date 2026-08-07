@@ -86,6 +86,18 @@ const {
     BaseResponseDTO
 } = require('../dtos/transaction.dto');
 
+// Accepted inbound time formats, shared by addTransaction and patchTransaction.
+const TIME_FORMATS = ['M/D/YYYY H:mm:ss', 'M/D/YYYY HH:mm:ss', 'YYYY-MM-DD HH:mm:ss', 'D/M/YYYY H:mm:ss', 'D/M/YYYY HH:mm:ss', moment.ISO_8601];
+
+/** Parse a user-supplied time string in `tz`. Returns a moment or null. */
+const parseTransactionTime = (raw, tz) => {
+    for (const fmt of TIME_FORMATS) {
+        const t = moment.tz(raw, fmt, true, tz);
+        if (t.isValid()) return t;
+    }
+    return null;
+};
+
 const addTransaction = async (req, res, next) => {
     try {
         const user = req.user;
@@ -139,12 +151,7 @@ const addTransaction = async (req, res, next) => {
         }
 
         // Validate time format — try common formats
-        const TIME_FORMATS = ['M/D/YYYY H:mm:ss', 'M/D/YYYY HH:mm:ss', 'YYYY-MM-DD HH:mm:ss', 'D/M/YYYY H:mm:ss', 'D/M/YYYY HH:mm:ss', moment.ISO_8601];
-        let transactionTime = null;
-        for (const fmt of TIME_FORMATS) {
-            const t = moment.tz(transactionDTO.time, fmt, true, transactionDTO.transaction_timezone);
-            if (t.isValid()) { transactionTime = t; break; }
-        }
+        const transactionTime = parseTransactionTime(transactionDTO.time, transactionDTO.transaction_timezone);
         if (!transactionTime) {
             logger.error(`Add transaction ${user.id} invalid time or timezone format`);
             return res.status(400).json(BaseResponseDTO.error('Invalid time or timezone format'));
@@ -402,20 +409,30 @@ const deleteTransaction = async (req, res, next) => {
 const patchTransaction = async (req, res) => {
     try {
         const { id } = req.params;
-        const { description, category } = req.body;
+        const { description, category, amount, time, transaction_timezone } = req.body;
 
-        if (!description && !category) {
-            return res.status(400).json(BaseResponseDTO.error('Provide description or category to update'));
+        if (description === undefined && category === undefined && amount === undefined && time === undefined) {
+            return res.status(400).json(BaseResponseDTO.error('Provide description, category, amount or time to update'));
+        }
+
+        // Read the current doc first: amount and time edits need the old values to
+        // compute the balance delta and to know which month snapshots to refresh.
+        const existing = await Transaction.findOne({ _id: id, user: req.user.id }).lean();
+        if (!existing) {
+            return res.status(404).json(BaseResponseDTO.error('Transaction not found'));
         }
 
         const update = {};
-        if (description) {
+        if (description !== undefined) {
             if (typeof description !== 'string' || !description.trim()) {
                 return res.status(400).json(BaseResponseDTO.error('description must be a non-empty string'));
             }
             update.description = description.trim();
         }
-        if (category) {
+        if (category !== undefined) {
+            if (typeof category !== 'string' || !category.trim()) {
+                return res.status(400).json(BaseResponseDTO.error('category must be a non-empty string'));
+            }
             const catExists = await Category.findOne({ user: req.user.id, name: { $regex: new RegExp(`^${escapeRegex(category.trim())}$`, 'i') } }).lean();
             if (!catExists) {
                 return res.status(400).json(BaseResponseDTO.error(`Category "${category}" not found`));
@@ -423,21 +440,81 @@ const patchTransaction = async (req, res) => {
             update.category = category.trim().toLowerCase();
         }
 
-        const txn = await Transaction.findOneAndUpdate(
-            { _id: id, user: req.user.id },
-            { $set: update },
-            { new: true }
-        ).lean();
-
-        if (!txn) {
-            return res.status(404).json(BaseResponseDTO.error('Transaction not found'));
+        let balanceDelta = 0;
+        if (amount !== undefined) {
+            const nextAmount = Number(amount);
+            if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+                return res.status(400).json(BaseResponseDTO.error('amount must be a positive number'));
+            }
+            update.amount = nextAmount;
+            // Income adds to the balance, expense subtracts — so the correction is
+            // the signed difference between the new and old amount.
+            const sign = existing.type === 'income' ? 1 : -1;
+            balanceDelta = sign * (nextAmount - Number(existing.amount));
         }
 
-        const patchYearMonth = moment(txn.time).tz(txn.transaction_timezone || 'UTC').format('YYYY-MM');
-        invalidateMLInsight(req.user.id, patchYearMonth); // fire-and-forget
+        const nextTz = transaction_timezone || existing.transaction_timezone || 'UTC';
+        if (time !== undefined) {
+            if (transaction_timezone !== undefined && !moment.tz.zone(nextTz)) {
+                return res.status(400).json(BaseResponseDTO.error('Invalid transaction_timezone'));
+            }
+            const parsed = parseTransactionTime(time, nextTz);
+            if (!parsed) {
+                return res.status(400).json(BaseResponseDTO.error('Invalid time format'));
+            }
+            update.time = parsed.toDate();
+            if (transaction_timezone !== undefined) update.transaction_timezone = nextTz;
+        }
+
+        // Amount edits move the balance, so the doc update and the $inc must land
+        // together — same atomicity rule as addTransaction/deleteTransaction.
+        let txn;
+        if (balanceDelta !== 0) {
+            ({ txn } = await withOptionalTransaction(async (session) => {
+                const updated = await Transaction.findOneAndUpdate(
+                    { _id: id, user: req.user.id },
+                    { $set: update },
+                    { ...(session ? { session } : {}), new: true }
+                ).lean();
+                if (!updated) throw Object.assign(new Error('Transaction not found'), { statusCode: 404 });
+                const bal = await Balance.findOneAndUpdate(
+                    { user: req.user.id },
+                    { $inc: { amount: balanceDelta } },
+                    { ...(session ? { session } : {}), new: true }
+                );
+                if (!bal) throw Object.assign(new Error('User balance not found'), { statusCode: 404 });
+                return { txn: updated };
+            }));
+        } else {
+            txn = await Transaction.findOneAndUpdate(
+                { _id: id, user: req.user.id },
+                { $set: update },
+                { new: true }
+            ).lean();
+            if (!txn) {
+                return res.status(404).json(BaseResponseDTO.error('Transaction not found'));
+            }
+        }
+
+        // A patch can change the category, the amount, or move the transaction into
+        // another month — all of which invalidate the cached analytics and both the
+        // old and new month's snapshot.
+        cache.invalidateUser(req.user.id);
+        const oldTz        = existing.transaction_timezone || 'UTC';
+        const oldYearMonth = moment(existing.time).tz(oldTz).format('YYYY-MM');
+        const newYearMonth = moment(txn.time).tz(txn.transaction_timezone || 'UTC').format('YYYY-MM');
+
+        refreshSnapshot(req.user.id, oldYearMonth, oldTz); // fire-and-forget
+        invalidateMLInsight(req.user.id, oldYearMonth);
+        if (newYearMonth !== oldYearMonth) {
+            refreshSnapshot(req.user.id, newYearMonth, txn.transaction_timezone || 'UTC');
+            invalidateMLInsight(req.user.id, newYearMonth);
+        }
+
         logger.info(`Transaction patched: id=${id} user=${req.user.id}`);
         res.status(200).json(BaseResponseDTO.success('Transaction updated', { transaction: txn }));
     } catch (e) {
+        if (e.statusCode === 404) return res.status(404).json(BaseResponseDTO.error(e.message));
         logger.error(`Patch transaction error: ${e.message}`);
         res.status(500).json(BaseResponseDTO.error('Failed to update transaction', e.message));
     }
