@@ -131,6 +131,7 @@ finan-app/                          ← monorepo root
 │       ├── transaction.integration.test.js
 │       ├── goal.integration.test.js
 │       ├── ml.anomaly.test.js
+│       ├── dataIntegrity.integration.test.js
 │       └── end-to-end.test.js
 │
 └── finance-management-fe/          ← Frontend (Next.js 16 + Tailwind CSS v4)
@@ -1004,7 +1005,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/auth/sessions` | — | ✓ | List all active sessions with device info |
 | DELETE | `/api/auth/sessions/:id` | — | ✓ | Revoke a specific session (cannot revoke current) |
 | PATCH | `/api/auth/password` | 5/min per user | ✓ | Change password (deletes all sessions) |
-| DELETE | `/api/auth/account` | — | ✓ | Delete account and all associated data |
+| DELETE | `/api/auth/account` | 3/min | ✓ | Delete account and **every** user-scoped document: transactions, categories, goals, budgets, preferences, snapshots, ML insights, password-reset and email-verification tokens, balance and sessions. Any new user-scoped collection must be added to `userScopedModels` in `deleteAccount`, or the "all data deleted" response becomes a false claim |
 | POST | `/api/auth/forgot-password` | 5/min per IP | — | Send password reset email (always returns 200) |
 | POST | `/api/auth/reset-password` | 10/min per IP | — | Validate token + set new password (deletes all sessions) |
 

@@ -213,7 +213,7 @@ router.get('/check', authenticateJWT, checkAuth);
  *         description: Invalid Google token
  */
 router.post('/google/verify', limiter.byIp(20), verifyGoogleToken);
-router.delete('/account', authenticateJWT, deleteAccount);
+router.delete('/account', authenticateJWT, limiter.byUser(3), deleteAccount);
 router.patch('/password', authenticateJWT, limiter.byUser(5), changePassword);
 router.post('/logout', authenticateJWT, logout);
 router.post('/logout-all', authenticateJWT, limiter.byUser(5), logoutAllDevices);

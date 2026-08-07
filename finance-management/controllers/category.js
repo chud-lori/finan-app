@@ -203,7 +203,12 @@ const deleteCategory = async (req, res) => {
 const renameCategory = async (req, res) => {
     const userId  = req.user.id;
     const { id }  = req.params;
-    const newName = (req.body.name || '').trim();
+    // Category names are stored lowercase everywhere else (addTransaction,
+    // patchTransaction, importCsv all lowercase before writing, and the
+    // (user, name) unique index is case-sensitive). Storing a mixed-case name
+    // here would let the next transaction upsert a second, duplicate category
+    // and split the totals between them.
+    const newName = (req.body.name || '').trim().toLowerCase();
 
     if (!isValidId(id))    return res.status(400).json({ status: 0, message: 'Invalid category id' });
     if (!newName)          return res.status(400).json({ status: 0, message: 'New name is required' });

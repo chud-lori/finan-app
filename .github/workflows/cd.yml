@@ -27,9 +27,28 @@ jobs:
             frontend:
               - 'finance-management-fe/**'
 
+  # Gate: main is pushed to directly, so CI (pull_request only) does not
+  # necessarily run for a given commit. Without this, Watchtower picks up
+  # :latest within 5 minutes and ships code no test ever saw.
+  test-backend:
+    name: Backend — test gate
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: finance-management
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3'
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+
   build-backend:
     name: Build & push backend
-    needs: changes
+    needs: [changes, test-backend]
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -55,9 +74,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  lint-frontend:
+    name: Frontend — lint gate
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: finance-management-fe
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: finance-management-fe/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+
   build-frontend:
     name: Build & push frontend
-    needs: changes
+    needs: [changes, lint-frontend]
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     permissions:

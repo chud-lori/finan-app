@@ -296,13 +296,26 @@ const verifyGoogleToken = async (req, res) => {
 const deleteAccount = async (req, res) => {
     try {
         const userId = req.user.id;
-        const Transaction = require('../models/transaction.model');
-        const Category = require('../models/category.model');
+
+        // Every user-scoped collection must be listed here. The response promises
+        // "all data deleted", so anything omitted is a false deletion claim —
+        // Snapshot in particular retains full monthly totals and per-category
+        // spend, which is exactly the data a deletion request is about.
+        const userScopedModels = [
+            require('../models/transaction.model'),
+            require('../models/category.model'),
+            require('../models/goal.model'),
+            require('../models/budget.model'),
+            require('../models/preference.model'),
+            require('../models/snapshot.model'),
+            require('../models/mlinsight.model'),
+            require('../models/passwordReset.model'),
+            require('../models/emailVerification.model'),
+        ];
 
         await Promise.all([
-            Transaction.deleteMany({ user: userId }),
+            ...userScopedModels.map(Model => Model.deleteMany({ user: userId })),
             Balance.deleteOne({ user: userId }),
-            Category.deleteMany({ user: userId }),
             // Kill every active session — without this, the JWT cookie remains
             // valid for up to 7 days and continues to authenticate against a
             // ghost user record, letting controllers create orphan documents.

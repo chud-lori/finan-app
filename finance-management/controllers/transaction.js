@@ -844,9 +844,11 @@ const importCsv = async (req, res, next) => {
                         transaction_timezone: timezone,
                     });
 
-                    balanceDelta += type === 'income' ? amount : -amount;
-
+                    // Accumulate only AFTER the row is durably saved. Adding first
+                    // meant a row that failed validation still moved the balance,
+                    // leaving permanent drift against the ledger.
                     await newTransaction.save();
+                    balanceDelta += type === 'income' ? amount : -amount;
                     results.success++;
                     const ym = moment(transactionTime).tz(timezone).format('YYYY-MM');
                     if (!affectedMonths.has(ym)) affectedMonths.set(ym, timezone);
