@@ -93,22 +93,47 @@ function buildInsights(explain, ttz, anomaly, ml) {
 
   if (explain?.topCategories?.length) {
     explain.topCategories.forEach(c => {
-      if (c.pct >= 35) {
+      // `volatility` is derived server-side from 6 months of history:
+      //   fixed    → committed cost (rent, insurance) the user can't flex month to month
+      //   flexible → discretionary (food, shopping) — the actionable lever
+      //   semi / unknown → treated like flexible, with the same thresholds
+      // `delta` is already pace-corrected server-side (run-rate vs the previous
+      // month pro-rated to the elapsed days), so it no longer reads "down" just
+      // because the month is young.
+      const fixed = c.volatility === 'fixed';
+      const d = c.delta;
+
+      // Concentration. A large share of a fixed cost is normal and not a lever,
+      // so it's stated neutrally rather than warned about.
+      if (!fixed && c.pct >= 35) {
         insights.push({ level: 'warn', icon: '⚠️', text: `You spent ${c.pct}% on ${cap(c.category)} — very high dependency on a single category`, anchor: 'where-its-going', cta: 'See breakdown' });
+      } else if (fixed && c.pct >= 40) {
+        insights.push({ level: 'info', icon: '🏠', text: `${cap(c.category)} is ${c.pct}% of your spending — your fixed monthly base`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
-      if (c.delta !== null && c.delta >= 30) {
-        insights.push({ level: 'danger', icon: '📈', text: `${cap(c.category)} spending spiked ${c.delta}% vs last month`, anchor: 'where-its-going', cta: 'See breakdown' });
-      } else if (c.delta !== null && c.delta >= 15) {
-        insights.push({ level: 'warn', icon: '📈', text: `${cap(c.category)} up ${c.delta}% vs last month — worth watching`, anchor: 'where-its-going', cta: 'See breakdown' });
+
+      // Change vs last month. A fixed cost rarely moves, so any change is a
+      // reportable event (moved, renewed) — informational, low threshold. A
+      // flexible cost swings normally, so it needs a bigger move and is framed
+      // as something the user can act on.
+      if (d !== null) {
+        if (fixed) {
+          if (Math.abs(d) >= 10) {
+            insights.push({ level: 'info', icon: '🏠', text: `${cap(c.category)} ${d > 0 ? 'up' : 'down'} ${Math.abs(d)}% vs last month — new baseline?`, anchor: 'where-its-going', cta: 'See breakdown' });
+          }
+        } else if (d >= 40) {
+          insights.push({ level: 'danger', icon: '📈', text: `${cap(c.category)} is running ${d}% above your usual pace — a place you can trim`, anchor: 'where-its-going', cta: 'See breakdown' });
+        } else if (d >= 25) {
+          insights.push({ level: 'warn', icon: '📈', text: `${cap(c.category)} up ${d}% above pace — worth watching`, anchor: 'where-its-going', cta: 'See breakdown' });
+        } else if (d <= -25) {
+          insights.push({ level: 'good', icon: '📉', text: `${cap(c.category)} down ${Math.abs(d)}% vs your usual pace — great progress`, anchor: 'where-its-going', cta: 'See breakdown' });
+        }
       }
-      if (c.delta !== null && c.delta <= -20) {
-        insights.push({ level: 'good', icon: '📉', text: `${cap(c.category)} down ${Math.abs(c.delta)}% vs last month — great progress`, anchor: 'where-its-going', cta: 'See breakdown' });
-      }
+
       if (c.count >= 10) {
         const avg = (c.count / daysElapsed).toFixed(1);
         insights.push({ level: 'info', icon: '🔁', text: `You made ${c.count} ${cap(c.category)} transactions this month — avg ${avg}/day`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
-      if (c.pct >= 20 && c.pct < 35 && (c.delta === null || Math.abs(c.delta) < 15)) {
+      if (!fixed && c.pct >= 20 && c.pct < 35 && (d === null || Math.abs(d) < 25)) {
         insights.push({ level: 'info', icon: '📊', text: `${cap(c.category)} is your top expense at ${c.pct}% of total spending`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
     });

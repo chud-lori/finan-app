@@ -116,6 +116,7 @@ finan-app/                          ← monorepo root
 │   │   ├── validator.js            ← express-validator rule sets
 │   │   ├── mailer.js               ← Resend SDK (password reset + email verification)
 │   │   ├── snapshot.js             ← refreshSnapshot() + applySnapshotDelta()
+│   │   ├── spendingVolatility.js  ← classifyVolatility() — CV-based fixed/flexible category class
 │   │   ├── cache.js                ← in-process request cache
 │   │   └── logger.js               ← Winston logger
 │   ├── config/
@@ -131,7 +132,9 @@ finan-app/                          ← monorepo root
 │       ├── transaction.integration.test.js
 │       ├── goal.integration.test.js
 │       ├── ml.anomaly.test.js
+│       ├── spendingVolatility.test.js
 │       ├── dataIntegrity.integration.test.js
+│       ├── explain.integration.test.js
 │       └── end-to-end.test.js
 │
 └── finance-management-fe/          ← Frontend (Next.js 16 + Tailwind CSS v4)
@@ -654,8 +657,31 @@ Guards: only over-spending is reported (`multiple ≥ 1.3`), and a baseline with
 
 | Samples per category | Algorithm | Threshold |
 |----------------------|-----------|-----------|
-| ≥ 3 | Z-score (population stddev) | `|z| ≥ 2.0` |
+| ≥ 3 (leave-one-out ≥ 2) | Median + MAD, Iglewicz–Hoaglin modified z | `M ≥ 3.5` **and** `multiple ≥ 1.3` |
 | < 3 | Skipped | insufficient context |
+
+---
+
+### Category volatility & pace-corrected insights (`helpers/spendingVolatility.js` + `getExplainability`)
+
+The rule-based insight feed ("What your data is saying") weights each category by whether the user can actually *act* on it, derived from data rather than a fixed taxonomy — the `essential`/`discretionary` group is too coarse (rent and food are both `essential` yet behave oppositely).
+
+**Classification.** `classifyVolatility(monthlyTotals, txPerMonth)` computes the coefficient of variation (`std / mean`, sample stddev) of a category's monthly totals across the trailing 6 complete months:
+
+| Class | Rule | Meaning |
+|-------|------|---------|
+| `fixed` | CV ≤ 0.15 **and** ≤ 1.5 tx/month | committed cost (rent, insurance) — not a monthly lever |
+| `flexible` | CV ≥ 0.35 | discretionary (food, shopping) — the actionable lever |
+| `semi` | between the two | variable bill (some utilities) |
+| `unknown` | < 3 active months | not enough history — treated like flexible |
+
+Thresholds are tunable defaults, **not** tuned on production data. Unit-tested in `test/spendingVolatility.test.js`.
+
+**Pace-corrected delta.** `getExplainability` no longer compares a partial current month against a *full* previous month (which made every accruing category read "down ~75% — great progress" early in the month). Instead:
+- `fixed` categories are compared **posted-vs-posted** (no pro-rating — you don't pro-rate a rent payment); `delta` is `null` until this month's charge exists.
+- everything else is compared against the previous month **pro-rated to the elapsed fraction** of the current month, so on-pace spending reads ≈ 0%.
+
+Each `topCategories` entry carries `volatility` and `cv`. The frontend `buildInsights` branches on `volatility`: it suppresses the "high dependency" warning for fixed costs (stating them neutrally), treats a fixed-cost change as an informational "new baseline?" at a low threshold, and reserves the actionable "you can trim this" / "great progress" framing for flexible categories at higher thresholds. The field is additive, so cached pre-upgrade payloads degrade to the prior behaviour. Covered by `test/explain.integration.test.js`.
 
 Returns top 10 results sorted by anomaly score, each with `severity` (high/medium/low), `multiple` (Nx vs category average), and a plain-English `label`.
 
@@ -1020,7 +1046,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/expense` | 60/min | ✓ | Total expense summary (all time) |
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M` |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
-| GET | `/api/transaction/explain` | 60/min | ✓ | Spending explainability breakdown by category |
+| GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category — see Category volatility section |
 | GET | `/api/transaction/time-to-zero` | 60/min | ✓ | Runway — days until balance reaches zero at current burn rate |
 | GET | `/api/transaction/active-months` | 60/min | ✓ | List of months with at least one transaction (reads from Snapshots) |
 | PUT | `/api/transaction/budget/:yearMonth` | 30/min | ✓ | Set budget for a month; body: `{ amount, updateDefault? }` |

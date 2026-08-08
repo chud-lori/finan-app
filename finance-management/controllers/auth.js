@@ -12,6 +12,7 @@ const {USER_EMAIL:email, SECRET_TOKEN, FE_URL, GOOGLE_CLIENT_ID} = require('../c
 const logger = require("../helpers/logger");
 const { sendPasswordResetEmail, sendVerificationEmail } = require('../helpers/mailer');
 const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
+const { track } = require('../helpers/backgroundJobs');
 const limiter = require('../middleware/rateLimit');
 const {
     RegisterRequestDTO,
@@ -118,9 +119,9 @@ const registerUser = async (req, res, next) => {
     const savedBalance = await newBalance.save();
 
     // Seed default categories for new user (fire-and-forget)
-    seedDefaultCategories(savedUser._id).catch(err =>
+    track(seedDefaultCategories(savedUser._id).catch(err =>
         logger.error(`Failed to seed categories for new user ${savedUser._id}: ${err.message}`)
-    );
+    ));
 
     // Send verification email (non-blocking — don't fail registration if email fails)
     // Skipped in test environment
@@ -214,7 +215,7 @@ const loginUser = async (req, res, next) => {
     await createSession(user._id, token, req, res);
 
     logger.info(`Auth Login: user ${user._id} signed in`);
-    User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
+    track(User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {}));
 
     res.status(200).json(BaseResponseDTO.success('Login successful', {
         user: { id: user._id, name: user.name },
@@ -257,9 +258,9 @@ const findOrCreateGoogleUser = async (googleId, email, name) => {
   const saved = await user.save();
   await new Balance({ user: saved._id, amount: 0 }).save();
   // Seed default categories for new Google user (fire-and-forget)
-  seedDefaultCategories(saved._id).catch(err =>
+  track(seedDefaultCategories(saved._id).catch(err =>
       logger.error(`Failed to seed categories for new Google user ${saved._id}: ${err.message}`)
-  );
+  ));
   return saved;
 };
 
@@ -282,7 +283,7 @@ const verifyGoogleToken = async (req, res) => {
     logger.info(`Google verify: issued token for user ${user._id}`);
 
     await createSession(user._id, token, req, res);
-    User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
+    track(User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {}));
 
     res.status(200).json(BaseResponseDTO.success('Login successful', {
         user: { id: user._id, name: user.name },

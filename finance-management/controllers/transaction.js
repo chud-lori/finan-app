@@ -18,7 +18,9 @@ const Preference = require('../models/preference.model');
 const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
+const { classifyVolatility } = require('../helpers/spendingVolatility');
 const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
+const { track } = require('../helpers/backgroundJobs');
 const nativeMl = require('../services/ml');
 
 // Fire-and-forget: drop the cached insight for the mutated month, and — when that month is inside
@@ -32,19 +34,20 @@ const invalidateMLInsight = (userId, yearMonth, tz = 'UTC') => {
         const cutoff = moment.tz(tz).subtract(6, 'months').format('YYYY-MM');
         if (yearMonth >= cutoff) months.add(current);
     }
-    MLInsight.deleteMany({ user: userId, yearMonth: { $in: [...months] } }).catch(() => {});
+    // Return the promise so callers can track()/drain it in tests.
+    return MLInsight.deleteMany({ user: userId, yearMonth: { $in: [...months] } }).catch(() => {});
 };
 
 // Fire-and-forget: update streak fields on the User document when a transaction is logged
 const updateStreak = (userId, txMoment, tz) => {
     const today = txMoment.clone().tz(tz).format('YYYY-MM-DD');
-    User.findById(userId).then(u => {
+    return User.findById(userId).then(u => {
         if (!u) return;
         if (u.streakLastDate === today) return; // already credited today
         const yesterday = moment.tz(today, 'YYYY-MM-DD', tz).subtract(1, 'day').format('YYYY-MM-DD');
         const newStreak = u.streakLastDate === yesterday ? (u.streakDays || 0) + 1 : 1;
         const newLongest = Math.max(newStreak, u.longestStreak || 0);
-        User.findByIdAndUpdate(userId, {
+        return User.findByIdAndUpdate(userId, {
             streakDays: newStreak,
             streakLastDate: today,
             longestStreak: newLongest,
@@ -141,15 +144,15 @@ const addTransaction = async (req, res, next) => {
 
         // Fire-and-forget: classify new/unclassified categories so group is available for insights
         if (category.group === 'other' || !category.group) {
-            classifyCategories([nameLower], user.id).then(results => {
+            track(classifyCategories([nameLower], user.id).then(results => {
                 const r = results[nameLower];
                 if (r && r.group && r.group !== 'other') {
-                    Category.updateOne(
+                    return Category.updateOne(
                         { _id: category._id },
                         { $set: { group: r.group, groupConfidence: r.confidence } }
                     ).catch(() => {});
                 }
-            }).catch(() => {});
+            }).catch(() => {}));
         }
 
         // Validate currency
@@ -209,15 +212,15 @@ const addTransaction = async (req, res, next) => {
         cache.invalidateUser(user.id);
         const txYearMonth = moment(transactionTime).tz(transactionDTO.transaction_timezone).format('YYYY-MM');
         // Incremental snapshot delta — faster than full recompute for single adds
-        applySnapshotDelta(user.id, txYearMonth, {
+        track(applySnapshotDelta(user.id, txYearMonth, {
             incomeDelta:  transactionDTO.type === 'income'  ? Number(transactionDTO.amount) : 0,
             expenseDelta: transactionDTO.type === 'expense' ? Number(transactionDTO.amount) : 0,
             category:     transactionDTO.type === 'expense' ? resolvedCategory : null,
             tz:           transactionDTO.transaction_timezone,
-        }); // fire-and-forget
-        invalidateMLInsight(user.id, txYearMonth, transactionDTO.transaction_timezone); // fire-and-forget
-        updateStreak(user.id, transactionTime, transactionDTO.transaction_timezone); // fire-and-forget
-        User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {});
+        })); // fire-and-forget
+        track(invalidateMLInsight(user.id, txYearMonth, transactionDTO.transaction_timezone)); // fire-and-forget
+        track(updateStreak(user.id, transactionTime, transactionDTO.transaction_timezone)); // fire-and-forget
+        track(User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {}));
         logger.info(`Add transaction response: ${user.id} success`);
 
         // Return DTO response
@@ -402,9 +405,9 @@ const deleteTransaction = async (req, res, next) => {
         const delTxTz = deletedTransaction.transaction_timezone || 'UTC';
         const delYearMonth = moment(deletedTransaction.time).tz(delTxTz).format('YYYY-MM');
         // Full recompute on delete — incremental reversal risks inconsistency if snapshot was already stale
-        refreshSnapshot(req.user.id, delYearMonth, delTxTz); // fire-and-forget
-        invalidateMLInsight(req.user.id, delYearMonth, delTxTz); // fire-and-forget
-        User.findByIdAndUpdate(req.user.id, { lastActivityAt: new Date(), lastActivityType: 'Deleted transaction' }).catch(() => {});
+        track(refreshSnapshot(req.user.id, delYearMonth, delTxTz)); // fire-and-forget
+        track(invalidateMLInsight(req.user.id, delYearMonth, delTxTz)); // fire-and-forget
+        track(User.findByIdAndUpdate(req.user.id, { lastActivityAt: new Date(), lastActivityType: 'Deleted transaction' }).catch(() => {}));
 
         const responseDTO = new DeleteTransactionResponseDTO(deletedTransaction);
         res.status(200).json(BaseResponseDTO.success('Transaction deleted successfully', responseDTO));
@@ -513,11 +516,11 @@ const patchTransaction = async (req, res) => {
         const oldYearMonth = moment(existing.time).tz(oldTz).format('YYYY-MM');
         const newYearMonth = moment(txn.time).tz(txn.transaction_timezone || 'UTC').format('YYYY-MM');
 
-        refreshSnapshot(req.user.id, oldYearMonth, oldTz); // fire-and-forget
-        invalidateMLInsight(req.user.id, oldYearMonth, oldTz);
+        track(refreshSnapshot(req.user.id, oldYearMonth, oldTz)); // fire-and-forget
+        track(invalidateMLInsight(req.user.id, oldYearMonth, oldTz));
         if (newYearMonth !== oldYearMonth) {
-            refreshSnapshot(req.user.id, newYearMonth, txn.transaction_timezone || 'UTC');
-            invalidateMLInsight(req.user.id, newYearMonth, txn.transaction_timezone || 'UTC');
+            track(refreshSnapshot(req.user.id, newYearMonth, txn.transaction_timezone || 'UTC'));
+            track(invalidateMLInsight(req.user.id, newYearMonth, txn.transaction_timezone || 'UTC'));
         }
 
         logger.info(`Transaction patched: id=${id} user=${req.user.id}`);
@@ -872,10 +875,10 @@ const importCsv = async (req, res, next) => {
             cache.invalidateUser(user.id);
             // Refresh snapshots and invalidate ML cache for every affected month (fire-and-forget)
             for (const [ym, tz] of affectedMonths) {
-                refreshSnapshot(user.id, ym, tz);
-                invalidateMLInsight(user.id, ym, tz);
+                track(refreshSnapshot(user.id, ym, tz));
+                track(invalidateMLInsight(user.id, ym, tz));
             }
-            User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Imported CSV' }).catch(() => {});
+            track(User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Imported CSV' }).catch(() => {}));
         }
 
         logger.info(`Import CSV: user ${user.id} — ${totalSuccess} imported, ${totalFailed} failed across ${files.length} file(s)`);
@@ -1074,10 +1077,15 @@ const getExplainability = async (req, res) => {
             periodEnd   = now.clone().endOf('month').toDate();
         }
         const prevStart = moment(periodStart).subtract(1, 'month').toDate();
+        // Trailing complete months (the current, possibly-partial month is excluded)
+        // used to classify each category's volatility and to supply the month-over-
+        // month baseline. Six months is enough to be stable while staying recent
+        // enough to reflect the user's current life.
+        const historyStart = moment(periodStart).subtract(6, 'month').toDate();
 
-        const [currentTxns, prevTxns] = await Promise.all([
+        const [currentTxns, historyTxns] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: periodStart, $lte: periodEnd } }).lean(),
-            Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: prevStart, $lt: periodStart } }).lean(),
+            Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: historyStart, $lt: periodStart } }).lean(),
         ]);
 
         const totalExpense = currentTxns.reduce((s, t) => s + t.amount, 0);
@@ -1089,20 +1097,58 @@ const getExplainability = async (req, res) => {
             catMap[t.category].count++;
         });
 
-        const prevCatMap = {};
-        prevTxns.forEach(t => {
-            if (!prevCatMap[t.category]) prevCatMap[t.category] = { total: 0 };
-            prevCatMap[t.category].total += t.amount;
+        // Per category, bucket the trailing window into monthly totals (in the
+        // user's tz so month boundaries match their view) plus a total tx count.
+        const prevYm = moment(prevStart).tz(userTz).format('YYYY-MM');
+        const histByCat = {}; // cat -> { months: { ym: total }, count }
+        historyTxns.forEach(t => {
+            const ym = moment(t.time).tz(userTz).format('YYYY-MM');
+            if (!histByCat[t.category]) histByCat[t.category] = { months: {}, count: 0 };
+            histByCat[t.category].months[ym] = (histByCat[t.category].months[ym] || 0) + t.amount;
+            histByCat[t.category].count++;
         });
+
+        // How far through the current month we are, for a pace-fair comparison.
+        // A past-month view (monthParam set) is always complete → fraction 1.
+        const currentYm   = now.format('YYYY-MM');
+        const isCurrent   = !monthParam || monthParam === currentYm;
+        const daysInMon   = moment(periodStart).daysInMonth();
+        const daysElapsed = isCurrent ? Math.min(now.date(), daysInMon) : daysInMon;
+        const fraction    = daysElapsed / daysInMon;
 
         const topCategories = Object.entries(catMap)
             .sort((a, b) => b[1].total - a[1].total)
             .slice(0, 5)
             .map(([cat, v]) => {
-                const prevTotal = prevCatMap[cat]?.total || 0;
+                const hist          = histByCat[cat];
+                const monthlyTotals = hist ? Object.values(hist.months) : [];
+                const activeMonths  = monthlyTotals.length;
+                const txPerMonth    = activeMonths > 0 ? hist.count / activeMonths : null;
+                const { volatility, cv } = classifyVolatility(monthlyTotals, txPerMonth);
+
+                const prevTotal = hist?.months[prevYm] || 0;
                 const pct       = totalExpense > 0 ? Math.round((v.total / totalExpense) * 100) : 0;
-                const delta     = prevTotal > 0 ? Math.round(((v.total - prevTotal) / prevTotal) * 100) : null;
-                return { category: cat, total: Math.round(v.total), count: v.count, pct, prevTotal: Math.round(prevTotal), delta };
+
+                // Delta framing depends on the category class:
+                //  - fixed (rent): posts as a lump, so compare posted-vs-posted with
+                //    no pro-rating; null until this month's charge exists.
+                //  - everything else (food): accrues daily, so compare against the
+                //    previous month pro-rated to the same elapsed fraction. Without
+                //    this an 8-days-in month reads as "down ~75%" against a full
+                //    month — the false "great progress" this replaces.
+                let delta = null;
+                if (volatility === 'fixed') {
+                    delta = prevTotal > 0 && v.total > 0
+                        ? Math.round(((v.total - prevTotal) / prevTotal) * 100)
+                        : null;
+                } else {
+                    const baseline = prevTotal * fraction;
+                    delta = baseline > 0
+                        ? Math.round(((v.total - baseline) / baseline) * 100)
+                        : null;
+                }
+
+                return { category: cat, total: Math.round(v.total), count: v.count, pct, prevTotal: Math.round(prevTotal), delta, volatility, cv };
             });
 
         const top3Names = topCategories.slice(0, 3).map(c => c.category).join(', ');
