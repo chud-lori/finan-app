@@ -67,6 +67,42 @@ describe('GET /api/transaction/explain — volatility & pace', () => {
         expect(cats['food'].volatility).to.equal('flexible');
     });
 
+    it('sums every current category into a volatilityBreakdown that reconciles to the total', async () => {
+        const cookie = await register('breakdown');
+
+        // Rent: steady monthly charge → fixed.
+        for (let m = 1; m <= 6; m++) {
+            await addExpense(cookie, { description: 'Rent', category: 'rent/mortgage', amount: 2500000, monthsAgo: m, day: 2 });
+        }
+        // Food: swinging monthly totals across many transactions → flexible.
+        const foodTotals = [1200000, 2400000, 900000, 3100000, 1500000, 2000000];
+        for (let m = 1; m <= 6; m++) {
+            const per = Math.round(foodTotals[m - 1] / 3);
+            for (let k = 0; k < 3; k++) {
+                await addExpense(cookie, { description: `Food ${m}-${k}`, category: 'food', amount: per, monthsAgo: m, day: 5 + k * 5 });
+            }
+        }
+        // Current month: rent posted (fixed) and some food (flexible).
+        await addExpense(cookie, { description: 'Rent', category: 'rent/mortgage', amount: 2500000, monthsAgo: 0, day: 1 });
+        await addExpense(cookie, { description: 'Food today', category: 'food', amount: 300000, monthsAgo: 0, day: 1 });
+
+        const res = await chai.request(server)
+            .get(`/api/transaction/explain?tz=${encodeURIComponent(TZ)}`)
+            .set('Cookie', cookie);
+
+        expect(res).to.have.status(200);
+        const b = res.body.data.volatilityBreakdown;
+        expect(b).to.be.an('object');
+
+        // Buckets reconcile to the reported total, which equals totalOutcome.
+        expect(b.fixed + b.semi + b.flexible + b.unknown).to.equal(b.total);
+        expect(b.total).to.equal(res.body.data.totalOutcome);
+
+        // Steady rent lands in fixed; swinging food lands in flexible.
+        expect(b.fixed).to.equal(2500000);
+        expect(b.flexible).to.equal(300000);
+    });
+
     it('does not report a fixed charge as "down" just because the month is young', async () => {
         const cookie = await register('pace');
 

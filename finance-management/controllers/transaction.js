@@ -1151,12 +1151,25 @@ const getExplainability = async (req, res) => {
                 return { category: cat, total: Math.round(v.total), count: v.count, pct, prevTotal: Math.round(prevTotal), delta, volatility, cv };
             });
 
+        // Every current category's total bucketed by volatility class (not just topCategories).
+        const volatilityBreakdown = { fixed: 0, semi: 0, flexible: 0, unknown: 0, total: 0 };
+        Object.entries(catMap).forEach(([cat, v]) => {
+            const hist          = histByCat[cat];
+            const monthlyTotals = hist ? Object.values(hist.months) : [];
+            const activeMonths  = monthlyTotals.length;
+            const txPerMonth    = activeMonths > 0 ? hist.count / activeMonths : null;
+            const { volatility } = classifyVolatility(monthlyTotals, txPerMonth);
+            volatilityBreakdown[volatility] += v.total;
+        });
+        volatilityBreakdown.total = volatilityBreakdown.fixed + volatilityBreakdown.semi + volatilityBreakdown.flexible + volatilityBreakdown.unknown;
+        Object.keys(volatilityBreakdown).forEach(k => { volatilityBreakdown[k] = Math.round(volatilityBreakdown[k]); });
+
         const top3Names = topCategories.slice(0, 3).map(c => c.category).join(', ');
         const summary = topCategories.length > 0
             ? `Your spending is mainly driven by: ${top3Names}`
             : 'No spending data for this period';
 
-        const explainResponse = BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalExpense), summary, topCategories });
+        const explainResponse = BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalExpense), summary, topCategories, volatilityBreakdown });
         cache.set(req.user.id, 'explain', cacheParams, explainResponse);
         res.status(200).json(explainResponse);
     } catch (error) {

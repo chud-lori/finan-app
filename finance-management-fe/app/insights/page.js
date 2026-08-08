@@ -653,6 +653,59 @@ function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, mov
   );
 }
 
+// ── Spending Mix (committed vs flexible) ──────────────────────────────────────
+
+function SpendingMixBar({ data }) {
+  const formatAmount = useFormatAmount();
+  if (!data || !(data.total > 0)) return null;
+
+  const committed = (data.fixed || 0) + (data.semi || 0);
+  const flexible  = (data.flexible || 0) + (data.unknown || 0);
+  const total     = data.total;
+  const pct = (n) => Math.round((n / total) * 100);
+
+  const segments = [
+    { key: 'committed', label: 'Committed', amount: committed, bar: 'bg-teal-500',  dot: 'bg-teal-500',  desc: 'Fixed costs — rent, bills, subscriptions' },
+    { key: 'flexible',  label: 'Flexible',  amount: flexible,  bar: 'bg-amber-400', dot: 'bg-amber-400', desc: 'Discretionary — the spending you can steer' },
+  ];
+
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
+      <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800 flex items-center gap-2">
+        <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">⚖️ Spending Mix</h2>
+        <Tooltip text="How much of this month's spending is committed (fixed costs you can't easily move) vs flexible (discretionary spending you can steer)." align="left" fixed />
+      </div>
+      <div className="p-5">
+        <div className="flex h-4 rounded-full overflow-hidden gap-0.5 mb-4">
+          {segments.map(s => s.amount > 0 && (
+            <div
+              key={s.key}
+              className={`${s.bar} transition-all duration-700`}
+              style={{ width: `${(s.amount / total) * 100}%` }}
+              title={`${s.label}: ${pct(s.amount)}%`}
+            />
+          ))}
+        </div>
+        <div className="space-y-2.5">
+          {segments.map(s => (
+            <div key={s.key} className="flex items-center gap-3">
+              <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${s.dot}`} />
+              <div className="min-w-0 flex-1">
+                <span className="text-sm font-semibold text-gray-800 dark:text-slate-200">{s.label}</span>
+                <span className="text-xs text-gray-400 dark:text-slate-500 ml-2">{s.desc}</span>
+              </div>
+              <div className="text-right shrink-0 tabular-nums">
+                <p className="text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{formatAmount(s.amount)}</p>
+                <p className="text-xs text-gray-400">{pct(s.amount)}%</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
 function SectionSkeleton() {
@@ -820,6 +873,8 @@ export default function InsightsPage() {
             explain={explain} ttz={ttz} anomaly={anomaly} ml={ml}
             loading={feedLoading}
           />
+
+          {explain?.volatilityBreakdown && <SpendingMixBar data={explain.volatilityBreakdown} />}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
