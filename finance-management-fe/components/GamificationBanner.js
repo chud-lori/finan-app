@@ -264,7 +264,7 @@ function HealthLevelUpBanner({ to, onDismiss }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold opacity-90">Financial health leveled up!</p>
           <p className="text-2xl font-black leading-tight mt-0.5">You reached {meta.label}</p>
-          <p className="text-xs opacity-75 mt-0.5">Keep it going — see what's driving your score.</p>
+          <p className="text-xs opacity-75 mt-0.5">Keep it going — see what&apos;s driving your score.</p>
         </div>
         <button
           onClick={onDismiss}
