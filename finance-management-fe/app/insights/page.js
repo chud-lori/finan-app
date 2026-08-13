@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, classifyAllCategories, setCategoryGroup } from '@/lib/api';
+import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -719,6 +719,83 @@ function SpendingMixBar({ data }) {
   );
 }
 
+// ── Financial Health Score ────────────────────────────────────────────────────
+const HEALTH_BANDS = {
+  excellent:       { label: 'Excellent',      ring: '#10b981', chip: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' },
+  healthy:         { label: 'Healthy',         ring: '#14b8a6', chip: 'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-400' },
+  building:        { label: 'Building',        ring: '#f59e0b', chip: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' },
+  needs_attention: { label: 'Needs attention', ring: '#f43f5e', chip: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400' },
+};
+const HEALTH_FOCUS = {
+  savings:   'Try to keep a bit more of your income',
+  emergency: 'Build up your emergency fund',
+  budget:    "You're spending above your budget pace",
+  goals:     'Add a little toward your savings goals',
+};
+const PILLAR_HINT = {
+  savings:   'no income logged yet',
+  emergency: 'not enough history yet',
+  budget:    'set a monthly budget to include this',
+  goals:     'add a savings goal to include this',
+};
+
+function HealthScoreCard({ health }) {
+  if (!health || health.score == null) return null;
+  const band = HEALTH_BANDS[health.band] || HEALTH_BANDS.building;
+  const available = health.components.filter(c => c.available);
+  const weakest = available.slice().sort((a, b) => a.score - b.score)[0];
+  const focus = weakest && weakest.score < 70 ? weakest : null;
+
+  const R = 34, C = 2 * Math.PI * R;
+  const offset = C * (1 - health.score / 100);
+
+  return (
+    <div id="health" className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm p-5 mb-6">
+      <div className="flex items-center gap-4">
+        <div className="relative shrink-0" style={{ width: 84, height: 84 }}>
+          <svg width="84" height="84" viewBox="0 0 84 84">
+            <circle cx="42" cy="42" r={R} fill="none" strokeWidth="8" className="stroke-gray-100 dark:stroke-slate-800" />
+            <circle cx="42" cy="42" r={R} fill="none" strokeWidth="8" stroke={band.ring} strokeLinecap="round"
+              strokeDasharray={C} strokeDashoffset={offset} transform="rotate(-90 42 42)"
+              style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-2xl font-black text-gray-900 dark:text-slate-100 tabular-nums">{health.score}</span>
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">Financial Health</h2>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${band.chip}`}>{band.label}</span>
+            <Tooltip text="A 0–100 score from four pillars: your savings rate, emergency-fund coverage, budget adherence, and goal progress. Pillars you haven't set up yet are left out, not counted against you." align="left" fixed />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+            {focus ? `Focus: ${HEALTH_FOCUS[focus.key] || `improve your ${focus.label.toLowerCase()}`}` : 'All your money pillars are looking strong'}
+          </p>
+        </div>
+      </div>
+
+      {/* Per-pillar bars */}
+      <div className="grid grid-cols-2 gap-x-5 gap-y-2 mt-4">
+        {health.components.map(c => (
+          <div key={c.key}>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-gray-500 dark:text-slate-400">{c.label}</span>
+              <span className="text-gray-400 dark:text-slate-500 tabular-nums">{c.available ? `${c.score}` : '—'}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-gray-100 dark:bg-slate-800 overflow-hidden">
+              {c.available
+                ? <div className="h-1.5 rounded-full" style={{ width: `${c.score}%`, background: band.ring }} />
+                : null}
+            </div>
+            {!c.available && <p className="text-[10px] text-gray-400 dark:text-slate-600 mt-0.5">{PILLAR_HINT[c.key]}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Recurring & Subscriptions ─────────────────────────────────────────────────
 
 function RecurringCard({ data }) {
@@ -825,6 +902,7 @@ function Section({ id, title, subtitle, tooltip, tag, headerRight, children, loa
 export default function InsightsPage() {
   const [ttz,        setTtz]        = useState(null);
   const [explain,    setExplain]    = useState(null);
+  const [health,     setHealth]     = useState(null);
   const [recurring,  setRecurring]  = useState(null);
   const [anomaly,    setAnomaly]    = useState(null);
   const [ml,           setMl]           = useState(null);
@@ -862,6 +940,9 @@ export default function InsightsPage() {
     load('explain',   getExplainability, setExplain);
     load('recurring', getRecurring,      setRecurring);
     load('anomaly',   getAnomalies,      setAnomaly);
+    // Financial Health lives on this page (a persistent summary), separate from
+    // the gamification banner's transient celebrations.
+    getGamificationSummary().then(res => setHealth(res.data?.health)).catch(() => {});
 
     // Kick off background classification then fetch group summary
     classifyAllCategories().catch(() => {});
@@ -947,6 +1028,8 @@ export default function InsightsPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
           <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-0.5">Insights</h1>
           <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Your finances, translated into plain language</p>
+
+          {health?.score != null && <HealthScoreCard health={health} />}
 
           <InsightFeed
             explain={explain} ttz={ttz} anomaly={anomaly} ml={ml} recurring={recurring}

@@ -118,6 +118,7 @@ finan-app/                          ← monorepo root
 │   │   ├── mailer.js               ← Resend SDK (password reset + email verification)
 │   │   ├── snapshot.js             ← refreshSnapshot() + applySnapshotDelta()
 │   │   ├── spendingVolatility.js  ← classifyVolatility() — CV-based fixed/flexible category class
+│   │   ├── financialHealth.js     ← computeFinancialHealth() — 0-100 score from 4 pillars
 │   │   ├── cache.js                ← in-process request cache
 │   │   └── logger.js               ← Winston logger
 │   ├── config/
@@ -135,6 +136,7 @@ finan-app/                          ← monorepo root
 │       ├── ml.anomaly.test.js
 │       ├── ml.recurring.test.js
 │       ├── spendingVolatility.test.js
+│       ├── financialHealth.test.js
 │       ├── dataIntegrity.integration.test.js
 │       ├── explain.integration.test.js
 │       └── end-to-end.test.js
@@ -1118,7 +1120,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
-| GET | `/api/gamification/summary` | 30/min | ✓ | Streak count, budget win, goal ring progress |
+| GET | `/api/gamification/summary` | 30/min | ✓ | Streak count, budget win, goal ring progress, and `health` — the Financial Health Score (0–100 + band + per-pillar breakdown) |
 
 ### Recommendations (smart nudges)
 
