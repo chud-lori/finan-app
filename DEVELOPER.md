@@ -108,6 +108,7 @@ finan-app/                          ← monorepo root
 │   │       ├── index.js            ← facade: classifyBatch() + analyze()
 │   │       ├── classifier.js       ← keyword + TF-IDF char-ngram cosine
 │   │       ├── anomaly.js          ← per-category median/MAD outlier detector
+│   │       ├── recurring.js        ← recurring-charge / subscription detection
 │   │       ├── forecast.js         ← linear-regression month-end forecast
 │   │       └── keywords.js         ← bilingual EN/ID taxonomy
 │   ├── helpers/
@@ -117,6 +118,7 @@ finan-app/                          ← monorepo root
 │   │   ├── mailer.js               ← Resend SDK (password reset + email verification)
 │   │   ├── snapshot.js             ← refreshSnapshot() + applySnapshotDelta()
 │   │   ├── spendingVolatility.js  ← classifyVolatility() — CV-based fixed/flexible category class
+│   │   ├── financialHealth.js     ← computeFinancialHealth() — 0-100 score from 4 pillars
 │   │   ├── cache.js                ← in-process request cache
 │   │   └── logger.js               ← Winston logger
 │   ├── config/
@@ -132,7 +134,9 @@ finan-app/                          ← monorepo root
 │       ├── transaction.integration.test.js
 │       ├── goal.integration.test.js
 │       ├── ml.anomaly.test.js
+│       ├── ml.recurring.test.js
 │       ├── spendingVolatility.test.js
+│       ├── financialHealth.test.js
 │       ├── dataIntegrity.integration.test.js
 │       ├── explain.integration.test.js
 │       └── end-to-end.test.js
@@ -1058,6 +1062,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M` |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
 | GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category — see Category volatility section |
+| GET | `/api/transaction/recurring` | 60/min | ✓ | Detected recurring charges/subscriptions: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). 13-month window; yearly cadences not detected |
 | GET | `/api/transaction/time-to-zero` | 60/min | ✓ | Runway — days until balance reaches zero at current burn rate |
 | GET | `/api/transaction/active-months` | 60/min | ✓ | List of months with at least one transaction (reads from Snapshots) |
 | PUT | `/api/transaction/budget/:yearMonth` | 30/min | ✓ | Set budget for a month; body: `{ amount, updateDefault? }` |
@@ -1115,7 +1120,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
-| GET | `/api/gamification/summary` | 30/min | ✓ | Streak count, budget win, goal ring progress |
+| GET | `/api/gamification/summary` | 30/min | ✓ | Streak count, budget win, goal ring progress, and `health` — the Financial Health Score (0–100 + band + per-pillar breakdown) |
 
 ### Recommendations (smart nudges)
 

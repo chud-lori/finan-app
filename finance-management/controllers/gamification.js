@@ -2,11 +2,60 @@ const moment = require('moment-timezone');
 const User = require('../models/user.model');
 const Goal = require('../models/goal.model');
 const Budget = require('../models/budget.model');
+const Balance = require('../models/balance.model');
 const Transaction = require('../models/transaction.model');
 const logger = require('../helpers/logger');
+const { computeFinancialHealth } = require('../helpers/financialHealth');
 const { BaseResponseDTO } = require('../dtos/transaction.dto');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
+
+// Gather the four financial-health pillars for a user and score them.
+// Each input is null when it can't be measured, so the score renormalizes.
+const computeHealth = async (userId, tz) => {
+    const now = moment.tz(tz);
+    const monthStart = now.clone().startOf('month').toDate();
+    const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
+    const sixMonthsAgo = now.clone().subtract(6, 'months').startOf('month').toDate();
+    const yearMonth = now.format('YYYY-MM');
+
+    const [trailingTxns, sixMoExpenseTxns, monthExpenseTxns, balanceDoc, budgetDoc, goals] = await Promise.all([
+        // Trailing 3 complete months → a stable savings rate.
+        Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } }).select('amount type').lean(),
+        Transaction.find({ user: userId, type: 'expense', time: { $gte: sixMonthsAgo, $lt: monthStart } }).select('amount time').lean(),
+        Transaction.find({ user: userId, type: 'expense', time: { $gte: monthStart } }).select('amount').lean(),
+        Balance.findOne({ user: userId }).select('amount').lean(),
+        Budget.findOne({ user: userId, yearMonth }).lean(),
+        Goal.find({ user: userId, achieve: { $ne: 1 } }).select('price savedAmount').lean(),
+    ]);
+
+    // Savings rate over the trailing window.
+    const trailIncome  = trailingTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const trailExpense = trailingTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const savingsRate = trailIncome > 0 ? (trailIncome - trailExpense) / trailIncome : null;
+
+    // Emergency fund = balance ÷ average monthly expense over 6 complete months.
+    const monthsWithExpense = new Set(sixMoExpenseTxns.map(t => moment(t.time).tz(tz).format('YYYY-MM'))).size;
+    const avgMonthlyExpense = monthsWithExpense > 0
+        ? sixMoExpenseTxns.reduce((s, t) => s + t.amount, 0) / monthsWithExpense
+        : null;
+    const balanceAmt = balanceDoc?.amount ?? 0;
+    const emergencyMonths = avgMonthlyExpense && avgMonthlyExpense > 0 ? Math.max(balanceAmt, 0) / avgMonthlyExpense : null;
+
+    // Budget pace = spent so far this month ÷ expected by now.
+    let budgetPaceRatio = null;
+    if (budgetDoc && budgetDoc.amount > 0) {
+        const spentSoFar = monthExpenseTxns.reduce((s, t) => s + t.amount, 0);
+        const expectedByNow = budgetDoc.amount * (now.date() / now.daysInMonth());
+        budgetPaceRatio = expectedByNow > 0 ? spentSoFar / expectedByNow : (spentSoFar > 0 ? 2 : 0);
+    }
+
+    // Average progress across active goals.
+    const progresses = goals.filter(g => g.price > 0).map(g => (g.savedAmount ?? 0) / g.price);
+    const avgGoalProgress = progresses.length ? progresses.reduce((s, p) => s + p, 0) / progresses.length : null;
+
+    return computeFinancialHealth({ savingsRate, emergencyMonths, budgetPaceRatio, avgGoalProgress });
+};
 
 const getGamificationSummary = async (req, res) => {
     try {
@@ -77,10 +126,14 @@ const getGamificationSummary = async (req, res) => {
             };
         });
 
+        // ── Financial Health Score ───────────────────────────────────────────
+        const health = await computeHealth(userId, tz);
+
         return res.json(BaseResponseDTO.success('Gamification summary retrieved', {
             streak,
             budgetWin,
             goals: goalMilestones,
+            health,
         }));
     } catch (err) {
         logger.error(`getGamificationSummary ${req.user?.id} error: ${err.message}`);

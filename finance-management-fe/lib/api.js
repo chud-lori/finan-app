@@ -174,6 +174,9 @@ export const getExplainability = (month = null) => {
   return apiFetch(`/api/transaction/explain?${qs}`);
 };
 
+export const getRecurring = () =>
+  apiFetch(`/api/transaction/recurring?tz=${encodeURIComponent(browserTz())}`);
+
 export const getTimeToZero = () =>
   apiFetch(`/api/transaction/time-to-zero?tz=${encodeURIComponent(browserTz())}`);
 

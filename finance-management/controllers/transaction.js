@@ -22,6 +22,7 @@ const { classifyVolatility } = require('../helpers/spendingVolatility');
 const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
 const { track } = require('../helpers/backgroundJobs');
 const nativeMl = require('../services/ml');
+const nativeMlRecurring = require('../services/ml/recurring');
 
 // Fire-and-forget: drop the cached insight for the mutated month, and — when that month is inside
 // the 6-month window the anomaly baselines are built from — the current month too.
@@ -1189,6 +1190,41 @@ const getExplainability = async (req, res) => {
     }
 };
 
+// GET /api/transaction/recurring — detected recurring charges / subscriptions,
+// their monthly cost, next-due dates, and missing-bill / price-jump alerts.
+const getRecurring = async (req, res) => {
+    try {
+        const userTz = validTz(req.query.tz);
+        const cacheParams = `${userTz}`;
+        const cached = cache.get(req.user.id, 'recurring', cacheParams);
+        if (cached) return res.status(200).json(cached);
+
+        const now = moment().tz(userTz);
+        // 13 months of history: enough occurrences for weekly/monthly/quarterly
+        // cadences. Yearly subscriptions need multiple years and are not detected.
+        const since = now.clone().subtract(13, 'months').startOf('month').toDate();
+        const txns = await Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: since } })
+            .select('amount category description time').lean();
+
+        const payload = txns.map(t => ({
+            id:          t._id.toString(),
+            amount:      t.amount,
+            category:    t.category,
+            description: t.description,
+            date:        moment(t.time).tz(userTz).format('YYYY-MM-DD'),
+            type:        'expense',
+        }));
+
+        const result = nativeMlRecurring.detectRecurring(payload, { asOf: now.format('YYYY-MM-DD') });
+        const response = BaseResponseDTO.success('Recurring analysis complete', result);
+        cache.set(req.user.id, 'recurring', cacheParams, response);
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error(`Get recurring error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
+    }
+};
+
 const getTimeToZero = async (req, res) => {
     try {
         const userTz = validTz(req.query.tz);
@@ -1499,6 +1535,7 @@ module.exports = {
     getAnalytics,
     getAnomalies,
     getExplainability,
+    getRecurring,
     getTimeToZero,
     getActiveMonths,
     setBudget,
