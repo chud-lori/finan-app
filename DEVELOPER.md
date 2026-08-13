@@ -653,11 +653,22 @@ Two properties this design exists for:
 - **Small categories can fire.** The earlier implementation scored a transaction against a population that included itself using population stddev, which caps the attainable z at `(n−1)/√n` — 1.15 at n=3, 1.50 at n=4, 1.79 at n=5, all below the old 2.0 threshold. A category with fewer than 6 transactions could therefore never produce an anomaly regardless of amount.
 - **Outliers don't mask each other.** Mean and stddev are dragged by extreme values, so two large purchases in one category each inflated the baseline the other was measured against and neither was flagged. Median and MAD have a 50% breakdown point, so a minority of extremes cannot move them.
 
-Guards: only over-spending is reported (`multiple ≥ 1.3`), and a baseline with no spread at all (`MAD = 0`, e.g. fixed rent) falls back to a pure ratio test at `multiple ≥ 2.0`. Covered by `test/ml.anomaly.test.js`.
+Guards: only over-spending is reported, and a baseline with no spread at all (`MAD = 0`, e.g. fixed rent) falls back to a pure ratio test. Covered by `test/ml.anomaly.test.js`.
+
+**Volatility-gated sensitivity.** The thresholds are not fixed — they scale with how much the category's monthly total normally swings, classified from its prior months via `classifyVolatility` (the current, in-progress month is excluded so the spike being judged can't soften its own gate). A naturally spiky category (sharing, food) needs a much bigger jump before it alerts, because spikiness is its normal state; a flat category (rent, a utility) alerts on a small deviation, because any jump there is genuinely unexpected:
+
+| Class | min multiple | modified-z |
+|-------|-------------|-----------|
+| `fixed`    | 1.3 | 3.5 |
+| `semi`     | 1.5 | 3.5 |
+| `flexible` | 3.0 | 5.0 |
+| `unknown`  | 1.3 | 3.5 (too little history → default) |
+
+The rule-based fallback `getAnomalies` applies the same idea to its mean-ratio test: flag threshold is `{ fixed: 1.5, semi: 2, flexible: 4, unknown: 2 }`×.
 
 | Samples per category | Algorithm | Threshold |
 |----------------------|-----------|-----------|
-| ≥ 3 (leave-one-out ≥ 2) | Median + MAD, Iglewicz–Hoaglin modified z | `M ≥ 3.5` **and** `multiple ≥ 1.3` |
+| ≥ 3 (leave-one-out ≥ 2) | Median + MAD, Iglewicz–Hoaglin modified z | `M` and `multiple` gated by category volatility (see table above) |
 | < 3 | Skipped | insufficient context |
 
 ---

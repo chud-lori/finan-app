@@ -19,15 +19,23 @@
 // cannot move them. Scoring uses the Iglewicz–Hoaglin modified z-score,
 // M = 0.6745 * (x - median) / MAD, with the conventional 3.5 cutoff.
 
+const { classifyVolatility } = require('../../helpers/spendingVolatility');
+
 const MIN_BASELINE  = 2;    // need at least 2 other transactions to compare against
-const MZ_THRESHOLD  = 3.5;  // Iglewicz–Hoaglin
 const MZ_SATURATE   = 14;   // modified z at which the severity bar reads full
-// A tight baseline (e.g. three near-identical Rp 50,000 fares) gives a tiny MAD,
-// so a trivially larger amount clears the threshold on spread alone. Requiring
-// the amount to also be meaningfully above the baseline keeps those out.
-const MIN_MULTIPLE  = 1.3;
-// Used when the baseline has no spread at all (MAD === 0), where the score is undefined.
-const FLAT_MULTIPLE = 2.0;
+
+// Sensitivity is gated by how volatile the category normally is. A spike in a
+// naturally-spiky category (sharing, food) is expected, so it needs a much
+// bigger jump before it's worth an alert — otherwise every treated-a-friend
+// outing cries wolf. A spike in a normally-flat category (rent, a utility) is
+// genuinely unexpected, so a small deviation is worth flagging. `flat` is the
+// MAD===0 fallback multiple (baseline has no spread at all).
+const CLASS_TUNING = {
+  fixed:    { minMultiple: 1.3, mz: 3.5, flat: 1.8 },
+  semi:     { minMultiple: 1.5, mz: 3.5, flat: 2.0 },
+  flexible: { minMultiple: 3.0, mz: 5.0, flat: 3.0 },
+  unknown:  { minMultiple: 1.3, mz: 3.5, flat: 2.0 }, // too little history → default
+};
 
 const MAD_SCALE = 0.6745; // makes MAD a consistent estimator of sigma for normal data
 
@@ -93,6 +101,24 @@ const detectAnomalies = (transactions) => {
     if (current.length === 0) continue;
     if (txs.length < MIN_BASELINE + 1) continue;
 
+    // Classify the category by how much its monthly total normally swings, then
+    // pick the sensitivity gate. Use only prior months (exclude the current,
+    // in-progress month) so the very spike being judged can't inflate the
+    // volatility read and soften its own gate.
+    const monthly = {};
+    let priorCount = 0;
+    for (const t of txs) {
+      if (t.is_current_month) continue;
+      const ym = String(t.date || '').slice(0, 7);
+      if (ym) { monthly[ym] = (monthly[ym] || 0) + Number(t.amount); priorCount++; }
+    }
+    const monthKeys = Object.keys(monthly);
+    const { volatility } = classifyVolatility(
+      monthKeys.map((k) => monthly[k]),
+      monthKeys.length > 0 ? priorCount / monthKeys.length : null,
+    );
+    const tune = CLASS_TUNING[volatility] || CLASS_TUNING.unknown;
+
     for (const tx of current) {
       // Leave-one-out: compare this transaction against every other one in the
       // category. Identity is by object reference, so duplicate amounts still
@@ -106,7 +132,7 @@ const detectAnomalies = (transactions) => {
       const amount   = Number(tx.amount);
       const multiple = amount / med;
       // Only over-spending is interesting — an unusually cheap coffee is not an alert.
-      if (multiple < MIN_MULTIPLE) continue;
+      if (multiple < tune.minMultiple) continue;
 
       const dev = mad(others, med);
 
@@ -114,12 +140,12 @@ const detectAnomalies = (transactions) => {
       if (dev === 0) {
         // Baseline has no spread (e.g. a fixed monthly rent), so the modified
         // z-score is undefined. Fall back to a pure ratio test.
-        if (multiple < FLAT_MULTIPLE) continue;
-        score = clip01((multiple - FLAT_MULTIPLE) / 3);
+        if (multiple < tune.flat) continue;
+        score = clip01((multiple - tune.flat) / 3);
       } else {
         const mz = MAD_SCALE * (amount - med) / dev;
-        if (mz < MZ_THRESHOLD) continue;
-        score = clip01((mz - MZ_THRESHOLD) / (MZ_SATURATE - MZ_THRESHOLD));
+        if (mz < tune.mz) continue;
+        score = clip01((mz - tune.mz) / (MZ_SATURATE - tune.mz));
       }
 
       results.push(buildResult(tx, multiple, score, med, category, others.length));

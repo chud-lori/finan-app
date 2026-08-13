@@ -144,4 +144,41 @@ describe('services/ml/anomaly — detectAnomalies', () => {
             expect(out[0].category).to.equal('coffee');
         });
     });
+
+    // Sensitivity is gated by category volatility (needs >=3 distinct months of
+    // history to classify). Build one tx per month across `monthlyAmounts`, then
+    // a current-month tx.
+    const buildMonthly = (category, monthlyAmounts, currentAmount) => {
+        const txs = monthlyAmounts.map((amount, i) => ({
+            id: `${category}-m${i}`, amount, category,
+            date: `2026-0${i + 1}-10`, description: `m${i}`, type: 'expense', is_current_month: false,
+        }));
+        txs.push({ id: `${category}-cur`, amount: currentAmount, category, date: '2026-08-10', description: 'current', type: 'expense', is_current_month: true });
+        return txs;
+    };
+
+    describe('volatility-gated sensitivity', () => {
+        it('does NOT flag a modest spike in a naturally spiky (flexible) category', () => {
+            // Sharing/treating friends: swings wildly month to month → flexible.
+            // A 2.4x outing is normal life here, not an anomaly.
+            const sharing = buildMonthly('sharing', [100000, 400000, 150000, 600000, 250000], 500000);
+            const out = detectAnomalies(sharing);
+            expect(out.find(a => a.category === 'sharing')).to.be.undefined;
+        });
+
+        it('still flags a large spike in a flexible category', () => {
+            // A genuinely big blow-out (well above the raised bar) should surface.
+            const sharing = buildMonthly('sharing', [100000, 400000, 150000, 600000, 250000], 3000000);
+            const out = detectAnomalies(sharing);
+            expect(out.find(a => a.category === 'sharing')).to.exist;
+        });
+
+        it('flags a smaller spike in a stable (fixed) category', () => {
+            // Electricity is normally flat, so a modest jump is genuinely unexpected
+            // and worth flagging at the lower bar.
+            const power = buildMonthly('electricity', [300000, 305000, 298000, 302000, 300000], 620000);
+            const out = detectAnomalies(power);
+            expect(out.find(a => a.category === 'electricity')).to.exist;
+        });
+    });
 });

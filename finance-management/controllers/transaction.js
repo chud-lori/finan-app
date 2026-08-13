@@ -1011,14 +1011,21 @@ const getAnomalies = async (req, res) => {
 
         const priorCategorySet = new Set(priorCategories.map(c => c.toLowerCase()));
 
-        // Per-category average from historical data
+        // Per-category average + monthly totals from historical data. The monthly
+        // series feeds a volatility read so a naturally-spiky category needs a
+        // bigger jump before it's flagged.
         const histMap = {};
         historicalTxns.forEach(t => {
             const cat = t.category.toLowerCase();
-            if (!histMap[cat]) histMap[cat] = { total: 0, count: 0 };
+            if (!histMap[cat]) histMap[cat] = { total: 0, count: 0, months: {} };
             histMap[cat].total += t.amount;
             histMap[cat].count++;
+            const ym = moment(t.time).tz(userTz).format('YYYY-MM');
+            histMap[cat].months[ym] = (histMap[cat].months[ym] || 0) + t.amount;
         });
+
+        // Ratio a transaction must clear to flag, by how volatile its category is.
+        const RATIO_GATE = { fixed: 1.5, semi: 2, flexible: 4, unknown: 2 };
 
         const anomalies = [];
         currentTxns.forEach(t => {
@@ -1033,12 +1040,16 @@ const getAnomalies = async (req, res) => {
             if (hist && hist.count > 0) {
                 const avg = hist.total / hist.count;
                 const ratio = t.amount / avg;
-                if (ratio >= 2) {
+                const monthTotals = Object.values(hist.months);
+                const { volatility } = classifyVolatility(monthTotals, monthTotals.length ? hist.count / monthTotals.length : null);
+                const gate = RATIO_GATE[volatility] ?? 2;
+                if (ratio >= gate) {
+                    const ratio1 = Math.round(ratio * 10) / 10;
                     flags.push({
                         type: 'high_amount',
-                        ratio: Math.round(ratio * 10) / 10,
+                        ratio: ratio1,
                         avg: Math.round(avg),
-                        message: `This is ${Math.round(ratio)}x higher than your normal ${t.category} spend`,
+                        message: `This is ${ratio1}x higher than your normal ${t.category} spend`,
                     });
                 }
             }
