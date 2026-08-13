@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnomalies, getExplainability, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, classifyAllCategories, setCategoryGroup } from '@/lib/api';
+import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, classifyAllCategories, setCategoryGroup } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -50,9 +50,21 @@ function RefreshButton({ generatedAt, onRefresh, loading, stale }) {
 
 // ── Smart Insights Feed ───────────────────────────────────────────────────────
 
-function buildInsights(explain, ttz, anomaly, ml) {
+function buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount) {
   const insights = [];
   const daysElapsed = new Date().getDate();
+
+  // Recurring: a missing bill is the highest-signal nudge; otherwise surface the
+  // subscription total so it's visible at a glance.
+  if (recurring?.alerts?.length) {
+    const miss = recurring.alerts.find(a => a.type === 'missing');
+    if (miss) {
+      insights.push({ level: 'warn', icon: '⏰', text: `${cap(miss.merchant)} usually charges around now but nothing has posted — check it didn't fail`, anchor: 'recurring', cta: 'See recurring' });
+    }
+  }
+  if (recurring?.count > 0) {
+    insights.push({ level: 'info', icon: '🔁', text: `You have ${recurring.count} recurring charge${recurring.count > 1 ? 's' : ''} totalling about ${formatAmount(recurring.monthlyTotal)} a month`, anchor: 'recurring', cta: 'See recurring' });
+  }
 
   if (ttz) {
     if (ttz.status === 'critical') {
@@ -150,7 +162,8 @@ const LEVEL = {
 };
 const LEVEL_ORDER = { danger: 0, warn: 1, good: 2, info: 3 };
 
-function InsightFeed({ explain, ttz, anomaly, ml, loading }) {
+function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
+  const formatAmount = useFormatAmount();
   if (loading) {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6 animate-pulse">
@@ -168,7 +181,7 @@ function InsightFeed({ explain, ttz, anomaly, ml, loading }) {
     );
   }
 
-  const insights = buildInsights(explain, ttz, anomaly, ml);
+  const insights = buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount);
   if (!insights.length) return null;
 
   const top = [...insights]
@@ -706,6 +719,70 @@ function SpendingMixBar({ data }) {
   );
 }
 
+// ── Recurring & Subscriptions ─────────────────────────────────────────────────
+
+function RecurringCard({ data }) {
+  const formatAmount = useFormatAmount();
+  if (!data || !(data.count > 0)) return null;
+
+  const dueLabel = (iso) => {
+    const days = Math.round((new Date(iso) - new Date()) / 86400000);
+    if (days < 0)  return 'overdue';
+    if (days === 0) return 'due today';
+    if (days === 1) return 'due tomorrow';
+    if (days <= 31) return `due in ${days}d`;
+    return `due ${new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+  };
+
+  return (
+    <div id="recurring" className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
+      <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">🔁 Recurring &amp; Subscriptions</h2>
+          <Tooltip text="Charges that repeat on a regular schedule, detected from your history. Monthly cost normalizes weekly/quarterly charges to a per-month figure." align="left" fixed />
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-sm font-bold text-gray-900 dark:text-slate-100 tabular-nums whitespace-nowrap">{formatAmount(data.monthlyTotal)}<span className="text-xs font-normal text-gray-400">/mo</span></p>
+          <p className="text-xs text-gray-400">{data.count} recurring</p>
+        </div>
+      </div>
+
+      {data.alerts?.length > 0 && (
+        <div className="px-5 pt-3 space-y-1.5">
+          {data.alerts.map((a, i) => (
+            <div key={i} className={`text-xs rounded-lg px-3 py-2 ${a.type === 'missing'
+              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
+              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400'}`}>
+              {a.type === 'missing'
+                ? `⏰ ${cap(a.merchant)} usually charges ~${formatAmount(a.expected)} by now — nothing posted yet`
+                : `📈 ${cap(a.merchant)} went up ${a.pct}% — ${formatAmount(a.from)} → ${formatAmount(a.to)}`}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ul className="p-5 pt-3 divide-y divide-gray-100 dark:divide-slate-800">
+        {data.recurring.map((r, i) => (
+          <li key={i} className="flex items-center gap-3 py-2.5 first:pt-0">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 truncate">{cap(r.merchant)}</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500">
+                {cap(r.category)} · {r.cadence} · {dueLabel(r.nextDue)}
+              </p>
+            </div>
+            <div className="text-right shrink-0 tabular-nums">
+              <p className="text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{formatAmount(r.typicalAmount)}</p>
+              {r.cadence !== 'monthly' && (
+                <p className="text-xs text-gray-400 whitespace-nowrap">≈{formatAmount(r.monthlyEquivalent)}/mo</p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
 function SectionSkeleton() {
@@ -748,6 +825,7 @@ function Section({ id, title, subtitle, tooltip, tag, headerRight, children, loa
 export default function InsightsPage() {
   const [ttz,        setTtz]        = useState(null);
   const [explain,    setExplain]    = useState(null);
+  const [recurring,  setRecurring]  = useState(null);
   const [anomaly,    setAnomaly]    = useState(null);
   const [ml,           setMl]           = useState(null);
   const [mlMeta,       setMlMeta]       = useState(null); // { ts, fromCache }
@@ -757,7 +835,7 @@ export default function InsightsPage() {
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [reclassifying, setReclassifying] = useState(false);
   const [movingCategory, setMovingCategory] = useState(null); // category name being moved
-  const [loading,      setLoading]      = useState({ ttz: true, explain: true, anomaly: true, ml: true });
+  const [loading,      setLoading]      = useState({ ttz: true, explain: true, recurring: true, anomaly: true, ml: true });
   const [refreshing,   setRefreshing]   = useState(false);
   const [errors,       setErrors]       = useState({});
 
@@ -780,9 +858,10 @@ export default function InsightsPage() {
       }
     };
 
-    load('ttz',     getTimeToZero,     setTtz);
-    load('explain', getExplainability, setExplain);
-    load('anomaly', getAnomalies,      setAnomaly);
+    load('ttz',       getTimeToZero,     setTtz);
+    load('explain',   getExplainability, setExplain);
+    load('recurring', getRecurring,      setRecurring);
+    load('anomaly',   getAnomalies,      setAnomaly);
 
     // Kick off background classification then fetch group summary
     classifyAllCategories().catch(() => {});
@@ -870,11 +949,13 @@ export default function InsightsPage() {
           <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Your finances, translated into plain language</p>
 
           <InsightFeed
-            explain={explain} ttz={ttz} anomaly={anomaly} ml={ml}
+            explain={explain} ttz={ttz} anomaly={anomaly} ml={ml} recurring={recurring}
             loading={feedLoading}
           />
 
           {explain?.volatilityBreakdown && <SpendingMixBar data={explain.volatilityBreakdown} />}
+
+          {recurring?.count > 0 && <RecurringCard data={recurring} />}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
