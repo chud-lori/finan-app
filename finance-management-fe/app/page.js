@@ -9,7 +9,7 @@ const SITE_URL = 'https://finance.lori.my.id';
 const SITE_NAME = 'Finan App';
 const TITLE = 'Finan App — Free Personal Finance Tracker & Planner';
 const DESCRIPTION =
-  'Free personal finance tracker with budgets, FIRE calculator, AI insights, and 10+ planning tools. Multi-currency support. No ads, free forever.';
+  'Free personal finance tracker with budgets, FIRE calculator, AI insights, and 9+ planning tools. Multi-currency support. No ads, free forever.';
 
 export const metadata = {
   title: TITLE,
@@ -47,7 +47,7 @@ const FEATURES = [
   { icon: '📈', title: 'Deep Analytics',    desc: 'Monthly & yearly breakdowns, category trends, and savings rate history. Know where money actually goes.' },
   { icon: '📅', title: 'Custom Reports',    desc: 'Query any date range. Income vs expense summaries, category breakdowns, export everything as CSV.' },
   { icon: '🔍', title: 'AI Insights',       desc: 'Anomaly detection, spending velocity, explainability scores, and time-to-zero projections.' },
-  { icon: '💡', title: '10 Planning Tools', desc: 'Debt snowball, FIRE calculator, 50/30/20 budgeting, tax estimator, savings goals — all built-in.' },
+  { icon: '💡', title: '9 Planning Tools', desc: 'Debt snowball, FIRE calculator, 50/30/20 budgeting, tax estimator, savings goals — all built-in.' },
   { icon: '🔒', title: 'Secure & Private',  desc: 'bcrypt passwords, JWT token versioning, Google OAuth. Your financial data is never sold or shared.' },
 ];
 
@@ -59,7 +59,6 @@ const TOOLS = [
   { icon: '🛡️', name: 'Emergency Fund',     desc: '3–6 month safety net' },
   { icon: '💳', name: 'Debt Payoff',        desc: 'Snowball vs avalanche' },
   { icon: '🔥', name: 'FIRE Calculator',    desc: 'Financial independence number' },
-  { icon: '📉', name: 'Inflation Impact',   desc: 'Purchasing power erosion' },
   { icon: '🧾', name: 'Tax Estimator',      desc: 'Estimate your tax bracket' },
   { icon: '📋', name: 'Net Worth',          desc: 'Assets vs liabilities' },
 ];
@@ -68,7 +67,7 @@ const STEPS = [
   { n: '1', title: 'Create your account',   desc: 'Sign up in 30 seconds — free, no credit card. Or continue with Google.' },
   { n: '2', title: 'Log your transactions', desc: 'Add income & expenses manually, or import a CSV file for bulk entry.' },
   { n: '3', title: 'See the full picture',  desc: 'Analytics, insights, and reports update instantly as you add data.' },
-  { n: '4', title: 'Plan with confidence',  desc: 'Use 10 built-in tools to make smarter decisions every month.' },
+  { n: '4', title: 'Plan with confidence',  desc: 'Use 9 built-in tools to make smarter decisions every month.' },
 ];
 
 const TESTIMONIALS = [
@@ -178,7 +177,7 @@ function LandingFooter() {
               A free personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.
             </p>
             <p className="text-sm leading-relaxed text-gray-400 max-w-xs">
-              10 planning tools, multi-currency support, AI insights, CSV import/export. Free forever.
+              9 planning tools, multi-currency support, AI insights, CSV import/export. Free forever.
             </p>
             <div className="flex items-center gap-2 mt-5">
               <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
@@ -263,7 +262,7 @@ export default function LandingPage() {
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
             <div className="animate-fade-in delay-0 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-100 text-teal-700 text-xs font-semibold mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
-              10 financial tools · Free · Multi-currency
+              9 financial tools · Free · Multi-currency
             </div>
 
             <h1 className="animate-fade-in-up delay-75 text-4xl sm:text-5xl lg:text-6xl font-black text-gray-900 leading-tight tracking-tight mb-6">
@@ -503,7 +502,7 @@ export default function LandingPage() {
           <div className="relative max-w-6xl mx-auto px-4 sm:px-6">
             <Reveal variant="blur" className="text-center mb-14">
               <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Planner</p>
-              <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">10 financial planning tools</h2>
+              <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">9 financial planning tools</h2>
               <p className="text-gray-500 max-w-xl mx-auto">From daily spending checks to retirement planning — each tool gives instant, actionable numbers.</p>
             </Reveal>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-10">
@@ -567,7 +566,7 @@ export default function LandingPage() {
                 {
                   icon: '⚡',
                   title: 'Fully free, always',
-                  desc: 'No credit card required. No freemium gates. Every feature — tracking, analytics, all 10 planning tools, AI insights — is 100% free.',
+                  desc: 'No credit card required. No freemium gates. Every feature — tracking, analytics, all 9 planning tools, AI insights — is 100% free.',
                   anim: 'up',
                 },
                 {
@@ -661,7 +660,7 @@ export default function LandingPage() {
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 text-center text-white">
               {[
-                { val: '10',  label: 'Planning tools' },
+                { val: '9',   label: 'Planning tools' },
                 { val: '10+', label: 'Currencies supported' },
                 { val: 'CSV', label: 'Import & export' },
                 { val: '$0',  label: 'Forever free' },

@@ -12,7 +12,7 @@ Sign up in 30 seconds. No credit card required. Google OAuth supported.
 
 ## The problem it solves
 
-Most people have no clear picture of their finances. They earn money, spend it, and wonder at the end of the month where it went. Finan App gives you that picture: a running balance, spending broken down by category, anomaly alerts when something looks off, and 10 planning tools to answer questions like "can I afford this?", "when can I retire?", and "how long until my balance hits zero?"
+Most people have no clear picture of their finances. They earn money, spend it, and wonder at the end of the month where it went. Finan App gives you that picture: a running balance, spending broken down by category, anomaly alerts when something looks off, and 9 planning tools to answer questions like "can I afford this?", "when can I retire?", and "how long until my balance hits zero?"
 
 ---
 
@@ -36,7 +36,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Category management** — rename categories (updates all transactions automatically) or delete unused ones; 28 default categories pre-loaded for every new account
 
 ### Plan
-10 built-in financial planning tools — no external apps needed:
+9 built-in financial planning tools — no external apps needed:
 
 | Tool | What it answers |
 |------|----------------|
@@ -47,9 +47,8 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Emergency Fund | How much should I keep in reserve? Saves the 3- or 6-month target as a tracked goal |
 | Debt Payoff | Snowball vs avalanche — which saves more interest? |
 | FIRE Calculator | What's my financial independence number? |
-| Inflation Impact | How much is purchasing power eroding over time? |
-| Tax Estimator | Estimate Indonesian PPh 21 tax bracket |
-| Net Worth | Assets vs liabilities snapshot |
+| Tax Estimator | Estimate Indonesian PPh 21 tax (progressive + TER awareness); auto-fills from your average income |
+| Net Worth | Track assets vs liabilities with a saved monthly trend — one point per month |
 
 ### Preferences
 - **Currency** — IDR and other currencies; affects all formatting throughout the app
@@ -67,7 +66,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Add transaction | Income or expense with smart category suggestions |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
 | Insights | Anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete) |
-| Recommendation | 10 built-in financial planning calculators |
+| Recommendation | 9 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, and more |
 | Range report | Custom date range with income/expense summary |
 | Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |
 | Settings | Theme toggle, change password, logout all devices, delete account |
