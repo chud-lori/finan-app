@@ -46,7 +46,7 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
 | Frontend | Next.js 16 (App Router), React, Tailwind CSS v4 |
 | Charts | Recharts |
 | Frontend testing | Playwright E2E |
-| Smart insights | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, median/MAD anomaly detector, linear-regression forecast |
+| Smart insights | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, median/MAD anomaly detector, linear-regression forecast, gated recurring/subscription detector |
 | Container | Docker + Docker Compose |
 | CI/CD | GitHub Actions → GHCR → Watchtower (auto-deploy) |
 
@@ -108,7 +108,7 @@ finan-app/                          ← monorepo root
 │   │       ├── index.js            ← facade: classifyBatch() + analyze()
 │   │       ├── classifier.js       ← keyword + TF-IDF char-ngram cosine
 │   │       ├── anomaly.js          ← per-category median/MAD outlier detector
-│   │       ├── recurring.js        ← recurring-charge / subscription detection
+│   │       ├── recurring.js        ← subscription/bill detection (category + amount + cadence gate)
 │   │       ├── forecast.js         ← linear-regression month-end forecast
 │   │       └── keywords.js         ← bilingual EN/ID taxonomy
 │   ├── helpers/
@@ -727,6 +727,30 @@ Requires ≥ 4 days of data. Returns `{ available: false, reason, days_tracked }
 
 ---
 
+### Recurring detection (`services/ml/recurring.js`)
+
+Groups expenses by a normalized merchant key (lowercase, digits/punctuation stripped, first 3 tokens), then reads the median gap between consecutive charges to pick a cadence bucket (daily → yearly).
+
+Periodicity alone is **not** enough to call a group a subscription — a fixed-price lunch bought roughly monthly is indistinguishable from a streaming bill on cadence and amount alone. A group is promoted to a subscription/bill only when **all three gates** pass:
+
+| Gate | Rule | Why |
+|------|------|-----|
+| Category | dominant category not on `BLOCKED_CATEGORY_TERMS` (food, coffee, snack, cigar, grocery, sharing, … EN + ID, whole-word match) | This is the discriminator that separates real bills from look-alike food/drink repeats |
+| Amount | coefficient of variation (stddev/mean) ≤ `0.12` | Removes variable-amount spend; deliberately **not** MAD-based, so a single price hike still registers as drift |
+| Cadence | canonical period ≥ 26 days **and** `MAD(gaps)/median(gaps)` ≤ `0.15` | Real bills post on a precise ~30-day schedule; coincidental spend is irregular and often sub-weekly |
+
+The category rule is a **blocklist, not an allowlist** — a bill the user filed under an odd or invented category still gets detected, which an allowlist would have silently dropped. The group's category is the *dominant* one across its transactions, so one stray re-tag can't knock out a year-long bill.
+
+**Missing-bill and price-jump alerts fire only for groups that clear all three gates.** Anything that fails them is either dropped or filed as frequent spend, and neither can raise an alert.
+
+Stable sub-monthly repeats (a weekly gym pass, a near-daily coffee) are surfaced separately in `frequent[]` — informational only: no `nextDue`, no alerts, a looser CV ceiling (`0.20`), and, below weekly cadence, a minimum of 5 occurrences before a handful of charges counts as a habit. Blocklisted categories are welcome here; a daily coffee is exactly what the list is for.
+
+Grouping is unchanged by this gate — this is a classification step, not a clustering one. No external AI, no embeddings, no fuzzy merchant matching: those would only add false-*merge* risk (joining two merchants that share a word) for no benefit.
+
+**API:** `detectRecurring(transactions, { asOf })` → `{ recurring[], monthlyTotal, count, alerts[], frequent[], frequentMonthlyTotal }`. Also exports `merchantKey()` and `isBlockedCategory()`.
+
+---
+
 ## Environment variables
 
 ### Root `.env` (used by Docker Compose)
@@ -1062,7 +1086,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M` |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
 | GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category — see Category volatility section |
-| GET | `/api/transaction/recurring` | 60/min | ✓ | Detected recurring charges/subscriptions: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). 13-month window; yearly cadences not detected |
+| GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
 | GET | `/api/transaction/time-to-zero` | 60/min | ✓ | Runway — days until balance reaches zero at current burn rate |
 | GET | `/api/transaction/active-months` | 60/min | ✓ | List of months with at least one transaction (reads from Snapshots) |
 | PUT | `/api/transaction/budget/:yearMonth` | 30/min | ✓ | Set budget for a month; body: `{ amount, updateDefault? }` |
