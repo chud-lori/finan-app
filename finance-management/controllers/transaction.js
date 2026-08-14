@@ -19,7 +19,7 @@ const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
 const { classifyVolatility } = require('../helpers/spendingVolatility');
-const { seedDefaultCategories } = require('../helpers/seedDefaultCategories');
+const { seedDefaultCategories, DEFAULT_UTILITY_CATEGORY_NAMES } = require('../helpers/seedDefaultCategories');
 const { track } = require('../helpers/backgroundJobs');
 const nativeMl = require('../services/ml');
 const nativeMlRecurring = require('../services/ml/recurring');
@@ -1219,7 +1219,19 @@ const getRecurring = async (req, res) => {
             type:        'expense',
         }));
 
-        const result = nativeMlRecurring.detectRecurring(payload, { asOf: now.format('YYYY-MM-DD') });
+        // Utility categories get a looser amount-stability gate (their bills vary
+        // with usage). Union the seed defaults with any category the user has
+        // flagged — all by exact name, never a fuzzy match on the text.
+        const flagged = await Category.find({ user: req.user.id, isUtility: true }).select('name').lean();
+        const utilityCategories = new Set([
+            ...DEFAULT_UTILITY_CATEGORY_NAMES,
+            ...flagged.map(c => c.name.toLowerCase()),
+        ]);
+
+        const result = nativeMlRecurring.detectRecurring(payload, {
+            asOf: now.format('YYYY-MM-DD'),
+            utilityCategories,
+        });
         const response = BaseResponseDTO.success('Recurring analysis complete', result);
         cache.set(req.user.id, 'recurring', cacheParams, response);
         res.status(200).json(response);

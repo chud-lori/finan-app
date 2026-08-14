@@ -122,6 +122,39 @@ describe('services/ml/recurring — detectRecurring', () => {
             expect(recurring[0].amountStable).to.equal(true);
         });
 
+        it('keeps a variable-amount monthly utility bill when its category is flagged', () => {
+            // Electricity posts monthly on a tight schedule but the amount swings
+            // with usage — CV here is ~0.20, past the 0.12 default gate yet under
+            // the looser utility ceiling. Only fires because the caller flags it.
+            const txs = series('PLN Postpaid', 'electricity', 5, 30, '2026-08-05',
+                [250000, 340000, 210000, 380000, 300000]);
+            const opts = { asOf: '2026-08-10', utilityCategories: new Set(['electricity']) };
+            const { count, recurring } = detectRecurring(txs, opts);
+            expect(count).to.equal(1);
+            expect(recurring[0].category).to.equal('electricity');
+            expect(recurring[0].amountStable).to.equal(false); // still flagged as an unstable amount
+        });
+
+        it('drops the same variable bill when the category is not flagged', () => {
+            // Identical data, but no utilityCategories — the tight 0.12 gate applies.
+            const txs = series('PLN Postpaid', 'electricity', 5, 30, '2026-08-05',
+                [250000, 340000, 210000, 380000, 300000]);
+            expect(detectRecurring(txs, { asOf: '2026-08-10' }).count).to.equal(0);
+        });
+
+        it('does not extend the utility leeway to unflagged categories in the same run', () => {
+            // A flagged utility and an unflagged category, same ~0.20 amount swing:
+            // only the flagged one survives.
+            const util = series('PLN Postpaid', 'electricity', 5, 30, '2026-08-05',
+                [250000, 340000, 210000, 380000, 300000]);
+            const other = series('Cleaning service', 'household', 5, 30, '2026-08-06',
+                [250000, 340000, 210000, 380000, 300000]);
+            const opts = { asOf: '2026-08-10', utilityCategories: new Set(['electricity']) };
+            const { count, recurring } = detectRecurring([...util, ...other], opts);
+            expect(count).to.equal(1);
+            expect(recurring[0].category).to.equal('electricity');
+        });
+
         it('blocks by category regardless of the exact wording', () => {
             expect(isBlockedCategory('Food & Drink')).to.equal(true);
             expect(isBlockedCategory('eating out')).to.equal(true);
