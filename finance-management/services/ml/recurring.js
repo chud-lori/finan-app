@@ -14,7 +14,9 @@
 //                  blocklist (food, coffee, snack, cigar, grocery, sharing, …).
 //                  A blocklist, not an allowlist: a user-mistagged bill still
 //                  gets through, which an allowlist would silently drop.
-//   2. amount    — coefficient of variation (stddev/mean) under 0.12.
+//   2. amount    — coefficient of variation (stddev/mean) under 0.12, or under
+//                  0.35 for categories the caller flags as utilities (their
+//                  bills vary with usage but still post on a fixed schedule).
 //   3. cadence   — monthly or longer, on a tight schedule (MAD/median ≤ 0.15).
 //
 // Stable sub-monthly repeats (a weekly gym pass, a near-daily coffee) are still
@@ -26,6 +28,7 @@ const MIN_SUB_WEEKLY_OCCURRENCES = 5; // a few charges in one week isn't a habit
 const INTERVAL_REGULARITY = 0.25; // MAD(gaps)/median(gaps) must be under this to count as scheduled
 const SUBSCRIPTION_REGULARITY = 0.15; // bills post on a precise schedule — hold them to a tighter one
 const SUBSCRIPTION_MAX_CV = 0.12; // amount CV a subscription/bill must stay under
+const SUBSCRIPTION_UTILITY_MAX_CV = 0.35; // utilities bill monthly on a precise schedule but the amount swings with usage — for flagged utility categories, loosen only the amount gate, never the cadence one
 const FREQUENT_MAX_CV = 0.20;   // sub-monthly repeats are informational — allow a bit more drift
 const AMOUNT_STABLE_CV = SUBSCRIPTION_MAX_CV; // what the `amountStable` display flag means
 const PRICE_JUMP = 0.15;        // latest vs typical amount above this → price-change alert
@@ -151,6 +154,13 @@ const detectRecurring = (transactions, opts = {}) => {
   if (!Array.isArray(transactions) || transactions.length === 0) return empty;
 
   const asOf = opts.asOf || new Date().toISOString().slice(0, 10);
+  // Utility categories (passed by exact lowercased name from the caller) earn a
+  // looser amount-CV ceiling — their bills vary with usage but still post on a
+  // tight monthly schedule. Empty by default: no utilities → no loosening.
+  const utilitySet = opts.utilityCategories instanceof Set
+    ? opts.utilityCategories
+    : new Set(opts.utilityCategories || []);
+  const isUtilityCategory = (category) => utilitySet.has(String(category || '').toLowerCase().trim());
 
   // Bucket expenses by (merchant key). Category rides along for display.
   const groups = new Map();
@@ -196,9 +206,11 @@ const detectRecurring = (transactions, opts = {}) => {
     // amount, and a tight monthly-or-longer schedule. Anything else is either a
     // frequent-spend habit or nothing at all — neither may raise bill alerts.
     const blocked = isBlockedCategory(category);
+    // Utilities keep the tight cadence gate but earn a looser amount ceiling.
+    const maxAmountCv = isUtilityCategory(category) ? SUBSCRIPTION_UTILITY_MAX_CV : SUBSCRIPTION_MAX_CV;
     const isSubscription = monthlyOrLonger
       && !blocked
-      && amountCv <= SUBSCRIPTION_MAX_CV
+      && amountCv <= maxAmountCv
       && jitter <= SUBSCRIPTION_REGULARITY;
 
     if (!isSubscription) {

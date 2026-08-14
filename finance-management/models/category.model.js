@@ -34,6 +34,14 @@ const CategorySchema = new Schema({
         type: Boolean,
         default: false,
     },
+    // Utility bills (electricity/internet/the catch-all "bill") post monthly on a
+    // tight schedule but the amount swings with usage. The recurring detector uses
+    // this to loosen only its amount-stability gate for these categories — a
+    // structured signal, set from the seed defaults, not a guess from the name.
+    isUtility: {
+        type: Boolean,
+        default: false,
+    },
 }, {
     timestamps: true
 });

@@ -493,6 +493,7 @@ Collection: categories
 | `group` | String | enum: `essential \| discretionary \| savings \| social \| income \| other` | default `other`; set by ML classifier |
 | `groupConfidence` | Number | 0–1, default 0 | confidence score from ML classifier |
 | `groupOverridden` | Boolean | default false | when true, `classifyAll` skips this category; used as a learning hint for future classifications |
+| `isUtility` | Boolean | default false | utility bill (electricity/internet/`bill`) — recurring detection loosens only its amount gate for these; set from seed defaults, overridable per category |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
 
@@ -784,10 +785,12 @@ Periodicity alone is **not** enough to call a group a subscription — a fixed-p
 | Gate | Rule | Why |
 |------|------|-----|
 | Category | dominant category not on `BLOCKED_CATEGORY_TERMS` (food, coffee, snack, cigar, grocery, sharing, … EN + ID, whole-word match) | This is the discriminator that separates real bills from look-alike food/drink repeats |
-| Amount | coefficient of variation (stddev/mean) ≤ `0.12` | Removes variable-amount spend; deliberately **not** MAD-based, so a single price hike still registers as drift |
+| Amount | coefficient of variation (stddev/mean) ≤ `0.12` (≤ `0.35` for flagged utility categories) | Removes variable-amount spend; deliberately **not** MAD-based, so a single price hike still registers as drift |
 | Cadence | canonical period ≥ 26 days **and** `MAD(gaps)/median(gaps)` ≤ `0.15` | Real bills post on a precise ~30-day schedule; coincidental spend is irregular and often sub-weekly |
 
 The category rule is a **blocklist, not an allowlist** — a bill the user filed under an odd or invented category still gets detected, which an allowlist would have silently dropped. The group's category is the *dominant* one across its transactions, so one stray re-tag can't knock out a year-long bill.
+
+**Utility amount leeway.** Utilities (electricity, internet, the catch-all `bill`) post on a tight monthly schedule but the *amount* genuinely swings with usage — the flat `0.12` amount gate would drop them, and being monthly they can't fall back to `frequent[]` either, so a real bill would vanish. The caller passes `utilityCategories` (a Set of exact lowercased category names) and those categories get the looser `0.35` amount ceiling while keeping the tight cadence gate. This is a **structured signal** — `Category.isUtility`, seeded on electricity/internet/`bill` and overridable per category — never a fuzzy match on the category text. The controller unions the seed defaults (`DEFAULT_UTILITY_CATEGORY_NAMES`) with any category the user has flagged, so existing users are covered without a migration.
 
 **Missing-bill and price-jump alerts fire only for groups that clear all three gates.** Anything that fails them is either dropped or filed as frequent spend, and neither can raise an alert.
 
@@ -795,7 +798,7 @@ Stable sub-monthly repeats (a weekly gym pass, a near-daily coffee) are surfaced
 
 Grouping is unchanged by this gate — this is a classification step, not a clustering one. No external AI, no embeddings, no fuzzy merchant matching: those would only add false-*merge* risk (joining two merchants that share a word) for no benefit.
 
-**API:** `detectRecurring(transactions, { asOf })` → `{ recurring[], monthlyTotal, count, alerts[], frequent[], frequentMonthlyTotal }`. Also exports `merchantKey()` and `isBlockedCategory()`.
+**API:** `detectRecurring(transactions, { asOf, utilityCategories })` → `{ recurring[], monthlyTotal, count, alerts[], frequent[], frequentMonthlyTotal }`. `utilityCategories` is an optional Set of exact lowercased category names that earn the looser amount gate. Also exports `merchantKey()` and `isBlockedCategory()`.
 
 ---
 
@@ -1134,7 +1137,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M` |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
 | GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category — see Category volatility section |
-| GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
+| GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12, or ≤ 0.35 for flagged utility categories) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
 | GET | `/api/transaction/time-to-zero` | 60/min | ✓ | Runway — days until balance reaches zero at current burn rate |
 | GET | `/api/transaction/active-months` | 60/min | ✓ | List of months with at least one transaction (reads from Snapshots) |
 | PUT | `/api/transaction/budget/:yearMonth` | 30/min | ✓ | Set budget for a month; body: `{ amount, updateDefault? }` |
