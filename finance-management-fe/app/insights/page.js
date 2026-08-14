@@ -800,7 +800,8 @@ function HealthScoreCard({ health }) {
 
 function RecurringCard({ data }) {
   const formatAmount = useFormatAmount();
-  if (!data || !(data.count > 0)) return null;
+  const frequent = data?.frequent || [];
+  if (!data || !(data.count > 0 || frequent.length > 0)) return null;
 
   const dueLabel = (iso) => {
     const days = Math.round((new Date(iso) - new Date()) / 86400000);
@@ -816,12 +817,14 @@ function RecurringCard({ data }) {
       <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">🔁 Recurring &amp; Subscriptions</h2>
-          <Tooltip text="Charges that repeat on a regular schedule, detected from your history. Monthly cost normalizes weekly/quarterly charges to a per-month figure." align="left" fixed />
+          <Tooltip text="Bills and subscriptions only: a fixed-ish amount on a precise monthly-or-longer schedule, in a category that isn't everyday spending. Repeat food and coffee show up under Frequent spend instead, and never raise bill alerts. Monthly cost normalizes quarterly/yearly charges to a per-month figure." align="left" fixed />
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-gray-900 dark:text-slate-100 tabular-nums whitespace-nowrap">{formatAmount(data.monthlyTotal)}<span className="text-xs font-normal text-gray-400">/mo</span></p>
-          <p className="text-xs text-gray-400">{data.count} recurring</p>
-        </div>
+        {data.count > 0 && (
+          <div className="text-right shrink-0">
+            <p className="text-sm font-bold text-gray-900 dark:text-slate-100 tabular-nums whitespace-nowrap">{formatAmount(data.monthlyTotal)}<span className="text-xs font-normal text-gray-400">/mo</span></p>
+            <p className="text-xs text-gray-400">{data.count} recurring</p>
+          </div>
+        )}
       </div>
 
       {data.alerts?.length > 0 && (
@@ -838,24 +841,54 @@ function RecurringCard({ data }) {
         </div>
       )}
 
-      <ul className="p-5 pt-3 divide-y divide-gray-100 dark:divide-slate-800">
-        {data.recurring.map((r, i) => (
-          <li key={i} className="flex items-center gap-3 py-2.5 first:pt-0">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 truncate">{cap(r.merchant)}</p>
-              <p className="text-xs text-gray-400 dark:text-slate-500">
-                {cap(r.category)} · {r.cadence} · {dueLabel(r.nextDue)}
-              </p>
-            </div>
-            <div className="text-right shrink-0 tabular-nums">
-              <p className="text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{formatAmount(r.typicalAmount)}</p>
-              {r.cadence !== 'monthly' && (
-                <p className="text-xs text-gray-400 whitespace-nowrap">≈{formatAmount(r.monthlyEquivalent)}/mo</p>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+      {data.count > 0 && (
+        <ul className="p-5 pt-3 divide-y divide-gray-100 dark:divide-slate-800">
+          {data.recurring.map((r, i) => (
+            <li key={i} className="flex items-center gap-3 py-2.5 first:pt-0">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 truncate">{cap(r.merchant)}</p>
+                <p className="text-xs text-gray-400 dark:text-slate-500">
+                  {cap(r.category)} · {r.cadence} · {dueLabel(r.nextDue)}
+                </p>
+              </div>
+              <div className="text-right shrink-0 tabular-nums">
+                <p className="text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{formatAmount(r.typicalAmount)}</p>
+                {r.cadence !== 'monthly' && (
+                  <p className="text-xs text-gray-400 whitespace-nowrap">≈{formatAmount(r.monthlyEquivalent)}/mo</p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Habits, not bills — repeats that land more often than monthly. No due
+          dates and no missing-bill alerts: they are spending patterns, not commitments. */}
+      {frequent.length > 0 && (
+        <div className="px-5 pb-5 pt-3 border-t border-gray-100 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">Frequent spend</h3>
+            <p className="text-xs text-gray-400 tabular-nums whitespace-nowrap">≈{formatAmount(data.frequentMonthlyTotal)}/mo</p>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-slate-500 mb-2">Habits that repeat more often than monthly — not treated as bills.</p>
+          <ul className="divide-y divide-gray-100 dark:divide-slate-800">
+            {frequent.map((r, i) => (
+              <li key={i} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 truncate">{cap(r.merchant)}</p>
+                  <p className="text-xs text-gray-400 dark:text-slate-500">
+                    {cap(r.category)} · {r.cadence} · {r.occurrences}×
+                  </p>
+                </div>
+                <div className="text-right shrink-0 tabular-nums">
+                  <p className="text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{formatAmount(r.typicalAmount)}</p>
+                  <p className="text-xs text-gray-400 whitespace-nowrap">≈{formatAmount(r.monthlyEquivalent)}/mo</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -1038,7 +1071,7 @@ export default function InsightsPage() {
 
           {explain?.volatilityBreakdown && <SpendingMixBar data={explain.volatilityBreakdown} />}
 
-          {recurring?.count > 0 && <RecurringCard data={recurring} />}
+          {(recurring?.count > 0 || recurring?.frequent?.length > 0) && <RecurringCard data={recurring} />}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
