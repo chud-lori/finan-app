@@ -222,6 +222,22 @@ export const updateGoal = (id, patch) =>
 export const deleteGoal = (id) =>
   apiFetch(`/api/goal/${id}`, { method: 'DELETE' });
 
+// ── Net worth ─────────────────────────────────────────────────────────────────
+
+export const getNetWorth = () =>
+  apiFetch('/api/networth');
+
+// Replaces the whole balance sheet — the backend recomputes totals and upserts
+// the current month's snapshot, so tz decides which month the point lands in.
+export const saveNetWorth = (assets, liabilities) =>
+  apiFetch(`/api/networth?tz=${encodeURIComponent(browserTz())}`, {
+    method: 'PUT',
+    body: JSON.stringify({ assets, liabilities }),
+  });
+
+export const getNetWorthHistory = (limit = 12) =>
+  apiFetch(`/api/networth/history?limit=${limit}`);
+
 // ── Profile ───────────────────────────────────────────────────────────────────
 
 export const getProfile = () =>

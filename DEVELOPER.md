@@ -150,7 +150,7 @@ finan-app/                          ← monorepo root
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
     │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown; year nav bounded by availableYears; clicking a bar in yearly view opens month transaction modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
-    │   ├── recommendation/page.js  ← 10 financial planning calculators
+    │   ├── recommendation/page.js  ← 9 financial planning calculators
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
     │   └── settings/page.js        ← Theme, password change, sessions, delete account
     ├── components/
@@ -558,6 +558,54 @@ Collection: budgets
 **Indexes:** `{ user: 1, yearMonth: 1 }` unique
 
 When reading, the backend first looks for a `Budget` document; falls back to `Preference.monthlyBudget` if none exists. Writing updates `Preference.monthlyBudget` only when `updateDefault: true` is explicitly passed.
+
+---
+
+### NetWorth
+
+```
+Collection: networths
+```
+
+Current holdings — exactly one document per user. User-declared, not derived from the ledger (the app knows cash flow, not houses or car loans). Each entry in `assets` / `liabilities` is a `Holding`: `{ label (≤60 chars), amount (≥0), type }`.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required, unique | one doc per user |
+| `assets` | Array | `[{ label, amount, type }]` | `type` ∈ cash, investment, property, vehicle, receivable, other |
+| `liabilities` | Array | `[{ label, amount, type }]` | `type` ∈ loan, mortgage, credit_card, bnpl, payable, other |
+| `createdAt` / `updatedAt` | Date | auto | |
+
+**Seed row:** `GET /api/networth` copies the app cash `Balance` into a draft `cash` asset row when no holdings exist yet — a read-only copy; `Balance` is never written from here.
+
+### NetWorthSnapshot
+
+```
+Collection: networthsnapshots
+```
+
+One reading per user per calendar month — the trend history. `assets` / `liabilities` are the totals at write time (row breakdown deliberately not copied; the trend only needs the two sums).
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required | |
+| `yearMonth` | String | required, `YYYY-MM` | |
+| `assets` | Number | default 0 | total assets at write time |
+| `liabilities` | Number | default 0 | total liabilities at write time |
+| `netWorth` | Number | default 0 | `assets − liabilities` |
+| `createdAt` / `updatedAt` | Date | auto | |
+
+**Indexes:** `{ user: 1, yearMonth: 1 }` unique, `{ user: 1, yearMonth: -1 }`
+
+**Endpoints** (all `authenticateJWT` + per-user rate limits):
+
+| Method | Path | Limit | Behaviour |
+|--------|------|-------|-----------|
+| `GET` | `/api/networth` | 60/min | current holdings + derived net worth (seeds Balance as a draft asset; does not persist) |
+| `PUT` | `/api/networth` | 30/min | replace holdings → recompute → **upsert** this month's snapshot (edit twice in a month = overwrite, not append) |
+| `GET` | `/api/networth/history` | 60/min | monthly snapshots for the trend line (`?limit=`, default 12, oldest-first) |
+
+Both `NetWorth` and `NetWorthSnapshot` are in `userScopedModels`, so `deleteAccount` clears them (asserted in `test/dataIntegrity.integration.test.js`).
 
 ---
 

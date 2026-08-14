@@ -129,6 +129,7 @@ const profileRoutes = require('./routers/profile');
 const gamificationRoutes = require('./routers/gamification');
 const recommendationRoutes = require('./routers/recommendation');
 const categoryRoutes = require('./routers/category');
+const netWorthRoutes = require('./routers/netWorth');
 // Routes
 app.get("/", (req, res) => res.json("HEHHHH"));
 app.get('/health', (_req, res) => {
@@ -151,6 +152,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/gamification', gamificationRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/category', categoryRoutes);
+app.use('/api/networth', netWorthRoutes);
 // views
 // app.get('/', (req, res, next) => {
 //     res.render('./public/index');

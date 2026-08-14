@@ -3,8 +3,23 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getRecommendation, getProfile, addGoal, getAllGoals, updateGoal, deleteGoal } from '@/lib/api';
+import {
+  getRecommendation, getProfile, addGoal, getAllGoals, updateGoal, deleteGoal,
+  getGroupSummary, getAnalytics, getNetWorth, saveNetWorth, getNetWorthHistory,
+} from '@/lib/api';
 import { useCurrency } from '@/components/CurrencyContext';
+import NetWorthTrendChart from '@/components/charts/NetWorthTrendChart';
+
+const currentYearMonth = () => {
+  const d = new Date();
+  return { year: d.getFullYear(), month: d.getMonth() + 1, ym: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` };
+};
+
+const monthLabel = (ym) => {
+  const [y, m] = String(ym).split('-').map(Number);
+  if (!y || !m) return ym;
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+};
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 const parseNum = (v) => Number(String(v).replace(/[^0-9]/g, ''));
@@ -209,59 +224,251 @@ function AffordTool({ savedBudget }) {
   );
 }
 
-// ─── Tool 2: 50/30/20 Rule Planner ───────────────────────────────────────────
-function BudgetRuleTool() {
-  const { formatAmount, currency } = useCurrency();
-  const [income, setIncome] = useState('');
-  const [result, setResult] = useState(null);
+// ─── Tool 2: 50/30/20 Rule — personalised from category groups ────────────────
+//
+// The rule is only useful against your real split. Mapping (issue #7):
+//   needs   = essential
+//   wants   = discretionary + social
+//   savings = savings group + whatever is left over of income (the surplus)
+// Anything still sitting in `other` is unclassified and is reported separately
+// rather than silently padding a bucket — a wrong bucket is worse than a gap.
+const RULE_BUCKET_STYLE = {
+  needs:   { label: 'Needs',   target: 50, sub: 'Essential — rent, groceries, utilities, transport', bar: 'bg-teal-500',    text: 'text-teal-700',    bg: 'bg-teal-50',    border: 'border-teal-200'    },
+  wants:   { label: 'Wants',   target: 30, sub: 'Discretionary + social — dining, hobbies, sharing',  bar: 'bg-amber-400',   text: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200'   },
+  savings: { label: 'Savings', target: 20, sub: 'Savings categories + this month\'s surplus',          bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+};
 
+const buildRuleSplit = (groups, incomeBasis) => {
+  const g = (k) => Math.round(groups?.[k] ?? 0);
+  const totalExpense = Math.round(groups?.total ?? 0);
+
+  const needs   = g('essential');
+  const wants   = g('discretionary') + g('social');
+  // The 'income' group only shows up here when an expense category was
+  // classified as income — treat it as unclassified rather than guessing.
+  const unclassified = g('other') + g('income');
+
+  const surplus = incomeBasis - totalExpense;
+  const savings = g('savings') + Math.max(surplus, 0);
+
+  const pct = (v) => (incomeBasis > 0 ? Math.round((v / incomeBasis) * 100) : 0);
+
+  return {
+    incomeBasis, totalExpense, surplus, unclassified,
+    overspent: surplus < 0 ? -surplus : 0,
+    buckets: [
+      { key: 'needs',   amount: needs,   pct: pct(needs)   },
+      { key: 'wants',   amount: wants,   pct: pct(wants)   },
+      { key: 'savings', amount: savings, pct: pct(savings) },
+    ],
+    unclassifiedPct: pct(unclassified),
+  };
+};
+
+function BudgetRuleTool({ identity }) {
+  const { formatAmount, currency } = useCurrency();
+  const [real,    setReal]    = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showWhatIf, setShowWhatIf] = useState(false);
+  const [income,  setIncome]  = useState('');
+  const [manual,  setManual]  = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const { year, month, ym } = currentYearMonth();
+
+    Promise.all([
+      getGroupSummary(ym).catch(() => null),
+      getAnalytics(year, month).catch(() => null),
+    ]).then(([groupRes, analyticsRes]) => {
+      if (cancelled) return;
+      const groups      = groupRes?.data ?? null;
+      const monthIncome = Math.round(analyticsRes?.data?.monthStats?.income ?? 0);
+      const avgIncome   = Math.round(identity?.avgMonthlyIncome ?? 0);
+      // Salary usually lands mid-month, so an empty income column this early is
+      // normal — fall back to the tracked average rather than showing 0% saved.
+      const usedAverage = monthIncome <= 0 && avgIncome > 0;
+      const incomeBasis = monthIncome > 0 ? monthIncome : avgIncome;
+
+      if (!groups || (incomeBasis <= 0 && (groups.total ?? 0) <= 0)) {
+        setReal(null);
+      } else {
+        setReal({ ...buildRuleSplit(groups, incomeBasis), month: ym, usedAverage });
+      }
+      setLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [identity]);
+
+  // Manual what-if — the original blank-slate calculator, kept as a fallback.
   const handleSubmit = (e) => {
     e.preventDefault();
     const amt = parseNum(income);
     if (!amt) return;
-    setResult({ needs: Math.round(amt * 0.5), wants: Math.round(amt * 0.3), savings: Math.round(amt * 0.2), income: amt });
+    setManual({ needs: Math.round(amt * 0.5), wants: Math.round(amt * 0.3), savings: Math.round(amt * 0.2), income: amt });
   };
 
-  const BUCKETS = result ? [
-    { label: 'Needs',   sub: 'Rent, groceries, utilities, transport', pct: 50, amount: result.needs,   bar: 'bg-teal-500',    text: 'text-teal-700',    bg: 'bg-teal-50',    border: 'border-teal-200'    },
-    { label: 'Wants',   sub: 'Dining out, entertainment, hobbies',    pct: 30, amount: result.wants,   bar: 'bg-amber-400',   text: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200'   },
-    { label: 'Savings', sub: 'Emergency fund, investments, goals',    pct: 20, amount: result.savings, bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  ] : [];
+  const hasReal = Boolean(real && real.incomeBasis > 0);
 
   return (
     <div className="space-y-4">
-      <ToolCard>
-        <p className="text-xs text-gray-500 mb-4">
-          The 50/30/20 rule splits your income into three categories — a simple and popular starting point for any budget.
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label={`Monthly take-home income (${currency})`} value={income} onChange={setIncome} placeholder="10,000,000" />
-          <SubmitBtn label="Calculate Split" />
-        </form>
-      </ToolCard>
+      {loading && (
+        <ToolCard>
+          <div className="h-4 w-40 bg-gray-100 rounded animate-pulse mb-3" />
+          <div className="h-20 bg-gray-50 rounded-xl animate-pulse" />
+        </ToolCard>
+      )}
 
-      {result && (
-        <div className="space-y-3">
-          {BUCKETS.map(({ label, sub, pct, amount, bar, text, bg, border }) => (
-            <div key={label} className={`rounded-2xl border p-4 ${bg} ${border}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <span className={`text-sm font-bold ${text}`}>{pct}% — {label}</span>
-                  <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
-                </div>
-                <span className={`text-lg font-black ${text}`}>{formatAmount(amount)}</span>
-              </div>
-              <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
-                <div className={`h-1.5 rounded-full ${bar}`} style={{ width: `${pct}%` }} />
-              </div>
-            </div>
-          ))}
-          <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
-            <p className="text-xs text-gray-400">Based on monthly income of</p>
-            <p className="text-base font-bold text-gray-800 mt-0.5">{formatAmount(result.income)}</p>
+      {!loading && hasReal && (
+        <>
+          <div className="rounded-2xl border-2 border-teal-200 bg-teal-50 p-4">
+            <p className="text-xs font-semibold text-teal-700 mb-1">Your actual split — {monthLabel(real.month)}</p>
+            <p className="text-xs text-teal-600">
+              Built from your category groups and {real.usedAverage ? 'your average monthly income' : 'this month\'s recorded income'} of {formatAmount(real.incomeBasis)}.
+            </p>
+            {real.usedAverage && (
+              <p className="text-xs text-teal-500 mt-1">No income recorded this month yet — using your tracked average instead.</p>
+            )}
           </div>
+
+          {/* Actual composition, one bar. Widths are the real percentages, so a
+              month that overspends visibly runs past the 100% mark. */}
+          <ToolCard>
+            <div className="flex justify-between text-xs text-gray-500 mb-2">
+              <span>Actual</span>
+              <span>Target 50 / 30 / 20</span>
+            </div>
+            <div className="w-full h-3 rounded-full bg-gray-100 overflow-hidden flex">
+              {real.buckets.map(({ key, pct }) => (
+                <div key={key} className={RULE_BUCKET_STYLE[key].bar} style={{ width: `${Math.min(pct, 100)}%` }} />
+              ))}
+              {real.unclassifiedPct > 0 && (
+                <div className="bg-gray-300" style={{ width: `${Math.min(real.unclassifiedPct, 100)}%` }} />
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5">
+              {real.buckets.map(({ key, pct }) => (
+                <span key={key} className="text-xs text-gray-500 flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${RULE_BUCKET_STYLE[key].bar}`} />
+                  {RULE_BUCKET_STYLE[key].label} {pct}%
+                </span>
+              ))}
+              {real.unclassifiedPct > 0 && (
+                <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-gray-300" />
+                  Unclassified {real.unclassifiedPct}%
+                </span>
+              )}
+            </div>
+          </ToolCard>
+
+          <div className="space-y-3">
+            {real.buckets.map(({ key, amount, pct }) => {
+              const s = RULE_BUCKET_STYLE[key];
+              const delta = pct - s.target;
+              // Over target is bad for needs/wants, good for savings.
+              const good = key === 'savings' ? delta >= 0 : delta <= 0;
+              const targetAmount = Math.round(real.incomeBasis * s.target / 100);
+              return (
+                <div key={key} className={`rounded-2xl border p-4 ${s.bg} ${s.border}`}>
+                  <div className="flex items-center justify-between mb-2 gap-3">
+                    <div className="min-w-0">
+                      <span className={`text-sm font-bold ${s.text}`}>{s.label} — {pct}% <span className="font-normal text-gray-400">vs {s.target}% target</span></span>
+                      <p className="text-xs text-gray-500 mt-0.5">{s.sub}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`text-lg font-black ${s.text} tabular-nums`}>{formatAmount(amount)}</span>
+                      <p className="text-xs text-gray-400 tabular-nums">target {formatAmount(targetAmount)}</p>
+                    </div>
+                  </div>
+                  <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
+                    <div className={`h-1.5 rounded-full ${s.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                  </div>
+                  <p className={`text-xs mt-2 ${good ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {delta === 0
+                      ? 'Exactly on target'
+                      : `${Math.abs(delta)} pt${Math.abs(delta) === 1 ? '' : 's'} ${delta > 0 ? 'above' : 'below'} target — ${formatAmount(Math.abs(amount - targetAmount))} ${delta > 0 ? 'more' : 'less'} than the rule suggests`}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          {real.overspent > 0 && (
+            <div className="rounded-xl bg-rose-50 border border-rose-200 p-3">
+              <p className="text-xs text-rose-700">
+                You spent {formatAmount(real.overspent)} more than you earned this month, so there is no surplus to save.
+              </p>
+            </div>
+          )}
+
+          {real.unclassified > 0 && (
+            <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
+              <p className="text-xs text-gray-500">
+                {formatAmount(real.unclassified)} of spend sits in categories with no group yet, so it is left out of the three buckets.
+                Assign them on the <a href="/insights" className="text-teal-600 font-medium underline underline-offset-2">Insights page</a> to sharpen this split.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {!loading && !hasReal && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+          <p className="text-xs text-amber-700">
+            Not enough data to personalise this yet — record some income and expenses and this will show your real split.
+            In the meantime, use the what-if calculator below.
+          </p>
         </div>
       )}
+
+      {/* What-if fallback — plain target split for any income figure. */}
+      <ToolCard>
+        <button type="button" onClick={() => setShowWhatIf(v => !v)}
+          className="w-full flex items-center justify-between text-left">
+          <span className="text-sm font-semibold text-gray-700">What-if: split any income</span>
+          <span className="text-gray-400 text-xs">{showWhatIf ? 'Hide' : 'Show'}</span>
+        </button>
+
+        {(showWhatIf || !hasReal) && (
+          <div className="mt-4 space-y-4">
+            <p className="text-xs text-gray-500">
+              The 50/30/20 rule splits take-home income into needs, wants and savings — a simple starting point for any budget.
+            </p>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <AmountInput label={`Monthly take-home income (${currency})`} value={income} onChange={setIncome} placeholder="10,000,000" />
+              <SubmitBtn label="Calculate Split" />
+            </form>
+
+            {manual && (
+              <div className="space-y-3">
+                {['needs', 'wants', 'savings'].map(key => {
+                  const s = RULE_BUCKET_STYLE[key];
+                  return (
+                    <div key={key} className={`rounded-2xl border p-4 ${s.bg} ${s.border}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <span className={`text-sm font-bold ${s.text}`}>{s.target}% — {s.label}</span>
+                          <p className="text-xs text-gray-500 mt-0.5">{s.sub}</p>
+                        </div>
+                        <span className={`text-lg font-black ${s.text} tabular-nums`}>{formatAmount(manual[key])}</span>
+                      </div>
+                      <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
+                        <div className={`h-1.5 rounded-full ${s.bar}`} style={{ width: `${s.target}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
+                  <p className="text-xs text-gray-400">Based on monthly income of</p>
+                  <p className="text-base font-bold text-gray-800 mt-0.5 tabular-nums">{formatAmount(manual.income)}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </ToolCard>
     </div>
   );
 }
@@ -1109,108 +1316,8 @@ function FireTool() {
   );
 }
 
-// ─── Tool 8: Inflation Impact ─────────────────────────────────────────────────
-function InflationTool() {
-  const { formatAmount, currency } = useCurrency();
-  const [amount,    setAmount]    = useState('');
-  const [years,     setYears]     = useState('10');
-  const [inflation, setInflation] = useState('5');
-  const [result,    setResult]    = useState(null);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const amt  = parseNum(amount);
-    const yrs  = parseInt(years) || 10;
-    const rate = parseFloat(inflation) / 100 || 0.05;
-    if (!amt || yrs < 1) return;
-
-    const futureValue  = amt * Math.pow(1 + rate, yrs);
-    const presentValue = amt / Math.pow(1 + rate, yrs); // what today's amount is worth in the future
-    const loss         = futureValue - amt;
-    const lossPct      = Math.round(((futureValue - amt) / amt) * 100);
-
-    // Year-by-year breakdown (every 5 years)
-    const milestones = [];
-    for (let y = 5; y <= yrs; y += 5) {
-      milestones.push({ year: y, value: Math.round(amt * Math.pow(1 + rate, y)) });
-    }
-    if (!milestones.find(m => m.year === yrs)) milestones.push({ year: yrs, value: Math.round(futureValue) });
-
-    setResult({ amt, yrs, rate, futureValue: Math.round(futureValue), loss: Math.round(loss), lossPct, presentPower: Math.round(presentValue), milestones });
-  };
-
-  return (
-    <div className="space-y-4">
-      <ToolCard>
-        <p className="text-xs text-gray-500 mb-4">
-          See how inflation erodes purchasing power over time — and what today&apos;s money will actually be worth.
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label={`Amount today (${currency})`} value={amount} onChange={setAmount} placeholder="10,000,000" />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Years ahead</label>
-              <input type="number" value={years} onChange={e => setYears(e.target.value)}
-                min="1" max="50" placeholder="10"
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Inflation rate (%/yr)</label>
-              <input type="number" value={inflation} onChange={e => setInflation(e.target.value)}
-                step="0.5" min="0" max="30" placeholder="5"
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-            </div>
-          </div>
-          <SubmitBtn label="Calculate Impact" />
-        </form>
-      </ToolCard>
-
-      {result && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border-2 border-gray-200 bg-white p-4 text-center">
-              <p className="text-xs text-gray-400 mb-1">Today&apos;s value</p>
-              <p className="text-xl font-black text-gray-800">{formatAmount(result.amt)}</p>
-            </div>
-            <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 text-center">
-              <p className="text-xs text-rose-500 mb-1">Costs in {result.yrs} years</p>
-              <p className="text-xl font-black text-rose-700">{formatAmount(result.futureValue)}</p>
-            </div>
-          </div>
-
-          <ToolCard>
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">Purchasing power erosion</h4>
-            <div className="mb-4">
-              <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-                <span>Real value remaining</span>
-                <span>{100 - Math.min(result.lossPct, 100)}%</span>
-              </div>
-              <ProgressBar value={result.amt} max={result.futureValue} color="rose" />
-            </div>
-            <StatRow label="Price increase" value={`+${formatAmount(result.loss)} (+${result.lossPct}%)`}
-              valueClass="text-rose-600" />
-            <StatRow label="Inflation rate" value={`${(result.rate * 100).toFixed(1)}% / yr`} />
-            <StatRow label="Years" value={result.yrs} />
-          </ToolCard>
-
-          {result.milestones.length > 0 && (
-            <ToolCard>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">Cost over time</h4>
-              {result.milestones.map(({ year, value }) => (
-                <div key={year} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                  <span className="text-sm text-gray-600">Year {year}</span>
-                  <span className="text-sm font-semibold text-rose-600">{formatAmount(value)}</span>
-                </div>
-              ))}
-            </ToolCard>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Tool 9: Tax Estimator (PPh 21 Indonesia) ─────────────────────────────────
+// ─── Tool 8: Tax Estimator (PPh 21 Indonesia) ─────────────────────────────────
+// Annual progressive rates and PTKP per UU HPP (Law 7/2021), unchanged for 2026.
 const PPH21_BRACKETS = [
   { max: 60_000_000,   rate: 0.05 },
   { max: 250_000_000,  rate: 0.15 },
@@ -1220,11 +1327,20 @@ const PPH21_BRACKETS = [
 ];
 const PTKP = { tk: 54_000_000, k0: 58_500_000, k1: 63_000_000, k2: 67_500_000, k3: 72_000_000 };
 
-function TaxTool() {
+// TER (Tarif Efektif Rata-rata, PP 58/2023) category per PTKP status. Since
+// January 2024 employers withhold Jan–Nov at a single effective rate looked up
+// from the TER table for this category, then reconcile in December against the
+// annual progressive calculation below — so the annual figure is still the one
+// that decides what you actually owe for the year.
+const TER_CATEGORY = { tk: 'A', k0: 'A', k1: 'B', k2: 'B', k3: 'C' };
+
+function TaxTool({ identity }) {
   const { formatAmount, currency } = useCurrency();
   const [gross,    setGross]    = useState('');
   const [status,   setStatus]   = useState('tk');
   const [result,   setResult]   = useState(null);
+
+  const avgIncome = Math.round(identity?.avgMonthlyIncome ?? 0);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1248,7 +1364,11 @@ function TaxTool() {
     const effectiveRate = annualGross > 0 ? ((tax / annualGross) * 100).toFixed(2) : 0;
     const takeHome = annualGross - tax;
 
-    setResult({ annualGross, ptkp, pkp, tax, monthlyTax, effectiveRate, takeHome, details });
+    setResult({
+      annualGross, ptkp, pkp, tax, monthlyTax, effectiveRate, takeHome, details,
+      monthlyGross: Math.round(annualGross / 12),
+      terCategory: TER_CATEGORY[status],
+    });
   };
 
   const STATUS_OPTIONS = [
@@ -1266,7 +1386,15 @@ function TaxTool() {
           Estimates PPh 21 income tax under Indonesian tax law (UU HPP 2021 rates). This is an estimate — consult a tax professional for exact figures.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label="Monthly gross salary (IDR)" value={gross} onChange={setGross} placeholder="10,000,000" />
+          <div>
+            {avgIncome > 0 && (
+              <button type="button" onClick={() => setGross(fmtInput(String(avgIncome)))}
+                className="text-xs text-teal-600 hover:text-teal-700 font-medium underline underline-offset-2 mb-2 block">
+                Use my average monthly income ({formatAmount(avgIncome)})
+              </button>
+            )}
+            <AmountInput label="Monthly gross salary (IDR)" value={gross} onChange={setGross} placeholder="10,000,000" />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">PTKP status</label>
             <select value={status} onChange={e => setStatus(e.target.value)}
@@ -1318,10 +1446,34 @@ function TaxTool() {
             </ToolCard>
           )}
 
+          <ToolCard>
+            <div className="flex items-center justify-between mb-2 gap-2">
+              <h4 className="text-sm font-semibold text-gray-700">How your employer actually withholds it (TER)</h4>
+              <span className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5 shrink-0">
+                Category {result.terCategory}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Since January 2024 (PP 58/2023) employers do not run the progressive calculation every month.
+              For January–November they apply a single <strong>average effective rate (TER)</strong> looked up from the
+              official table by TER category and monthly gross — your PTKP status ({STATUS_OPTIONS.find(o => o.val === status)?.label}) puts you in
+              category {result.terCategory}, at a monthly gross of {formatAmount(result.monthlyGross)}.
+              In <strong>December</strong> the employer reconciles the year against the progressive brackets above, so
+              December&apos;s deduction is usually much larger or smaller than the other eleven.
+            </p>
+            <div className="mt-3">
+              <StatRow label="Annual liability (progressive)" value={formatAmount(result.tax)}
+                sub="What December reconciles to — the figure that matters" valueClass="text-rose-600" />
+              <StatRow label="Average per month" value={formatAmount(result.monthlyTax)}
+                sub="Annual ÷ 12 — your real Jan–Nov TER deduction will differ" />
+            </div>
+          </ToolCard>
+
           <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
             <p className="text-xs text-amber-700">
-              This estimate uses the standard 5% job-cost deduction (max Rp 6 jt/yr) and 2021 UU HPP progressive rates.
-              Actual tax may differ based on other deductions or allowances.
+              This estimate uses the standard 5% job-cost deduction (max Rp 6 jt/yr) and the UU HPP progressive rates
+              (5% / 15% / 25% / 30% / 35% at Rp 60 jt / 250 jt / 500 jt / 5 M), current for 2026.
+              It does not model TER month-by-month, BPJS contributions, or other allowances — actual withholding will differ.
             </p>
           </div>
         </div>
@@ -1330,121 +1482,247 @@ function TaxTool() {
   );
 }
 
-// ─── Tool 10: Net Worth Tracker ───────────────────────────────────────────────
-function NetWorthTool() {
-  const { formatAmount, currency } = useCurrency();
-  const [assets,      setAssets]      = useState([{ id: 1, name: '', value: '' }]);
-  const [liabilities, setLiabilities] = useState([{ id: 1, name: '', value: '' }]);
-  const [result,      setResult]      = useState(null);
+// ─── Tool 9: Net Worth (persistent — tracked monthly) ────────────────────────
+// Not a calculator: holdings are stored server-side and every save upserts one
+// snapshot for the current month, so the trend line gets a point per month
+// rather than a point per edit.
+const ASSET_TYPES = [
+  { val: 'cash',       label: 'Cash & savings' },
+  { val: 'investment', label: 'Investment' },
+  { val: 'property',   label: 'Property' },
+  { val: 'vehicle',    label: 'Vehicle' },
+  { val: 'receivable', label: 'Owed to me' },
+  { val: 'other',      label: 'Other' },
+];
+const LIABILITY_TYPES = [
+  { val: 'loan',        label: 'Loan' },
+  { val: 'mortgage',    label: 'Mortgage' },
+  { val: 'credit_card', label: 'Credit card' },
+  { val: 'bnpl',        label: 'BNPL / paylater' },
+  { val: 'payable',     label: 'I owe' },
+  { val: 'other',       label: 'Other' },
+];
 
-  const addRow = (setter) => setter(r => [...r, { id: Date.now(), name: '', value: '' }]);
-  const removeRow = (setter, id) => setter(r => r.filter(x => x.id !== id));
-  const updateRow = (setter, id, field, val) => setter(r => r.map(x => x.id === id ? { ...x, [field]: val } : x));
+let nwRowSeq = 0;
+const nwKey = () => `nw${++nwRowSeq}`;
+const toEditorRow = (r) => ({ key: nwKey(), label: r.label ?? '', amount: r.amount ? fmtInput(String(r.amount)) : '', type: r.type ?? 'other' });
+const blankRow = (type) => ({ key: nwKey(), label: '', amount: '', type });
+const rowsTotal = (rows) => rows.reduce((s, r) => s + parseNum(r.amount), 0);
+// Only fully-blank rows are dropped silently; a half-filled row is a validation error.
+const isBlankRow = (r) => !r.label.trim() && !parseNum(r.amount);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const a = assets.map(x => ({ name: x.name || 'Asset', value: parseNum(x.value) })).filter(x => x.value > 0);
-    const l = liabilities.map(x => ({ name: x.name || 'Liability', value: parseNum(x.value) })).filter(x => x.value > 0);
-    const totalAssets = a.reduce((s, x) => s + x.value, 0);
-    const totalLiabilities = l.reduce((s, x) => s + x.value, 0);
-    const netWorth = totalAssets - totalLiabilities;
-    setResult({ assets: a, liabilities: l, totalAssets, totalLiabilities, netWorth });
-  };
-
-  const RowInput = ({ rows, setter, placeholder }) => (
+// Module-level so React keeps the inputs mounted across re-renders — a nested
+// component definition remounts every keystroke and drops focus mid-typing.
+function HoldingRows({ rows, types, accent, namePlaceholder, onEdit, onRemove, onAdd }) {
+  const { currency } = useCurrency();
+  return (
     <div className="space-y-2">
       {rows.map((r, i) => (
-        <div key={r.id} className="flex gap-2 items-center">
-          <input type="text" placeholder={`${placeholder} ${i+1}`} value={r.name}
-            onChange={e => updateRow(setter, r.id, 'name', e.target.value)}
-            className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-          <div className="relative w-40">
+        <div key={r.key} className="flex gap-2 items-center">
+          <input type="text" placeholder={`${namePlaceholder} ${i + 1}`} value={r.label}
+            onChange={e => onEdit(r.key, 'label', e.target.value)}
+            maxLength={60}
+            className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+          <select value={r.type} onChange={e => onEdit(r.key, 'type', e.target.value)}
+            className="w-28 shrink-0 px-2 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+            {types.map(t => <option key={t.val} value={t.val}>{t.label}</option>)}
+          </select>
+          <div className="relative w-36 shrink-0">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none max-w-[2.5rem] truncate">{currency}</span>
-            <input type="text" placeholder="0" value={r.value}
-              onChange={e => updateRow(setter, r.id, 'value', fmtInput(e.target.value))}
-              className="w-full pl-11 pr-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+            <input type="text" inputMode="numeric" placeholder="0" value={r.amount}
+              onChange={e => onEdit(r.key, 'amount', fmtInput(e.target.value))}
+              className="w-full pl-11 pr-2 py-1.5 rounded-lg border border-gray-200 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           </div>
-          {rows.length > 1 && (
-            <button type="button" onClick={() => removeRow(setter, r.id)}
-              className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
-          )}
+          <button type="button" onClick={() => onRemove(r.key)} aria-label="Remove row"
+            className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none shrink-0">×</button>
         </div>
       ))}
-      <button type="button" onClick={() => addRow(setter)}
-        className="text-xs text-teal-600 hover:text-teal-700 font-medium">+ Add row</button>
+      <button type="button" onClick={onAdd}
+        className={`text-xs font-medium ${accent}`}>+ Add row</button>
     </div>
   );
+}
+
+function NetWorthTool() {
+  const { formatAmount } = useCurrency();
+  const [assets,      setAssets]      = useState([blankRow('cash')]);
+  const [liabilities, setLiabilities] = useState([blankRow('loan')]);
+  const [history,     setHistory]     = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [saving,      setSaving]      = useState(false);
+  const [error,       setError]       = useState('');
+  const [notice,      setNotice]      = useState('');
+  const [seeded,      setSeeded]      = useState(false);
+  const [lastSaved,   setLastSaved]   = useState(null);
+
+  const applyHoldings = useCallback((data) => {
+    const a = (data?.assets      ?? []).map(toEditorRow);
+    const l = (data?.liabilities ?? []).map(toEditorRow);
+    setAssets(a.length ? a : [blankRow('cash')]);
+    setLiabilities(l.length ? l : [blankRow('loan')]);
+    setSeeded(Boolean(data?.seeded));
+    setLastSaved(data?.seeded ? null : (data?.updatedAt ?? null));
+  }, []);
+
+  const loadHistory = useCallback(() => (
+    getNetWorthHistory(24)
+      .then(res => setHistory(res.data?.history ?? []))
+      .catch(() => {})
+  ), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getNetWorth(), getNetWorthHistory(24)])
+      .then(([nw, hist]) => {
+        if (cancelled) return;
+        applyHoldings(nw.data);
+        setHistory(hist.data?.history ?? []);
+      })
+      .catch(err => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [applyHoldings]);
+
+  const editRow   = (setter) => (key, field, val) => setter(rows => rows.map(r => r.key === key ? { ...r, [field]: val } : r));
+  const removeRow = (setter, fallbackType) => (key) => setter(rows => {
+    const next = rows.filter(r => r.key !== key);
+    return next.length ? next : [blankRow(fallbackType)];
+  });
+
+  const totalAssets      = rowsTotal(assets);
+  const totalLiabilities = rowsTotal(liabilities);
+  const netWorth         = totalAssets - totalLiabilities;
+
+  const handleSave = async () => {
+    setError(''); setNotice('');
+    const half = [...assets, ...liabilities].find(r => !isBlankRow(r) && !r.label.trim());
+    if (half) { setError('Every row needs a name before it can be saved.'); return; }
+
+    const pack = (rows) => rows.filter(r => !isBlankRow(r))
+      .map(r => ({ label: r.label.trim(), amount: parseNum(r.amount), type: r.type }));
+
+    setSaving(true);
+    try {
+      const res = await saveNetWorth(pack(assets), pack(liabilities));
+      applyHoldings(res.data);
+      await loadHistory();
+      setNotice(`Saved — ${monthLabel(res.data?.snapshotMonth)} recorded on your trend.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const chartData = history.map(h => ({
+    name: monthLabel(h.yearMonth),
+    netWorth: h.netWorth,
+    assets: h.assets,
+    liabilities: h.liabilities,
+  }));
+  const prev   = history.length > 1 ? history[history.length - 2] : null;
+  const latest = history.length > 0 ? history[history.length - 1] : null;
+  const change = prev && latest ? latest.netWorth - prev.netWorth : null;
+
+  if (loading) {
+    return (
+      <ToolCard>
+        <div className="h-4 w-36 bg-gray-100 rounded animate-pulse mb-3" />
+        <div className="h-24 bg-gray-50 rounded-xl animate-pulse" />
+      </ToolCard>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      <ToolCard>
-        <p className="text-xs text-gray-500 mb-4">
-          Net worth = what you own minus what you owe. Tracking it over time is the clearest measure of financial progress.
+      {/* Live headline — updates as you type, saved value lands on the trend */}
+      <div className={`rounded-2xl border-2 p-5 text-center ${netWorth >= 0 ? 'border-teal-300 bg-teal-50' : 'border-rose-300 bg-rose-50'}`}>
+        <p className="text-xs font-medium text-gray-500 mb-1">Net worth</p>
+        <p className={`text-3xl font-black tabular-nums ${netWorth >= 0 ? 'text-teal-700' : 'text-rose-700'}`}>
+          {netWorth < 0 && '−'}{formatAmount(Math.abs(netWorth))}
         </p>
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <p className="text-xs text-gray-500 mt-1.5 tabular-nums">
+          {formatAmount(totalAssets)} owned − {formatAmount(totalLiabilities)} owed
+        </p>
+        {change !== null && (
+          <p className={`text-xs mt-1 font-medium ${change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {change >= 0 ? '+' : '−'}{formatAmount(Math.abs(change))} vs {monthLabel(prev.yearMonth)}
+          </p>
+        )}
+        {lastSaved && (
+          <p className="text-xs text-gray-400 mt-1">Last saved {new Date(lastSaved).toLocaleDateString()}</p>
+        )}
+      </div>
+
+      {chartData.length >= 2 ? (
+        <ToolCard>
+          <h4 className="text-sm font-semibold text-gray-700 mb-3">Monthly trend</h4>
+          <NetWorthTrendChart data={chartData} />
+        </ToolCard>
+      ) : (
+        <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
+          <p className="text-xs text-gray-500">
+            {chartData.length === 1
+              ? 'One month recorded. Save again next month and the trend line appears.'
+              : 'Save your holdings to start the trend. One point is recorded per month.'}
+          </p>
+        </div>
+      )}
+
+      {seeded && (
+        <div className="rounded-xl bg-teal-50 border border-teal-200 p-3">
+          <p className="text-xs text-teal-700">
+            We pre-filled your tracked cash balance to get you started. Add the rest of what you own and owe, then save.
+          </p>
+        </div>
+      )}
+
+      <ToolCard>
+        {error  && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
+        {notice && <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">{notice}</div>}
+
+        <div className="space-y-5">
           <div>
-            <h4 className="text-sm font-semibold text-emerald-700 mb-2">Assets — what you own</h4>
-            <RowInput rows={assets} setter={setAssets} placeholder="Asset" />
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-emerald-700">Assets — what you own</h4>
+              <span className="text-sm font-bold text-emerald-700 tabular-nums">{formatAmount(totalAssets)}</span>
+            </div>
+            <HoldingRows rows={assets} types={ASSET_TYPES} namePlaceholder="Asset"
+              accent="text-emerald-600 hover:text-emerald-700"
+              onEdit={editRow(setAssets)} onRemove={removeRow(setAssets, 'cash')}
+              onAdd={() => setAssets(r => [...r, blankRow('cash')])} />
           </div>
+
           <div>
-            <h4 className="text-sm font-semibold text-rose-600 mb-2">Liabilities — what you owe</h4>
-            <RowInput rows={liabilities} setter={setLiabilities} placeholder="Liability" />
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-rose-600">Liabilities — what you owe</h4>
+              <span className="text-sm font-bold text-rose-600 tabular-nums">{formatAmount(totalLiabilities)}</span>
+            </div>
+            <HoldingRows rows={liabilities} types={LIABILITY_TYPES} namePlaceholder="Liability"
+              accent="text-rose-500 hover:text-rose-600"
+              onEdit={editRow(setLiabilities)} onRemove={removeRow(setLiabilities, 'loan')}
+              onAdd={() => setLiabilities(r => [...r, blankRow('loan')])} />
           </div>
-          <SubmitBtn label="Calculate Net Worth" />
-        </form>
+
+          <button type="button" onClick={handleSave} disabled={saving}
+            className="w-full py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+            {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            Save & record this month
+          </button>
+        </div>
       </ToolCard>
 
-      {result && (
-        <div className="space-y-4">
-          <div className={`rounded-2xl border-2 p-5 text-center ${result.netWorth >= 0 ? 'border-teal-300 bg-teal-50' : 'border-rose-300 bg-rose-50'}`}>
-            <p className="text-xs font-medium text-gray-500 mb-1">Net Worth</p>
-            <p className={`text-3xl font-black ${result.netWorth >= 0 ? 'text-teal-700' : 'text-rose-700'}`}>
-              {result.netWorth >= 0 ? '' : '−'}{formatAmount(Math.abs(result.netWorth))}
-            </p>
+      {totalAssets > 0 && (
+        <ToolCard>
+          <div className="mb-2 flex justify-between text-xs text-gray-500">
+            <span>Asset coverage ratio</span>
+            <span>{totalLiabilities > 0 ? `${(totalAssets / totalLiabilities).toFixed(1)}×` : '∞'}</span>
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <ToolCard>
-              <p className="text-xs font-semibold text-emerald-700 mb-2">Assets</p>
-              {result.assets.map((a, i) => (
-                <div key={i} className="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
-                  <span className="text-gray-600 truncate mr-2">{a.name}</span>
-                  <span className="font-medium text-emerald-700 shrink-0">{formatAmount(a.value)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between text-sm font-bold pt-2 mt-1 border-t border-gray-200">
-                <span>Total</span>
-                <span className="text-emerald-700">{formatAmount(result.totalAssets)}</span>
-              </div>
-            </ToolCard>
-            <ToolCard>
-              <p className="text-xs font-semibold text-rose-600 mb-2">Liabilities</p>
-              {result.liabilities.length > 0 ? result.liabilities.map((l, i) => (
-                <div key={i} className="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
-                  <span className="text-gray-600 truncate mr-2">{l.name}</span>
-                  <span className="font-medium text-rose-600 shrink-0">{formatAmount(l.value)}</span>
-                </div>
-              )) : <p className="text-xs text-gray-400 italic">None</p>}
-              <div className="flex justify-between text-sm font-bold pt-2 mt-1 border-t border-gray-200">
-                <span>Total</span>
-                <span className="text-rose-600">{formatAmount(result.totalLiabilities)}</span>
-              </div>
-            </ToolCard>
-          </div>
-
-          {result.totalAssets > 0 && (
-            <ToolCard>
-              <div className="mb-2 flex justify-between text-xs text-gray-500">
-                <span>Asset coverage ratio</span>
-                <span>{result.totalLiabilities > 0 ? `${(result.totalAssets / result.totalLiabilities).toFixed(1)}×` : '∞'}</span>
-              </div>
-              <ProgressBar value={result.totalAssets - result.totalLiabilities} max={result.totalAssets} color={result.netWorth >= 0 ? 'teal' : 'rose'} />
-              <p className="text-xs text-gray-400 mt-1.5">
-                {result.netWorth >= 0 ? `${Math.round((result.netWorth / result.totalAssets) * 100)}% of assets are unencumbered` : 'Liabilities exceed assets'}
-              </p>
-            </ToolCard>
-          )}
-        </div>
+          <ProgressBar value={Math.max(netWorth, 0)} max={totalAssets} color={netWorth >= 0 ? 'teal' : 'rose'} />
+          <p className="text-xs text-gray-400 mt-1.5">
+            {netWorth >= 0 ? `${Math.round((netWorth / totalAssets) * 100)}% of assets are unencumbered` : 'Liabilities exceed assets'}
+          </p>
+        </ToolCard>
       )}
     </div>
   );
@@ -1461,11 +1739,12 @@ const TOOL_INFO = {
     ],
   },
   rule: {
-    tip:   { title: 'Rule of 72', body: 'Divide 72 by your annual return to find years to double money. At 7%: 72 ÷ 7 ≈ 10 years.' },
+    tip:   { title: 'Rule of 72', body: 'Divide 72 by your annual return to find years to double money. At 7%: 72 ÷ 7 ≈ 10 years. At 5% inflation, prices double every ~14 years — cash left idle halves in real terms.' },
     refs:  [
-      { label: 'Needs',   value: '50% of income' },
-      { label: 'Wants',   value: '30% of income' },
-      { label: 'Savings', value: '20% of income' },
+      { label: 'Needs',   value: 'essential' },
+      { label: 'Wants',   value: 'discretionary + social' },
+      { label: 'Savings', value: 'savings + surplus' },
+      { label: 'Target',  value: '50 / 30 / 20' },
     ],
   },
   goal: {
@@ -1508,14 +1787,6 @@ const TOOL_INFO = {
       { label: 'Lean FIRE rate', value: '3.5% (more conservative)' },
     ],
   },
-  inflation: {
-    tip:   { title: 'Real vs nominal', body: 'At 5% inflation prices double every ~14 years (72 ÷ 5). Cash loses half its value in 14 years without investment.' },
-    refs:  [
-      { label: 'Indonesia avg inflation', value: '~3–5% / yr' },
-      { label: 'Doubling formula',        value: '72 ÷ inflation rate' },
-      { label: 'At 5% for 10 yrs',        value: '+62.9% price rise' },
-    ],
-  },
   tax: {
     tip:   { title: 'Gross vs net', body: 'Always negotiate salary in gross. Plan expenses in net (take-home). A 10% gross raise is often much less than 10% more cash.' },
     refs:  [
@@ -1524,14 +1795,18 @@ const TOOL_INFO = {
       { label: 'Rp 250–500 jt/yr',     value: '25%' },
       { label: 'Rp 500 jt–5 M/yr',     value: '30%' },
       { label: 'Above Rp 5 M/yr',      value: '35%' },
+      { label: 'PTKP TK/0',            value: 'Rp 54 jt/yr' },
+      { label: 'Jan–Nov withholding',  value: 'TER effective rate' },
+      { label: 'December',             value: 'Progressive reconciliation' },
     ],
   },
   networth: {
-    tip:   { title: 'Track monthly', body: 'Update your net worth monthly. Even when a month feels bad, your long-term trajectory is what matters most.' },
+    tip:   { title: 'Track monthly', body: 'Saving your holdings records one point per month. Even when a month feels bad, the trajectory of the line is what matters most.' },
     refs:  [
       { label: 'Net worth',       value: 'Assets − Liabilities' },
       { label: 'Good ratio',      value: 'Assets > 2× Liabilities' },
       { label: 'Target by 30',    value: '~1× annual income' },
+      { label: 'Trend',           value: 'One point per month' },
     ],
   },
 };
@@ -1570,7 +1845,7 @@ function RightPanel({ toolId }) {
       {/* Navigate tip */}
       <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
         <p className="text-xs text-gray-400 leading-relaxed">
-          <span className="font-medium text-gray-500">10 tools available.</span> Use the <span className="sm:hidden">tabs above</span><span className="hidden sm:inline">sidebar</span> to switch between budgeting, saving, debt, investing, and tax tools.
+          <span className="font-medium text-gray-500">{TOOLS.length} tools available.</span> Use the <span className="sm:hidden">tabs above</span><span className="hidden sm:inline">sidebar</span> to switch between budgeting, saving, debt, investing, and tax tools.
         </p>
       </div>
     </div>
@@ -1586,7 +1861,6 @@ const TOOLS = [
   { id: 'emergency', label: 'Emergency Fund',       icon: '🛡️', desc: 'Check your safety net coverage',             Component: EmergencyFundTool, passbudget: false },
   { id: 'debt',      label: 'Debt Payoff',          icon: '💳', desc: 'Snowball or avalanche your debts',           Component: DebtTool,       passbudget: false },
   { id: 'fire',      label: 'FIRE Calculator',      icon: '🔥', desc: 'Find your financial independence number',    Component: FireTool,       passbudget: false },
-  { id: 'inflation', label: 'Inflation Impact',     icon: '📉', desc: 'How inflation erodes purchasing power',      Component: InflationTool,  passbudget: false },
   { id: 'tax',       label: 'Tax Estimator',        icon: '🧾', desc: 'Estimate PPh 21 income tax (Indonesia)',     Component: TaxTool,        passbudget: false },
   { id: 'networth',  label: 'Net Worth',            icon: '📋', desc: 'Track assets vs liabilities',               Component: NetWorthTool,   passbudget: false },
 ];
@@ -1599,10 +1873,14 @@ function PlannerInner() {
 
   const [active,      setActive]      = useState(initialTool);
   const [savedBudget, setSavedBudget] = useState(0);
+  const [identity,    setIdentity]    = useState(null);
 
   useEffect(() => {
     getProfile()
-      .then(res => setSavedBudget(res.data?.preferences?.monthlyBudget ?? 0))
+      .then(res => {
+        setSavedBudget(res.data?.preferences?.monthlyBudget ?? 0);
+        setIdentity(res.data?.identity ?? null);
+      })
       .catch(() => {});
   }, []);
 
@@ -1666,7 +1944,7 @@ function PlannerInner() {
                     <p className="text-xs text-gray-500">{tool.desc}</p>
                   </div>
                 </div>
-                <Component {...(passbudget ? { savedBudget } : {})} />
+                <Component {...(passbudget ? { savedBudget } : {})} identity={identity} />
                 {/* Tip shown inline on mobile/tablet */}
                 <div className="xl:hidden">
                   <RightPanel toolId={active} />

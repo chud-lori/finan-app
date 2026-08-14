@@ -15,6 +15,8 @@ const Budget      = require('../models/budget.model');
 const Preference  = require('../models/preference.model');
 const Snapshot    = require('../models/snapshot.model');
 const MLInsight   = require('../models/mlinsight.model');
+const NetWorth    = require('../models/netWorth.model');
+const NetWorthSnapshot = require('../models/netWorthSnapshot.model');
 const User        = require('../models/user.model');
 
 chai.use(chaiHttp);
@@ -145,6 +147,12 @@ describe('Data integrity regressions', () => {
                 { $set: { income: 0, expense: 25000, txCount: 1, byCategory: [] } }, { upsert: true });
             await MLInsight.updateOne({ user: userId, yearMonth: '2026-08' },
                 { $set: { generatedAt: new Date(), txCountSnapshot: 1 } }, { upsert: true });
+            // Net worth holdings + trend history — a declared house and mortgage
+            // is exactly the kind of data a deletion request is about.
+            await chai.request(server).put('/api/networth').set('Cookie', cookie).send({
+                assets:      [{ label: 'House', amount: 900000000, type: 'property' }],
+                liabilities: [{ label: 'Mortgage', amount: 400000000, type: 'mortgage' }],
+            });
 
             const res = await chai.request(server)
                 .delete('/api/auth/account')
@@ -155,6 +163,7 @@ describe('Data integrity regressions', () => {
             for (const [name, Model] of Object.entries({
                 transaction: Transaction, category: Category, goal: Goal, budget: Budget,
                 preference: Preference, snapshot: Snapshot, mlinsight: MLInsight,
+                networth: NetWorth, networthSnapshot: NetWorthSnapshot,
             })) {
                 leftovers[name] = await Model.countDocuments({ user: userId });
             }
@@ -163,7 +172,8 @@ describe('Data integrity regressions', () => {
 
             expect(leftovers).to.deep.equal({
                 transaction: 0, category: 0, goal: 0, budget: 0,
-                preference: 0, snapshot: 0, mlinsight: 0, balance: 0, user: 0,
+                preference: 0, snapshot: 0, mlinsight: 0,
+                networth: 0, networthSnapshot: 0, balance: 0, user: 0,
             });
         });
     });
