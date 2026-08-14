@@ -239,9 +239,13 @@ const getUserTransaction = async (req, res, next) => {
     try {
         logger.info(`Get user transaction: ${req.user.id}`);
 
-        const month    = req.query.month;
-        const category = req.query.category;
-        const search   = req.query.search;
+        // Coerce query params to strings. Express's qs parser turns `?category[$ne]=x`
+        // into an object; passing that to escapeRegex/.trim() would throw a 500 (and
+        // spam the error log). Non-strings are ignored, not run as Mongo operators.
+        const asString = (v) => (typeof v === 'string' ? v : undefined);
+        const month    = asString(req.query.month);
+        const category = asString(req.query.category);
+        const search   = asString(req.query.search);
         const sortBy   = ['description', 'amount', 'time'].includes(req.query.sortBy) ? req.query.sortBy : 'time';
         const order    = req.query.order === 'asc' ? 1 : -1;
         const page     = Math.max(1, parseInt(req.query.page)  || 1);
@@ -629,7 +633,7 @@ const seedCategory = async (req, res, next) => {
 const getCategory = async (req, res, next) => {
     try {
         logger.info(`Get list of category`);
-        const search = req.query.search || '';
+        const search = typeof req.query.search === 'string' ? req.query.search : '';
         const typeFilter = req.query.type; // 'income' | 'expense' | undefined
 
         // Passive top-up for existing users who have no categories yet

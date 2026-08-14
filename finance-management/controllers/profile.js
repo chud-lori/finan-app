@@ -239,11 +239,19 @@ const exportTransactions = async (req, res) => {
         ];
 
         const header = ['Description', 'Amount', 'Type', 'Category', 'Date & Time', 'Timezone', 'Currency'];
+        // Neutralise CSV/spreadsheet formula injection: a cell whose text starts
+        // with = + - @ (or a control char) is executed as a formula by Excel/Sheets
+        // on open. Prefix such user-supplied cells with a single quote, then quote
+        // and escape as normal.
+        const csvCell = (v) => {
+            let s = String(v ?? '');
+            if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+            return `"${s.replace(/"/g, '""')}"`;
+        };
         const rows = txns.map(t => {
             const txTz  = t.transaction_timezone || 'UTC';
             const stamp = moment(t.time).tz(txTz).format('M/D/YYYY H:mm:ss');
-            const desc  = `"${(t.description || '').replace(/"/g, '""')}"`;
-            return [desc, t.amount, t.type, t.category, stamp, txTz, (t.currency || 'IDR').toUpperCase()].join(',');
+            return [csvCell(t.description), t.amount, t.type, csvCell(t.category), stamp, txTz, (t.currency || 'IDR').toUpperCase()].join(',');
         });
 
         const csv = [...titleBlock, header.join(','), ...rows].join('\n');
