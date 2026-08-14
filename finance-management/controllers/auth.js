@@ -312,6 +312,8 @@ const deleteAccount = async (req, res) => {
             require('../models/mlinsight.model'),
             require('../models/passwordReset.model'),
             require('../models/emailVerification.model'),
+            require('../models/netWorth.model'),
+            require('../models/netWorthSnapshot.model'),
         ];
 
         await Promise.all([
