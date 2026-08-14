@@ -9,6 +9,7 @@ import {
 } from '@/lib/api';
 import { useCurrency } from '@/components/CurrencyContext';
 import NetWorthTrendChart from '@/components/charts/NetWorthTrendChart';
+import { buildRuleSplit } from '@/lib/ruleSplit';
 
 const currentYearMonth = () => {
   const d = new Date();
@@ -236,33 +237,6 @@ const RULE_BUCKET_STYLE = {
   needs:   { label: 'Needs',   target: 50, sub: 'Essential — rent, groceries, utilities, transport', bar: 'bg-teal-500',    text: 'text-teal-700',    bg: 'bg-teal-50',    border: 'border-teal-200'    },
   wants:   { label: 'Wants',   target: 30, sub: 'Discretionary + social — dining, hobbies, sharing',  bar: 'bg-amber-400',   text: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200'   },
   savings: { label: 'Savings', target: 20, sub: 'Savings categories + this month\'s surplus',          bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-};
-
-const buildRuleSplit = (groups, incomeBasis) => {
-  const g = (k) => Math.round(groups?.[k] ?? 0);
-  const totalExpense = Math.round(groups?.total ?? 0);
-
-  const needs   = g('essential');
-  const wants   = g('discretionary') + g('social');
-  // The 'income' group only shows up here when an expense category was
-  // classified as income — treat it as unclassified rather than guessing.
-  const unclassified = g('other') + g('income');
-
-  const surplus = incomeBasis - totalExpense;
-  const savings = g('savings') + Math.max(surplus, 0);
-
-  const pct = (v) => (incomeBasis > 0 ? Math.round((v / incomeBasis) * 100) : 0);
-
-  return {
-    incomeBasis, totalExpense, surplus, unclassified,
-    overspent: surplus < 0 ? -surplus : 0,
-    buckets: [
-      { key: 'needs',   amount: needs,   pct: pct(needs)   },
-      { key: 'wants',   amount: wants,   pct: pct(wants)   },
-      { key: 'savings', amount: savings, pct: pct(savings) },
-    ],
-    unclassifiedPct: pct(unclassified),
-  };
 };
 
 function BudgetRuleTool({ identity }) {

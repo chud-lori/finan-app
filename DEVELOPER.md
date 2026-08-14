@@ -1082,10 +1082,17 @@ bun run test:app
 
 Tests run against `mongodb-memory-server` — no real DB connection required. Rate limiting is disabled in `NODE_ENV=test`.
 
-### Frontend (Playwright E2E)
+### Frontend (Vitest unit + Playwright E2E)
+
+Pure frontend logic (no DOM) is unit-tested with Vitest — colocated `*.test.js`
+next to the module. Config: `vitest.config.mjs` (node env, `@/` alias mirrors
+jsconfig). CI runs `npm run test` on any `finance-management-fe/**` change.
 
 ```bash
 cd finance-management-fe
+
+npm run test              # Vitest unit tests (run once)
+npm run test:watch        # Vitest watch mode
 
 npm run test:e2e          # requires running app on localhost:3000
 npm run test:e2e:ui       # Playwright UI mode
