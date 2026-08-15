@@ -118,6 +118,7 @@ finan-app/                          ← monorepo root
 │   │   ├── mailer.js               ← Resend SDK (password reset + email verification)
 │   │   ├── snapshot.js             ← refreshSnapshot() + applySnapshotDelta()
 │   │   ├── spendingVolatility.js  ← classifyVolatility() — CV-based fixed/flexible category class
+│   │   ├── savingsCategories.js   ← getSavingsCategoryNames() — group==='savings' names to exclude from spend
 │   │   ├── financialHealth.js     ← computeFinancialHealth() — 0-100 score from 4 pillars
 │   │   ├── cache.js                ← in-process request cache
 │   │   └── logger.js               ← Winston logger
@@ -150,7 +151,7 @@ finan-app/                          ← monorepo root
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
     │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown; year nav bounded by availableYears; clicking a bar in yearly view opens month transaction modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
-    │   ├── recommendation/page.js  ← 9 financial planning calculators
+    │   ├── recommendation/page.js  ← 11 financial planning tools (incl. Windfall Planner, Zakat Estimator)
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
     │   └── settings/page.js        ← Theme, password change, sessions, delete account
     ├── components/
@@ -339,9 +340,29 @@ Category.updateOne({ group, groupConfidence })
 
 **User override learning:** When a user manually moves a category to a different group (`PATCH /api/category/:id/group`), `groupOverridden: true` is set. On the next classification run for that user, the overridden categories are loaded and used as learning hints — so future categories with similar names are matched to the user-defined group before the in-process classifier is consulted.
 
-**Default categories:** 28 expense + 9 income categories are seeded per-user from `categories.json` via `seedDefaultCategories()`. This runs fire-and-forget on new user registration (email/password and Google OAuth). For existing users with zero categories, `GET /api/transaction/category` triggers a passive seed before returning results — no manual migration needed.
+**Default categories:** 31 expense + 9 income categories are seeded per-user from `categories.json` via `seedDefaultCategories()`. This runs fire-and-forget on new user registration (email/password and Google OAuth). For existing users with zero categories, `GET /api/transaction/category` triggers a passive seed before returning results — no manual migration needed. Three of the expense defaults (`savings`, `reksa dana`, `stocks`) carry a `group: "savings"` in `categories.json`; `seedDefaultCategories()` writes that group **only on insert** (`$setOnInsert`), so a later user re-group is never clobbered by an idempotent re-seed, and because the seeded group is not `'other'`, `classifyAll` leaves it untouched.
 
 **`classifyAll` (`POST /api/category/classify-all`):** Processes all categories where `group === 'other'` AND `groupOverridden !== true`. Safe to call repeatedly. Called automatically on the Insights page load.
+
+---
+
+### Savings & investment visibility
+
+Transaction `type` is only `income | expense` — there is no `transfer`. Investing (reksa dana / DCA / a deposit) leaves spendable cash but is **not consumption**, so users would otherwise skip recording it and only enter leftover income, corrupting the savings rate, 50/30/20 split and net-worth flow.
+
+**Option A convention:** record the *full* income and log the investment as an **expense in a `group === 'savings'` category**. The atomic `$inc` balance still decrements (the cash really left), but every "spend" metric treats savings-group outflow as *saved, not spent*:
+
+| Metric | Where | Treatment |
+|--------|-------|-----------|
+| Savings rate | `controllers/gamification.js#computeHealth` | `(income − nonSavingsExpense) / income` — savings-group outflow is excluded from the expense figure (also excluded from the emergency-fund avg-expense and budget-pace denominators). |
+| Explainability spend | `controllers/transaction.js#getExplainability` | savings-group txns dropped from `totalOutcome`, top categories and the MoM baseline. |
+| Anomaly baseline (rule) | `controllers/transaction.js#getAnomalies` | savings-group txns removed from the current set, historical baseline and the "first-time category" signal. |
+| Anomaly baseline (ML) | `services/ml/anomaly.js#detectAnomalies` | skips any tx flagged `is_savings`; the flag is set in `_runMLPipeline` and savings-group outflow is also excluded from the forecast's `daily_totals`. |
+| 50/30/20 | `finance-management-fe/lib/ruleSplit.js#buildRuleSplit` | savings bucket = `savingsGroup + max(income − nonSavingsExpense − savingsGroup, 0)`. |
+
+**The double-count trap (50/30/20):** if savings-group outflow is excluded from expense, the surplus rises by exactly that amount. Adding both the raised surplus *and* the savings-group total to the savings bucket would count the invested rupiah twice. `buildRuleSplit` computes the surplus against **income − total outflow** (`income − nonSavingsExpense − savingsGroup`, i.e. the old `income − totalExpense`), so each rupiah lands in exactly one place: invested money in `savingsGroup`, idle cash in the surplus. Covered by a regression test in `lib/ruleSplit.test.js`.
+
+The category → savings lookup is centralised in `helpers/savingsCategories.js#getSavingsCategoryNames(userId)` (a lowercased `Set` of `group === 'savings'` category names).
 
 ---
 
@@ -542,6 +563,32 @@ Collection: goals
 
 ---
 
+### Allocation
+
+```
+Collection: allocations
+```
+
+Records a one-tap allocation of a cash-flow surplus or an income windfall into a
+`Goal`. **Not a money-movement ledger and never a shared pool** — the money moves
+onto the target goal's own `savedAmount` (atomic `$inc`). The row exists so the
+prompting nudge can suppress itself: a surplus month or windfall transaction with
+an `Allocation` is "handled" and no longer nudged.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required, indexed | |
+| `source` | String | enum: `surplus \| windfall`, required | what prompted the allocation |
+| `sourceKey` | String | required, ≤64 chars | `surplus` → `'YYYY-MM'` of the surplus month; `windfall` → the income transaction id |
+| `goal` | ObjectId | ref: Goal, required | the funded goal |
+| `amount` | Number | required, min 0 | amount added to the goal's `savedAmount` |
+| `createdAt` / `updatedAt` | Date | auto | |
+
+**Indexes:** `{ user: 1, source: 1, sourceKey: 1 }` (non-unique — a windfall can be
+split across several goals). In `userScopedModels`, so `deleteAccount` clears it.
+
+---
+
 ### Budget
 
 ```
@@ -559,6 +606,25 @@ Collection: budgets
 **Indexes:** `{ user: 1, yearMonth: 1 }` unique
 
 When reading, the backend first looks for a `Budget` document; falls back to `Preference.monthlyBudget` if none exists. Writing updates `Preference.monthlyBudget` only when `updateDefault: true` is explicitly passed.
+
+---
+
+### GroupBudget
+
+```
+Collection: groupbudgets
+```
+
+Optional **envelope-lite soft caps** per spending group, layered on top of the single monthly `Budget` (they do not replace it). Opt-in: a user with no caps has zero rows and the feature stays invisible. Caps are **recurring monthly envelopes** — not keyed on `yearMonth` — so a cap set once applies every month. They are advisory: nothing is blocked when a cap is exceeded, the UI just turns the progress bar red.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required | |
+| `group` | String | required, enum | one of `essential`, `discretionary`, `savings`, `social` (the steerable groups — `income`/`other` are not cappable) |
+| `amount` | Number | required, min 0 | soft cap in the user's currency |
+| `createdAt` / `updatedAt` | Date | auto | |
+
+**Indexes:** `{ user: 1, group: 1 }` unique — one cap per group per user. Setting a cap upserts the row; clearing it (`amount ≤ 0`) deletes the row so "no cap" and "cap of 0" are never confused. `GET /api/group-budget` joins each group's cap to the current-month expense for that group (same category→group aggregation as `getGroupSummary`) and returns `spent`, `pct`, `remaining`, and `over`.
 
 ---
 
@@ -717,7 +783,11 @@ Guards: only over-spending is reported, and a baseline with no spread at all (`M
 | `flexible` | 3.0 | 5.0 |
 | `unknown`  | 1.3 | 3.5 (too little history → default) |
 
-The rule-based fallback `getAnomalies` applies the same idea to its mean-ratio test: flag threshold is `{ fixed: 1.5, semi: 2, flexible: 4, unknown: 2 }`×.
+The rule-based fallback `getAnomalies` applies the same idea to its mean-ratio test: flag threshold is `{ fixed: 1.5, semi: 2, flexible: 4, unknown: 3 }`×.
+
+**Lumpy-category gate (gotcha#566).** The volatility class is derived from *monthly totals*, but the score runs on a *single transaction*. Low-frequency lumpy categories — social "traktir"/gifts, one big irregular hit a month — read as tame or `unknown`, so a normal 2–3× treat cried wolf. Both detectors now promote a category to the **flexible** bar when either structured lumpiness signal holds: (1) its semantic `group` is `social` or `discretionary` (expected-lumpy by nature), or (2) it posts ≤ 2 transactions per active month. The promotion never touches a genuinely flat `fixed` category, whose small jumps are the real signal. `unknown` was also raised 2→3× so sparse history no longer fires at a low bar. `services/ml/anomaly.js` reads the group off `tx.group` (attached by `_runMLPipeline` from the category → group map); `getAnomalies` loads it directly.
+
+**Seasonal suppression (Seasonal Radar).** During a month the user habitually overspends (Ramadan/Lebaran/holidays — see below), every gate is widened by a multiplier so an expected festive spike is not flagged, while a genuine blow-out still clears the raised bar. `detectAnomalies(transactions, { seasonal: { active, multiplier } })`; `getAnomalies` multiplies its ratio gate by the same factor and reframes the message ("…a lot even for Ramadan / Lebaran season").
 
 | Samples per category | Algorithm | Threshold |
 |----------------------|-----------|-----------|
@@ -799,6 +869,34 @@ Stable sub-monthly repeats (a weekly gym pass, a near-daily coffee) are surfaced
 Grouping is unchanged by this gate — this is a classification step, not a clustering one. No external AI, no embeddings, no fuzzy merchant matching: those would only add false-*merge* risk (joining two merchants that share a word) for no benefit.
 
 **API:** `detectRecurring(transactions, { asOf, utilityCategories })` → `{ recurring[], monthlyTotal, count, alerts[], frequent[], frequentMonthlyTotal }`. `utilityCategories` is an optional Set of exact lowercased category names that earn the looser amount gate. Also exports `merchantKey()` and `isBlockedCategory()`.
+
+### Money Recap (`services/ml/recap.js`)
+
+A rule-based, fully in-process monthly "wrapped" — no LLM, nothing leaves the box. `buildRecap(input)` is a pure function that stitches a plain-language `narrative[]` and a set of stat `tiles[]` out of signals the app already computes: the monthly `Snapshot` (this month vs the one before), the Financial Health score (`computeHealth`, reused from `controllers/gamification.js`), the logging streak, the net-worth reading (`NetWorthSnapshot`), the ML anomaly count (`MLInsight`) and the per-category top mover.
+
+Narrative discipline: lines never bake in a formatted amount — they speak in percentages, counts, category names and month labels so they read correctly in any currency. Raw amounts ride only on `tiles`, which the frontend formats via `useFormatAmount()`. Each tile carries `{ key, label, value, format: 'currency'|'percent'|'number', tone, delta? }`.
+
+Graceful degradation: `buildRecap` returns `{ available: false, reason }` when either the target month or its prior month is missing — a recap needs ≥1 full prior month to compare against. The `getRecap` controller reads snapshots O(1), caches per `(month, tz)`, and is invalidated by `cache.invalidateUser` on any transaction mutation. Covered by `test/ml.recap.test.js` (pure) and `test/recap.integration.test.js`.
+
+### Payday Runway (`services/ml/runway.js`)
+
+A forward-looking "safe to spend before your next income". Pure math, fully in-process. `detectIncomeCadence(incomeEvents, asOf)` reads the income rhythm (weekly / biweekly / monthly) from the median gap between income transactions and projects the next pay date; `computeRunway(input)` walks the balance forward day by day — subtracting a discretionary daily run-rate, subtracting recurring bills on their due dates (from `services/ml/recurring.js` `nextDue` + `typicalAmount`), and adding projected income on pay dates — to answer two questions: how much is safe to spend before the next payday, and the day the balance would go negative (the runway).
+
+The `getRunway` controller supplies the balance, the income history (9 months), the upcoming recurring bills, and a discretionary run-rate computed as last-30-day expense minus the recurring monthly share (so bills are not double-counted). It caches per `tz` (invalidated by `cache.invalidateUser`).
+
+Graceful degradation: when income cadence can't be read (variable / gig income — fewer than 3 events or an irregular schedule), it falls back to `mode:'rolling'` — a plain rolling runway with no payday horizon. Framed as a guide, not a guarantee (`note` is always returned). Covered by `test/ml.runway.test.js` (pure) and `test/runway.integration.test.js`.
+
+---
+
+### Seasonal Radar (`helpers/seasonalRadar.js`)
+
+Learns a user's recurring seasonal spending spikes from their **own monthly `Snapshot` history**, with an in-process Hijri/Ramadan calendar as a cold-start prior for the Ramadan / Lebaran / THR season (the biggest recurring spike for Indonesian users). **No external API and no network** — Hijri dates are a bundled static table (`RAMADAN_SEASON`, the Gregorian month(s) each year's fasting-and-Lebaran spend lands in) and the personal signal is learned entirely from which calendar months the user historically overspends.
+
+- `monthlyProfile(snapshots, excludeYm)` buckets months by calendar month (1–12), takes each month's average expense, and divides by the user's overall monthly average. A month at ≥ `SEASONAL_RATIO` (1.25×) the baseline is a personal spike. The in-progress month is excluded so the spike being judged can't move its own baseline.
+- `seasonalContext(snapshots, year, monthNum, excludeYm)` → `{ isSeasonal, ratio, multiplier, source, label }`. Learned spikes win (`source: 'history'`, or `'both'` when the month is also on the Hijri calendar) with the gate multiplier = the observed ratio clamped to `[1.25, 2.0]`; a Hijri-only month (`source: 'hijri'`) gets a modest fixed 1.4× prior. Consumed by both anomaly detectors for the suppression above.
+- `lookAhead(snapshots, { year, month }, horizon = 2)` returns the soonest upcoming seasonal month with a suggested set-aside. With ≥ 12 months of history it quotes a number (`baseline × (ratio − 1)`); under a year (`coldStart`) or on a Hijri-only signal it degrades to a generic, numberless heads-up. Powers the recommendation nudge below.
+
+Two consumers: **anomaly suppression** (`getAnomalies` + `services/ml/anomaly.js`) and the **look-ahead set-aside nudge** in `controllers/recommendation.js`. Covered by `test/seasonalRadar.test.js` and the seasonal cases in `test/ml.anomaly.test.js`.
 
 ---
 
@@ -1145,6 +1243,8 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
 | GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category — see Category volatility section |
 | GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12, or ≤ 0.35 for flagged utility categories) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
+| GET | `/api/transaction/recap` | 30/min | ✓ | Money Recap — rule-based, fully in-process monthly "wrapped". Query: `?month=YYYY-MM` (defaults to the most recent complete month). Returns `{ available, month, monthLabel, narrative[], tiles[] }` stitched from the monthly Snapshot (this month vs prior), Financial Health score, streak, net-worth delta, ML anomaly count and top category mover. `available:false` with a `reason` until there is ≥1 full prior month. Narrative lines are currency-free; raw amounts ride only on `tiles` for the FE to format |
+| GET | `/api/transaction/runway` | 30/min | ✓ | Payday Runway — forward "safe to spend before next income". Infers income cadence from income history, projects the balance to the next expected payday using upcoming recurring bills + a discretionary run-rate, and returns `{ mode:'payday'\|'rolling', nextIncomeDate, daysUntilIncome, expectedIncome, safeToSpend, safeToSpendPerDay, billsBeforeIncome[], billsTotal, runwayDays, runwayDate, status, note }`. Degrades to a rolling-30-day runway when income cadence is unclear. A guide, not a guarantee |
 | GET | `/api/transaction/time-to-zero` | 60/min | ✓ | Runway — days until balance reaches zero at current burn rate |
 | GET | `/api/transaction/active-months` | 60/min | ✓ | List of months with at least one transaction (reads from Snapshots) |
 | PUT | `/api/transaction/budget/:yearMonth` | 30/min | ✓ | Set budget for a month; body: `{ amount, updateDefault? }` |
@@ -1198,6 +1298,13 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | PATCH | `/api/category/:id/rename` | 30/min | ✓ | Rename a category; body: `{ name }`. Updates all referencing transactions atomically. 409 if new name already exists |
 | DELETE | `/api/category/:id` | 30/min | ✓ | Delete a category. 409 if any transaction uses it (returns count). 400 if `:id` is not a valid ObjectId |
 
+### Group budgets (envelope-lite soft caps)
+
+| Method | Path | Rate limit | Auth | Description |
+|--------|------|-----------|------|-------------|
+| GET | `/api/group-budget` | 30/min | ✓ | The four cappable groups, each with `cap`, current-month `spent`, `pct`, `remaining`, `over`; query: `?month=YYYY-MM&tz=IANA`. `hasCaps` is false until the user sets one |
+| PUT | `/api/group-budget/:group` | 30/min | ✓ | Set or clear a soft cap; body: `{ amount }`. `:group` ∈ essential/discretionary/savings/social. `amount ≤ 0`/null clears (deletes the row) |
+
 ### Gamification
 
 | Method | Path | Rate limit | Auth | Description |
@@ -1209,6 +1316,9 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
 | GET | `/api/recommendations` | 20/min | ✓ | 1–5 personalised rule-based nudges; query: `?tz=IANA` |
+| POST | `/api/recommendations/allocate` | 30/min | ✓ | one-tap allocation of a surplus/windfall into a goal; body: `{ source, sourceKey, goalId, amount }` |
+| GET | `/api/recommendations/windfall` | 30/min | ✓ | detect a recent unusually large income (THR/bonus) + active goals to split into; query: `?tz=IANA` |
+| GET | `/api/recommendations/zakat` | 30/min | ✓ | zakat-maal estimate from net-worth + social-group giving YTD; query: `?tz=IANA`, optional `?nisab=` |
 
 **Every nudge CTA must lead to a persistent action.** A nudge is only suppressed by
 state stored in the database, so its CTA has to be able to create that state — a link
@@ -1217,6 +1327,55 @@ emergency-fund nudge is the reference case: it is suppressed by any `Goal` whose
 description matches `/emergency/i` (achieved or not — hence the goal query is
 unfiltered on `achieve`), and its CTA carries `?tool=emergency&monthly=&saved=` so the
 Emergency Fund tool prefills and offers a one-click "Track this as a goal".
+
+**Surplus-sweep nudge (`surplus_sweep`).** When the last completed month ran a
+surplus (`Snapshot.income − Snapshot.expense > 0`) and the user has an unachieved
+goal, the nudge invites them to earmark part of that surplus to a goal. Its CTA
+carries `?tool=goal&sweep=YYYY-MM&amount=N`, opening the Savings Goal tool with a
+one-tap "sweep here" button per active goal. Tapping it calls `POST
+/api/recommendations/allocate` with `source: 'surplus'`, `sourceKey: 'YYYY-MM'`,
+which (a) increments that goal's **own** `savedAmount` via an atomic `$inc` — never
+a shared pool — and (b) writes an `Allocation` row. The nudge query suppresses
+itself the moment an `Allocation` exists for `(user, source: 'surplus', sourceKey:
+that month)`. Copy never claims money was moved anywhere real — it is cash-flow
+surplus, a suggestion, and the amount is carried only in CTA params so the FE
+formats it in the user's currency (the server never embeds a currency figure).
+
+The same `allocate` endpoint backs the windfall planner with `source: 'windfall'`
+and `sourceKey` = the large income transaction's id (see the Windfall section).
+
+**Windfall planner (`GET /api/recommendations/windfall`).** `helpers/windfall.js`
+`detectWindfall()` finds the largest income in the last 45 days and calls it a
+windfall when it is ≥ 1.8× the median of the user's income over the last 365 days
+(median is robust — a single windfall barely moves it). The endpoint returns the
+detected windfall (with `allocated` / `remaining` / `handled` derived from existing
+`Allocation` rows for that transaction) plus the user's active goals. The FE
+Windfall Planner tool pre-fills a suggested split (`lib/windfallSplit.js`, fill
+goals oldest-first up to each goal's remaining need) and each "Allocate" button
+calls `/allocate` with `source: 'windfall'`. The `windfall_<txnId>` dashboard nudge
+appears when a windfall is detected and the user has an active goal, and suppresses
+itself once any `Allocation` exists for that transaction id. Emergency fund and
+debt payoff are not special-cased — they are just goals; there is no debt-account
+model, so a debt-payoff target is a user-created goal.
+
+**Zakat estimator (`GET /api/recommendations/zakat`).** `helpers/zakat.js`
+`estimateZakat()` returns 2.5% of a zakatable base = liquid assets
+(`cash + investment + receivable` holding types) − short-term debts
+(`credit_card + bnpl + payable + loan`), with illiquid personal-use assets
+(property, vehicle, mortgage) excluded. Giving YTD sums this year's **expense**
+transactions in categories grouped `social` (zakat / donation / sharing). Nisab is
+an optional `?nisab=` input — below it, `zakatDue` is 0 (`meetsNisab: false`). It is
+an **estimate, not a fatwa** (no haul tracking); the FE labels it as such and lets
+any user hide the tool. The zakatable-asset and deductible-liability type lists live
+in `helpers/zakat.js` and are keyed to the `NetWorth` holding `type` enum.
+
+The **Seasonal Radar look-ahead** nudge follows the same suppression contract:
+Seasonal Radar's `lookAhead()` pre-warns before a personal seasonal spike
+(Ramadan/Lebaran/holidays, learned from snapshot history) with a suggested
+set-aside; it is suppressed once the user has a `Goal` reading as a seasonal fund
+(`/ramadan|lebaran|thr|hari raya|seasonal|holiday|festive/i`), and its CTA opens the
+goal planner prefilled with that description + target so the suppressing state is one
+click away.
 
 ---
 

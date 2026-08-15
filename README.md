@@ -12,7 +12,7 @@ Sign up in 30 seconds. No credit card required. Google OAuth supported.
 
 ## The problem it solves
 
-Most people have no clear picture of their finances. They earn money, spend it, and wonder at the end of the month where it went. Finan App gives you that picture: a running balance, spending broken down by category, anomaly alerts when something looks off, and 9 planning tools to answer questions like "can I afford this?", "when can I retire?", and "how long until my balance hits zero?"
+Most people have no clear picture of their finances. They earn money, spend it, and wonder at the end of the month where it went. Finan App gives you that picture: a running balance, spending broken down by category, anomaly alerts when something looks off, and 11 planning tools to answer questions like "can I afford this?", "when can I retire?", and "how should I split this bonus?"
 
 ---
 
@@ -33,10 +33,12 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Anomaly detection** — flags unusually large transactions compared to your spending baseline
 - **Spending explainability** — shows which categories drive your spending the most
 - **Time-to-zero runway** — estimates when your balance hits zero if current spending continues
+- **Money Recap** — a monthly in-app "wrapped": a plain-language narrative plus stat tiles (net saved, spend vs last month, top category, streak, net-worth change) stitched entirely from your own numbers, no AI
+- **Payday Runway** — forward safe-to-spend before your next expected income: detects your income cadence, projects the balance forward using upcoming bills and your everyday spending pace, and flags the day the balance would run out (degrades to a rolling 30-day view for variable income)
 - **Category management** — rename categories (updates all transactions automatically) or delete unused ones; 28 default categories pre-loaded for every new account
 
 ### Plan
-9 built-in financial planning tools — no external apps needed:
+11 built-in financial planning tools — no external apps needed:
 
 | Tool | What it answers |
 |------|----------------|
@@ -49,6 +51,10 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | FIRE Calculator | What's my financial independence number? |
 | Tax Estimator | Estimate Indonesian PPh 21 tax (progressive + TER awareness); auto-fills from your average income |
 | Net Worth | Track assets vs liabilities with a saved monthly trend — one point per month |
+| Windfall Planner | Detects a THR / bonus / large one-off income and splits it into your goals, one tap each |
+| Zakat Estimator | Estimates zakat-maal (2.5% of zakatable assets) and tracks your giving this year — a clearly-labelled estimate, optional for everyone |
+
+**Smart nudges** on the dashboard turn your data into one-tap actions. The **surplus sweep** nudge appears when last month's income beat its spending: one tap earmarks part of that leftover to a savings goal (added to that goal's own balance — nothing leaves any account), and the nudge clears itself once you act.
 
 ### Preferences
 - **Currency** — IDR and other currencies; affects all formatting throughout the app
@@ -63,10 +69,10 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Page | Description |
 |------|-------------|
 | Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category |
-| Add transaction | Income or expense with smart category suggestions |
+| Add transaction | Income or expense with smart category suggestions, plus a savings/investment nudge — log money moved to savings under a savings category so it counts as saved, not spent |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
-| Insights | Anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete) |
-| Recommendation | 9 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, and more |
+| Insights | Money Recap (monthly wrap-up), Payday Runway (safe-to-spend before next income), anomaly detection (seasonal- and lumpy-category aware — an expected Ramadan/Lebaran or social-spending spike isn't flagged), spending explainability, time-to-zero runway, smart category classification, category management (rename / delete), optional envelope-lite group budgets (soft caps per essential / discretionary / savings / social). Savings & investment visibility: investing logged as a savings-group expense is treated as saved (not spent) across savings rate, 50/30/20 and anomaly baselines |
+| Recommendation | 11 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, windfall planner, zakat estimator, and more — plus a Seasonal Radar heads-up that pre-warns before your own seasonal spikes with a suggested set-aside |
 | Range report | Custom date range with income/expense summary |
 | Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |
 | Settings | Theme toggle, change password, logout all devices, delete account |

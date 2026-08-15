@@ -180,6 +180,18 @@ export const getRecurring = () =>
 export const getTimeToZero = () =>
   apiFetch(`/api/transaction/time-to-zero?tz=${encodeURIComponent(browserTz())}`);
 
+// Money Recap — monthly in-app "wrapped". Pass a YYYY-MM month, or omit for the
+// most recent complete month.
+export const getRecap = (month = null) => {
+  const qs = new URLSearchParams({ tz: browserTz() });
+  if (month) qs.set('month', month);
+  return apiFetch(`/api/transaction/recap?${qs}`);
+};
+
+// Payday Runway — forward safe-to-spend before the next expected income.
+export const getRunway = () =>
+  apiFetch(`/api/transaction/runway?tz=${encodeURIComponent(browserTz())}`);
+
 export const getMLInsights = () =>
   apiFetch(`/api/transaction/ml-insights?tz=${encodeURIComponent(browserTz())}`);
 
@@ -265,6 +277,23 @@ export const getGamificationSummary = () =>
 export const getSmartRecommendations = () =>
   apiFetch(`/api/recommendations?tz=${encodeURIComponent(browserTz())}`);
 
+// One-tap allocation of a surplus or windfall into a goal. Atomic per-goal
+// increment server-side; writes the state that suppresses the prompting nudge.
+// body: { source: 'surplus'|'windfall', sourceKey, goalId, amount }
+export const allocateToGoal = (body) =>
+  apiFetch('/api/recommendations/allocate', { method: 'POST', body: JSON.stringify(body) });
+
+// Detects a recent unusually large income (THR / bonus) + returns active goals.
+export const getWindfall = () =>
+  apiFetch(`/api/recommendations/windfall?tz=${encodeURIComponent(browserTz())}`);
+
+// Zakat-maal estimate from net-worth holdings + social-group giving YTD.
+export const getZakat = (nisab = null) => {
+  const qs = new URLSearchParams({ tz: browserTz() });
+  if (nisab) qs.set('nisab', nisab);
+  return apiFetch(`/api/recommendations/zakat?${qs}`);
+};
+
 // ── Category groups ───────────────────────────────────────────────────────────
 
 export const getGroupSummary = (month) => {
@@ -272,6 +301,21 @@ export const getGroupSummary = (month) => {
   if (month) qs.set('month', month);
   return apiFetch(`/api/category/group-summary?${qs}`);
 };
+
+// ── Group budgets (envelope-lite soft caps) ───────────────────────────────────
+
+export const getGroupBudgets = (month) => {
+  const qs = new URLSearchParams({ tz: browserTz() });
+  if (month) qs.set('month', month);
+  return apiFetch(`/api/group-budget?${qs}`);
+};
+
+// amount <= 0 / null clears the cap
+export const setGroupBudget = (group, amount) =>
+  apiFetch(`/api/group-budget/${group}`, {
+    method: 'PUT',
+    body: JSON.stringify({ amount }),
+  });
 
 export const classifyAllCategories = () =>
   apiFetch('/api/category/classify-all', { method: 'POST' });

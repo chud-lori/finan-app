@@ -19,10 +19,16 @@ const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
 const { classifyVolatility } = require('../helpers/spendingVolatility');
+const { seasonalContext } = require('../helpers/seasonalRadar');
+const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
 const { seedDefaultCategories, DEFAULT_UTILITY_CATEGORY_NAMES } = require('../helpers/seedDefaultCategories');
 const { track } = require('../helpers/backgroundJobs');
 const nativeMl = require('../services/ml');
 const nativeMlRecurring = require('../services/ml/recurring');
+const NetWorthSnapshot = require('../models/netWorthSnapshot.model');
+const { buildRecap } = require('../services/ml/recap');
+const { computeRunway } = require('../services/ml/runway');
+const { computeHealth } = require('./gamification');
 
 // Fire-and-forget: drop the cached insight for the mutated month, and — when that month is inside
 // the 6-month window the anomaly baselines are built from — the current month too.
@@ -1008,13 +1014,35 @@ const getAnomalies = async (req, res) => {
         const startOfMonth = now.clone().startOf('month').toDate();
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
 
-        const [currentTxns, historicalTxns, priorCategories] = await Promise.all([
+        const [currentTxnsRaw, historicalTxnsRaw, priorCategoriesRaw, savingsNames, categories, snapshots] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: startOfMonth } }).lean(),
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: threeMonthsAgo, $lt: startOfMonth } }).lean(),
             Transaction.distinct('category', { user: req.user.id, type: 'expense', time: { $lt: startOfMonth } }),
+            getSavingsCategoryNames(req.user.id),
+            // Category semantic group is a structured expected-lumpy signal (gotcha#566).
+            Category.find({ user: req.user.id }).select('name group').lean(),
+            // Monthly history for Seasonal Radar — is this month one the user
+            // habitually overspends (their own Ramadan/Lebaran/holiday pattern)?
+            Snapshot.find({ user: req.user.id }).select('yearMonth expense').lean(),
         ]);
 
+        // Savings-group outflow (investing, moving cash to savings) is not
+        // consumption — exclude it from the current set, the historical baseline
+        // and the "first time in this category" signal so it never reads as
+        // overspending.
+        const notSavings = (t) => !savingsNames.has((t.category || '').toLowerCase());
+        const currentTxns    = currentTxnsRaw.filter(notSavings);
+        const historicalTxns = historicalTxnsRaw.filter(notSavings);
+        const priorCategories = priorCategoriesRaw.filter(c => !savingsNames.has((c || '').toLowerCase()));
+
         const priorCategorySet = new Set(priorCategories.map(c => c.toLowerCase()));
+        const catGroup = {};
+        categories.forEach(c => { if (c.name) catGroup[c.name.toLowerCase()] = c.group; });
+
+        // Seasonal Radar context for the current month (multiplier 1 = no change
+        // outside a seasonal month). Excludes the in-progress month from the
+        // learned baseline so the spike being judged can't soften its own gate.
+        const season = seasonalContext(snapshots, now.year(), now.month() + 1, now.format('YYYY-MM'));
 
         // Per-category average + monthly totals from historical data. The monthly
         // series feeds a volatility read so a naturally-spiky category needs a
@@ -1030,7 +1058,10 @@ const getAnomalies = async (req, res) => {
         });
 
         // Ratio a transaction must clear to flag, by how volatile its category is.
-        const RATIO_GATE = { fixed: 1.5, semi: 2, flexible: 4, unknown: 2 };
+        // 'unknown' is raised 2→3: too little history should not fire at a low bar
+        // (gotcha#566 — sparse lumpy categories were mis-gated as 'unknown').
+        const RATIO_GATE = { fixed: 1.5, semi: 2, flexible: 4, unknown: 3 };
+        const LUMPY_TX_PER_MONTH = 2; // few, big, irregular hits a month → inherently lumpy
 
         const anomalies = [];
         currentTxns.forEach(t => {
@@ -1046,15 +1077,39 @@ const getAnomalies = async (req, res) => {
                 const avg = hist.total / hist.count;
                 const ratio = t.amount / avg;
                 const monthTotals = Object.values(hist.months);
-                const { volatility } = classifyVolatility(monthTotals, monthTotals.length ? hist.count / monthTotals.length : null);
-                const gate = RATIO_GATE[volatility] ?? 2;
+                const txPerMonth = monthTotals.length ? hist.count / monthTotals.length : null;
+                const { volatility } = classifyVolatility(monthTotals, txPerMonth);
+                let gate = RATIO_GATE[volatility] ?? 3;
+
+                // gotcha#566: the ratio test runs on a SINGLE transaction, but the
+                // gate is picked from MONTHLY-TOTAL volatility. Low-frequency lumpy
+                // categories (social "traktir"/gifts, one big irregular hit a month)
+                // read as tame/unknown, so a normal 2–3x treat cried wolf. Two
+                // structured lumpiness signals promote such a category to the
+                // flexible gate — but never a genuinely flat 'fixed' category, whose
+                // small jumps are the real signal:
+                //   (1) semantic group is social/discretionary (expected-lumpy)
+                //   (2) it posts few transactions per active month
+                const grp = catGroup[cat];
+                const lumpy = volatility !== 'fixed' &&
+                    (grp === 'social' || grp === 'discretionary' ||
+                     (txPerMonth != null && txPerMonth <= LUMPY_TX_PER_MONTH));
+                if (lumpy) gate = Math.max(gate, RATIO_GATE.flexible);
+
+                // Seasonal Radar: during a month the user habitually overspends, a
+                // bigger bill is expected — widen the gate and reframe rather than alarm.
+                if (season.isSeasonal) gate *= season.multiplier;
+
                 if (ratio >= gate) {
                     const ratio1 = Math.round(ratio * 10) / 10;
                     flags.push({
                         type: 'high_amount',
                         ratio: ratio1,
                         avg: Math.round(avg),
-                        message: `This is ${ratio1}x higher than your normal ${t.category} spend`,
+                        ...(season.isSeasonal ? { seasonal: true } : {}),
+                        message: season.isSeasonal
+                            ? `${ratio1}x your normal ${t.category} spend — a lot even for ${season.label}`
+                            : `This is ${ratio1}x higher than your normal ${t.category} spend`,
                     });
                 }
             }
@@ -1099,10 +1154,18 @@ const getExplainability = async (req, res) => {
         // enough to reflect the user's current life.
         const historyStart = moment(periodStart).subtract(6, 'month').toDate();
 
-        const [currentTxns, historyTxns] = await Promise.all([
+        const [currentTxnsRaw, historyTxnsRaw, savingsNames] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: periodStart, $lte: periodEnd } }).lean(),
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: historyStart, $lt: periodStart } }).lean(),
+            getSavingsCategoryNames(req.user.id),
         ]);
+
+        // Investing / moving cash to a savings-group category is a transfer, not
+        // spend — exclude it so it never surfaces as a top spending category or
+        // inflates the month-over-month spend baseline.
+        const notSavings = (t) => !savingsNames.has((t.category || '').toLowerCase());
+        const currentTxns = currentTxnsRaw.filter(notSavings);
+        const historyTxns = historyTxnsRaw.filter(notSavings);
 
         const totalExpense = currentTxns.reduce((s, t) => s + t.amount, 0);
 
@@ -1353,18 +1416,31 @@ const _runMLPipeline = async (userId, tz) => {
     const endOfMonth   = moment.tz(yearMonth + '-01', tz).endOf('month').toDate();
     const sixMonthsAgo = moment.tz(tz).subtract(6, 'months').startOf('month').toDate();
 
-    const [transactions, budgetDoc] = await Promise.all([
+    const [transactions, budgetDoc, savingsNames, categories, snapshots] = await Promise.all([
         Transaction.find({ user: userId, type: 'expense', time: { $gte: sixMonthsAgo, $lte: endOfMonth } }).lean(),
         Budget.findOne({ user: userId, yearMonth }).lean(),
+        getSavingsCategoryNames(userId),
+        // Category group feeds the ML anomaly detector's lumpiness gate (gotcha#566).
+        Category.find({ user: userId }).select('name group').lean(),
+        // Monthly history for Seasonal Radar suppression.
+        Snapshot.find({ user: userId }).select('yearMonth expense').lean(),
     ]);
 
-    // Current-month tx count (used for cache staleness check)
+    const catGroup = {};
+    categories.forEach(c => { if (c.name) catGroup[c.name] = c.group; });
+
+    const isSavings = (tx) => savingsNames.has((tx.category || '').toLowerCase());
+
+    // Current-month tx count (used for cache staleness check). Counts ALL
+    // current-month expenses — it must stay in step with the countDocuments the
+    // ML-insights endpoints use as the cache key, so it is not savings-filtered.
     const currentMonthTxCount = transactions.filter(tx => tx.time >= startOfMonth).length;
 
-    // Daily totals for forecast
+    // Daily totals for the spend forecast — savings-group outflow is a transfer,
+    // not spend, so it is excluded from the projection.
     const dailyMap = {};
     for (const tx of transactions) {
-        if (tx.time >= startOfMonth) {
+        if (tx.time >= startOfMonth && !isSavings(tx)) {
             const day = moment.tz(tx.time, tz).date();
             dailyMap[day] = (dailyMap[day] || 0) + tx.amount;
         }
@@ -1374,11 +1450,18 @@ const _runMLPipeline = async (userId, tz) => {
         id:               tx._id.toString(),
         amount:           tx.amount,
         category:         tx.category,
+        group:            catGroup[tx.category], // expected-lumpy signal for gotcha#566
         date:             moment.tz(tx.time, tz).format('YYYY-MM-DD'),
         description:      tx.description,
         type:             tx.type,
         is_current_month: tx.time >= startOfMonth,
+        // Skipped by the anomaly detector — investing isn't overspending.
+        is_savings:       isSavings(tx),
     }));
+
+    // Seasonal Radar: widen the anomaly bar during a month the user habitually
+    // overspends. Excludes the in-progress month from its own learned baseline.
+    const season = seasonalContext(snapshots, now.year(), now.month() + 1, yearMonth);
 
     const analyzePayload = {
         transactions:  txPayload,
@@ -1386,6 +1469,7 @@ const _runMLPipeline = async (userId, tz) => {
         current_day:   now.date(),
         days_in_month: now.daysInMonth(),
         budget:        budgetDoc?.amount ?? null,
+        seasonal:      { active: season.isSeasonal, multiplier: season.multiplier },
     };
 
     const aiData = nativeMl.analyze(analyzePayload);
@@ -1535,6 +1619,154 @@ const refreshMLInsights = async (req, res) => {
     }
 };
 
+// ── GET /api/transaction/recap ────────────────────────────────────────────────
+// Money Recap: a rule-based, fully in-process monthly "wrapped". Stitches a
+// plain-language narrative + stat tiles out of signals already computed — the
+// monthly Snapshot (this month vs prior), Financial Health, streak, net-worth
+// delta, ML anomaly count and top category mover. No LLM, nothing leaves the box.
+const getRecap = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const userTz = validTz(req.query.tz);
+        const now    = moment.tz(userTz);
+
+        // Target month: ?month=YYYY-MM, defaulting to the most recent COMPLETE
+        // month (a recap summarises a finished month).
+        const monthParam = typeof req.query.month === 'string' ? req.query.month : null;
+        if (monthParam && !/^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam)) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid month — expected YYYY-MM'));
+        }
+        const targetYm   = monthParam || now.clone().subtract(1, 'month').format('YYYY-MM');
+        const priorYm    = moment.tz(targetYm + '-01', 'YYYY-MM-DD', userTz).subtract(1, 'month').format('YYYY-MM');
+        const monthLabel = moment.tz(targetYm + '-01', 'YYYY-MM-DD', userTz).format('MMMM YYYY');
+
+        const cacheParams = `${targetYm}:${userTz}`;
+        const cached = cache.get(userId, 'recap', cacheParams);
+        if (cached) return res.status(200).json(cached);
+
+        const [curSnap, priorSnap, nwCur, nwPrior, user, mlDoc] = await Promise.all([
+            Snapshot.findOne({ user: userId, yearMonth: targetYm }).lean(),
+            Snapshot.findOne({ user: userId, yearMonth: priorYm }).lean(),
+            NetWorthSnapshot.findOne({ user: userId, yearMonth: targetYm }).select('netWorth').lean(),
+            NetWorthSnapshot.findOne({ user: userId, yearMonth: priorYm }).select('netWorth').lean(),
+            User.findById(userId).select('streakDays longestStreak').lean(),
+            MLInsight.findOne({ user: userId, yearMonth: targetYm }).select('anomalyCount').lean(),
+        ]);
+
+        // Financial Health is a current-standing score, reused from gamification.
+        // Non-fatal — a failure just drops that one tile.
+        let health = null;
+        try { health = await computeHealth(userId, userTz); } catch (e) {
+            logger.warn(`Recap health compute failed for ${userId}: ${e.message}`);
+        }
+
+        const toSnapInput = (s) => s ? {
+            income:  s.income  || 0,
+            expense: s.expense || 0,
+            txCount: s.txCount || 0,
+            byCategory: (s.byCategory || []).map(c => ({ category: c.category, total: c.total, count: c.count })),
+        } : null;
+
+        const recap = buildRecap({
+            month:      targetYm,
+            monthLabel,
+            current:    toSnapInput(curSnap),
+            prior:      toSnapInput(priorSnap),
+            netWorth:   { current: nwCur ? nwCur.netWorth : null, prior: nwPrior ? nwPrior.netWorth : null },
+            streak:     { current: user?.streakDays || 0, longest: user?.longestStreak || 0 },
+            health:     health && health.score != null ? { score: health.score } : null,
+            anomalyCount: mlDoc ? (mlDoc.anomalyCount ?? null) : null,
+        });
+
+        const response = BaseResponseDTO.success('Money recap', recap);
+        cache.set(userId, 'recap', cacheParams, response);
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error(`Get recap error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
+    }
+};
+
+// ── GET /api/transaction/runway ───────────────────────────────────────────────
+// Payday Runway: forward "safe to spend before your next income". Infers income
+// cadence from income history, projects the balance to the next expected payday
+// using upcoming recurring bills (services/ml/recurring) + a discretionary run-
+// rate, and reports a safe-to-spend figure and the day the balance would go
+// negative. Degrades to a rolling-30-day runway when income cadence is unclear.
+const getRunway = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const userTz = validTz(req.query.tz);
+        const cacheParams = `${userTz}`;
+        const cached = cache.get(userId, 'runway', cacheParams);
+        if (cached) return res.status(200).json(cached);
+
+        const now  = moment().tz(userTz);
+        const asOf = now.format('YYYY-MM-DD');
+
+        const balanceDoc = await Balance.findOne({ user: userId }).select('amount').lean();
+        if (!balanceDoc) {
+            return res.status(404).json(BaseResponseDTO.error('User balance not found'));
+        }
+
+        const incomeSince    = now.clone().subtract(9, 'months').startOf('month').toDate();
+        const recurringSince = now.clone().subtract(13, 'months').startOf('month').toDate();
+        const thirtyAgo      = now.clone().subtract(30, 'days').toDate();
+
+        const [incomeTxns, expenseTxns, recentExpenses, flagged] = await Promise.all([
+            Transaction.find({ user: userId, type: 'income', time: { $gte: incomeSince } }).select('amount time').lean(),
+            Transaction.find({ user: userId, type: 'expense', time: { $gte: recurringSince } }).select('amount category description time').lean(),
+            Transaction.find({ user: userId, type: 'expense', time: { $gte: thirtyAgo } }).select('amount').lean(),
+            Category.find({ user: userId, isUtility: true }).select('name').lean(),
+        ]);
+
+        const incomeEvents = incomeTxns.map(t => ({
+            date:   moment(t.time).tz(userTz).format('YYYY-MM-DD'),
+            amount: t.amount,
+        }));
+
+        const recurringPayload = expenseTxns.map(t => ({
+            id:          t._id.toString(),
+            amount:      t.amount,
+            category:    t.category,
+            description: t.description,
+            date:        moment(t.time).tz(userTz).format('YYYY-MM-DD'),
+            type:        'expense',
+        }));
+        const utilityCategories = new Set([
+            ...DEFAULT_UTILITY_CATEGORY_NAMES,
+            ...flagged.map(c => c.name.toLowerCase()),
+        ]);
+        const recurringResult = nativeMlRecurring.detectRecurring(recurringPayload, { asOf, utilityCategories });
+
+        // Upcoming recurring bills become scheduled outflows in the projection.
+        const bills = recurringResult.recurring
+            .filter(r => r.nextDue)
+            .map(r => ({ merchant: r.merchant, dueDate: r.nextDue, amount: r.typicalAmount }));
+
+        // Discretionary run-rate: last-30-day expense minus the recurring monthly
+        // share, so bills aren't double-counted against the everyday burn.
+        const last30Expense   = recentExpenses.reduce((s, t) => s + t.amount, 0);
+        const recurringDaily  = (recurringResult.monthlyTotal || 0) / 30.44;
+        const discretionaryDaily = Math.max(0, last30Expense / 30 - recurringDaily);
+
+        const runway = computeRunway({
+            asOf,
+            balance: balanceDoc.amount,
+            incomeEvents,
+            bills,
+            discretionaryDaily,
+        });
+
+        const response = BaseResponseDTO.success('Payday runway calculated', runway);
+        cache.set(userId, 'runway', cacheParams, response);
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error(`Get runway error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
+    }
+};
+
 module.exports = {
     addTransaction,
     getUserTransaction,
@@ -1557,4 +1789,6 @@ module.exports = {
     setBudget,
     getMLInsights,
     refreshMLInsights,
+    getRecap,
+    getRunway,
 };

@@ -3,6 +3,10 @@ const Transaction = require('../models/transaction.model');
 const Goal = require('../models/goal.model');
 const Balance = require('../models/balance.model');
 const MLInsight = require('../models/mlinsight.model');
+const Snapshot = require('../models/snapshot.model');
+const Allocation = require('../models/allocation.model');
+const { lookAhead } = require('../helpers/seasonalRadar');
+const { detectWindfall } = require('../helpers/windfall');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 
@@ -17,7 +21,7 @@ const getSmartRecommendations = async (req, res) => {
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
         const weekAgo       = now.clone().subtract(7, 'days').toDate();
 
-        const [thisMonthTxns, last3MonthsTxns, recentTxn, goals, balance, mlCache] = await Promise.all([
+        const [thisMonthTxns, last3MonthsTxns, recentTxn, goals, balance, mlCache, snapshots] = await Promise.all([
             Transaction.find({ user: userId, time: { $gte: monthStart, $lte: monthEnd } })
                 .select('amount type category').lean(),
             Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } })
@@ -28,6 +32,8 @@ const getSmartRecommendations = async (req, res) => {
             Goal.find({ user: userId }).select('description price savedAmount achieve createdAt').lean(),
             Balance.findOne({ user: userId }).select('amount').lean(),
             MLInsight.findOne({ user: userId }).sort({ createdAt: -1 }).select('anomalyCount').lean(),
+            // Monthly history for the Seasonal Radar look-ahead nudge.
+            Snapshot.find({ user: userId }).select('yearMonth expense').lean(),
         ]);
 
         const recs = [];
@@ -160,6 +166,99 @@ const getSmartRecommendations = async (req, res) => {
                 body:  'AI analysis flagged some spending patterns that look out of the ordinary. Review your Insights for details.',
                 cta:  { label: 'View AI Insights', href: '/insights' },
             });
+        }
+
+        // ── 7. Seasonal Radar look-ahead ──────────────────────────────────────
+        // Pre-warn before a personal seasonal spike (Ramadan/Lebaran/holidays,
+        // learned from the user's own snapshot history with an in-process Hijri
+        // prior) with a suggested set-aside. Suppressed once the user has a Goal
+        // whose description reads as a seasonal fund — the CTA creates exactly that
+        // state, so the nudge is dismissible instead of nagging forever.
+        const hasSeasonalGoal = goals.some(g => /ramadan|lebaran|thr|hari raya|seasonal|holiday|festive/i.test(g.description || ''));
+        if (!hasSeasonalGoal) {
+            const ahead = lookAhead(snapshots, { year: now.year(), month: now.month() + 1 }, 2);
+            if (ahead) {
+                const when = ahead.monthsAway === 1 ? 'next month' : `in ${ahead.monthsAway} months`;
+                const params = new URLSearchParams({ tool: 'goal' });
+                let body;
+                if (ahead.coldStart || ahead.suggestedSetAside == null) {
+                    // <1yr history (or Hijri-only signal): generic heads-up, no number.
+                    body = `${ahead.monthName} tends to be a higher-spending stretch${ahead.label ? ` (${ahead.label})` : ''}. Setting a little aside now softens the hit.`;
+                } else {
+                    params.set('desc', `${ahead.monthName} set-aside`);
+                    params.set('target', String(ahead.suggestedSetAside));
+                    body = `You usually spend about ${ahead.ratio}× your normal in ${ahead.monthName}. Setting aside ~${Math.round(ahead.suggestedSetAside).toLocaleString()} ${when} keeps ${ahead.label || 'the season'} from denting your budget.`;
+                }
+                recs.push({
+                    id:   'seasonal_lookahead',
+                    type: 'tip',
+                    icon: '🗓️',
+                    title: `${ahead.monthName} spike coming — set aside early`,
+                    body,
+                    cta:  { label: 'Plan a set-aside goal', href: `/recommendation?${params.toString()}` },
+                });
+            }
+        }
+
+        // ── 8. Surplus sweep — earmark last month's leftover to a goal ───────
+        // If the last completed month ran a surplus (income > expense) and the
+        // user has an unachieved goal to feed, nudge them to sweep part of it in
+        // before it blends into this month's spend. Suppressed once an Allocation
+        // exists for that month — the CTA lands on the Savings Goal tool, whose
+        // one-tap "sweep here" button writes exactly that Allocation. No money was
+        // auto-moved: this is cash-flow surplus, a suggestion.
+        const activeGoals = goals.filter(g => g.achieve !== 1);
+        if (activeGoals.length > 0) {
+            const lastMonthYM = now.clone().subtract(1, 'month').format('YYYY-MM');
+            const [lastSnap, alreadySwept] = await Promise.all([
+                Snapshot.findOne({ user: userId, yearMonth: lastMonthYM }).select('income expense').lean(),
+                Allocation.exists({ user: userId, source: 'surplus', sourceKey: lastMonthYM }),
+            ]);
+            const surplus = lastSnap ? Math.round((lastSnap.income || 0) - (lastSnap.expense || 0)) : 0;
+            if (lastSnap && lastSnap.income > 0 && surplus > 0 && !alreadySwept) {
+                // Amount stays in the CTA params only — the FE formats it in the
+                // user's currency; the server never embeds a currency figure.
+                const params = new URLSearchParams({
+                    tool:   'goal',
+                    sweep:  lastMonthYM,
+                    amount: String(surplus),
+                });
+                recs.push({
+                    id:   'surplus_sweep',
+                    type: 'tip',
+                    icon: '💰',
+                    title: 'You had a surplus last month',
+                    body:  'You spent less than you earned last month. Sweep some of that surplus into a goal before it blends into this month\'s spending — it stays your money, just earmarked.',
+                    cta:  { label: 'Sweep surplus to a goal', href: `/recommendation?${params.toString()}` },
+                });
+            }
+
+            // ── 8. Windfall (THR / bonus) not yet allocated ──────────────────
+            // A recent income far above the user's usual gets a nudge to plan a
+            // split into goals. Suppressed once any Allocation exists for that
+            // transaction — the Windfall Planner tool writes it via /allocate.
+            const windowStart   = now.clone().subtract(45, 'days').toDate();
+            const baselineStart = now.clone().subtract(365, 'days').toDate();
+            const [recentIncome, baselineIncome] = await Promise.all([
+                Transaction.find({ user: userId, type: 'income', time: { $gte: windowStart } })
+                    .select('amount time').lean(),
+                Transaction.find({ user: userId, type: 'income', time: { $gte: baselineStart } })
+                    .select('amount').lean(),
+            ]);
+            const windfall = detectWindfall(recentIncome, baselineIncome.map(t => t.amount));
+            if (windfall) {
+                const handled = await Allocation.exists({ user: userId, source: 'windfall', sourceKey: windfall.transactionId });
+                if (!handled) {
+                    recs.push({
+                        id:   `windfall_${windfall.transactionId}`,
+                        type: 'info',
+                        icon: '🎁',
+                        title: 'Large income just landed',
+                        body:  'A recent deposit is well above your usual income — a bonus or THR, perhaps. Plan a split into your goals before it gets absorbed into everyday spending.',
+                        cta:  { label: 'Plan your windfall', href: '/recommendation?tool=windfall' },
+                    });
+                }
+            }
         }
 
         // Prioritise: warning → info → success → tip; cap at 5
