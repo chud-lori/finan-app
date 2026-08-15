@@ -25,6 +25,7 @@ const nativeMl = require('../services/ml');
 const nativeMlRecurring = require('../services/ml/recurring');
 const NetWorthSnapshot = require('../models/netWorthSnapshot.model');
 const { buildRecap } = require('../services/ml/recap');
+const { computeRunway } = require('../services/ml/runway');
 const { computeHealth } = require('./gamification');
 
 // Fire-and-forget: drop the cached insight for the mutated month, and — when that month is inside
@@ -1606,6 +1607,86 @@ const getRecap = async (req, res) => {
     }
 };
 
+// ── GET /api/transaction/runway ───────────────────────────────────────────────
+// Payday Runway: forward "safe to spend before your next income". Infers income
+// cadence from income history, projects the balance to the next expected payday
+// using upcoming recurring bills (services/ml/recurring) + a discretionary run-
+// rate, and reports a safe-to-spend figure and the day the balance would go
+// negative. Degrades to a rolling-30-day runway when income cadence is unclear.
+const getRunway = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const userTz = validTz(req.query.tz);
+        const cacheParams = `${userTz}`;
+        const cached = cache.get(userId, 'runway', cacheParams);
+        if (cached) return res.status(200).json(cached);
+
+        const now  = moment().tz(userTz);
+        const asOf = now.format('YYYY-MM-DD');
+
+        const balanceDoc = await Balance.findOne({ user: userId }).select('amount').lean();
+        if (!balanceDoc) {
+            return res.status(404).json(BaseResponseDTO.error('User balance not found'));
+        }
+
+        const incomeSince    = now.clone().subtract(9, 'months').startOf('month').toDate();
+        const recurringSince = now.clone().subtract(13, 'months').startOf('month').toDate();
+        const thirtyAgo      = now.clone().subtract(30, 'days').toDate();
+
+        const [incomeTxns, expenseTxns, recentExpenses, flagged] = await Promise.all([
+            Transaction.find({ user: userId, type: 'income', time: { $gte: incomeSince } }).select('amount time').lean(),
+            Transaction.find({ user: userId, type: 'expense', time: { $gte: recurringSince } }).select('amount category description time').lean(),
+            Transaction.find({ user: userId, type: 'expense', time: { $gte: thirtyAgo } }).select('amount').lean(),
+            Category.find({ user: userId, isUtility: true }).select('name').lean(),
+        ]);
+
+        const incomeEvents = incomeTxns.map(t => ({
+            date:   moment(t.time).tz(userTz).format('YYYY-MM-DD'),
+            amount: t.amount,
+        }));
+
+        const recurringPayload = expenseTxns.map(t => ({
+            id:          t._id.toString(),
+            amount:      t.amount,
+            category:    t.category,
+            description: t.description,
+            date:        moment(t.time).tz(userTz).format('YYYY-MM-DD'),
+            type:        'expense',
+        }));
+        const utilityCategories = new Set([
+            ...DEFAULT_UTILITY_CATEGORY_NAMES,
+            ...flagged.map(c => c.name.toLowerCase()),
+        ]);
+        const recurringResult = nativeMlRecurring.detectRecurring(recurringPayload, { asOf, utilityCategories });
+
+        // Upcoming recurring bills become scheduled outflows in the projection.
+        const bills = recurringResult.recurring
+            .filter(r => r.nextDue)
+            .map(r => ({ merchant: r.merchant, dueDate: r.nextDue, amount: r.typicalAmount }));
+
+        // Discretionary run-rate: last-30-day expense minus the recurring monthly
+        // share, so bills aren't double-counted against the everyday burn.
+        const last30Expense   = recentExpenses.reduce((s, t) => s + t.amount, 0);
+        const recurringDaily  = (recurringResult.monthlyTotal || 0) / 30.44;
+        const discretionaryDaily = Math.max(0, last30Expense / 30 - recurringDaily);
+
+        const runway = computeRunway({
+            asOf,
+            balance: balanceDoc.amount,
+            incomeEvents,
+            bills,
+            discretionaryDaily,
+        });
+
+        const response = BaseResponseDTO.success('Payday runway calculated', runway);
+        cache.set(userId, 'runway', cacheParams, response);
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error(`Get runway error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
+    }
+};
+
 module.exports = {
     addTransaction,
     getUserTransaction,
@@ -1629,4 +1710,5 @@ module.exports = {
     getMLInsights,
     refreshMLInsights,
     getRecap,
+    getRunway,
 };

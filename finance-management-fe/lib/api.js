@@ -188,6 +188,10 @@ export const getRecap = (month = null) => {
   return apiFetch(`/api/transaction/recap?${qs}`);
 };
 
+// Payday Runway — forward safe-to-spend before the next expected income.
+export const getRunway = () =>
+  apiFetch(`/api/transaction/runway?tz=${encodeURIComponent(browserTz())}`);
+
 export const getMLInsights = () =>
   apiFetch(`/api/transaction/ml-insights?tz=${encodeURIComponent(browserTz())}`);
 

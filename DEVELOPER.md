@@ -808,6 +808,14 @@ Narrative discipline: lines never bake in a formatted amount — they speak in p
 
 Graceful degradation: `buildRecap` returns `{ available: false, reason }` when either the target month or its prior month is missing — a recap needs ≥1 full prior month to compare against. The `getRecap` controller reads snapshots O(1), caches per `(month, tz)`, and is invalidated by `cache.invalidateUser` on any transaction mutation. Covered by `test/ml.recap.test.js` (pure) and `test/recap.integration.test.js`.
 
+### Payday Runway (`services/ml/runway.js`)
+
+A forward-looking "safe to spend before your next income". Pure math, fully in-process. `detectIncomeCadence(incomeEvents, asOf)` reads the income rhythm (weekly / biweekly / monthly) from the median gap between income transactions and projects the next pay date; `computeRunway(input)` walks the balance forward day by day — subtracting a discretionary daily run-rate, subtracting recurring bills on their due dates (from `services/ml/recurring.js` `nextDue` + `typicalAmount`), and adding projected income on pay dates — to answer two questions: how much is safe to spend before the next payday, and the day the balance would go negative (the runway).
+
+The `getRunway` controller supplies the balance, the income history (9 months), the upcoming recurring bills, and a discretionary run-rate computed as last-30-day expense minus the recurring monthly share (so bills are not double-counted). It caches per `tz` (invalidated by `cache.invalidateUser`).
+
+Graceful degradation: when income cadence can't be read (variable / gig income — fewer than 3 events or an irregular schedule), it falls back to `mode:'rolling'` — a plain rolling runway with no payday horizon. Framed as a guide, not a guarantee (`note` is always returned). Covered by `test/ml.runway.test.js` (pure) and `test/runway.integration.test.js`.
+
 ---
 
 ## Environment variables
@@ -1154,6 +1162,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category — see Category volatility section |
 | GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12, or ≤ 0.35 for flagged utility categories) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
 | GET | `/api/transaction/recap` | 30/min | ✓ | Money Recap — rule-based, fully in-process monthly "wrapped". Query: `?month=YYYY-MM` (defaults to the most recent complete month). Returns `{ available, month, monthLabel, narrative[], tiles[] }` stitched from the monthly Snapshot (this month vs prior), Financial Health score, streak, net-worth delta, ML anomaly count and top category mover. `available:false` with a `reason` until there is ≥1 full prior month. Narrative lines are currency-free; raw amounts ride only on `tiles` for the FE to format |
+| GET | `/api/transaction/runway` | 30/min | ✓ | Payday Runway — forward "safe to spend before next income". Infers income cadence from income history, projects the balance to the next expected payday using upcoming recurring bills + a discretionary run-rate, and returns `{ mode:'payday'\|'rolling', nextIncomeDate, daysUntilIncome, expectedIncome, safeToSpend, safeToSpendPerDay, billsBeforeIncome[], billsTotal, runwayDays, runwayDate, status, note }`. Degrades to a rolling-30-day runway when income cadence is unclear. A guide, not a guarantee |
 | GET | `/api/transaction/time-to-zero` | 60/min | ✓ | Runway — days until balance reaches zero at current burn rate |
 | GET | `/api/transaction/active-months` | 60/min | ✓ | List of months with at least one transaction (reads from Snapshots) |
 | PUT | `/api/transaction/budget/:yearMonth` | 30/min | ✓ | Set budget for a month; body: `{ amount, updateDefault? }` |
