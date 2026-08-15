@@ -67,9 +67,9 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Page | Description |
 |------|-------------|
 | Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category |
-| Add transaction | Income or expense with smart category suggestions |
+| Add transaction | Income or expense with smart category suggestions, plus a savings/investment nudge — log money moved to savings under a savings category so it counts as saved, not spent |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
-| Insights | Anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete) |
+| Insights | Anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete). Savings & investment visibility: investing logged as a savings-group expense is treated as saved (not spent) across savings rate, 50/30/20 and anomaly baselines |
 | Recommendation | 11 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, windfall planner, zakat estimator, and more |
 | Range report | Custom date range with income/expense summary |
 | Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |
