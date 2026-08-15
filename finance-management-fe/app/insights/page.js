@@ -909,8 +909,8 @@ function Section({ id, title, subtitle, tooltip, tag, headerRight, children, loa
   return (
     <div id={id} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
       <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="flex items-center gap-2 min-w-0 w-full sm:flex-1">
             <h2 className="text-base font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{title}</h2>
             {tag && (
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 shrink-0">
