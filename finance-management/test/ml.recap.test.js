@@ -74,7 +74,10 @@ describe('services/ml/recap — buildRecap', () => {
 
     it('keeps raw currency out of the narrative (multi-currency safe)', () => {
       for (const line of recap.narrative) {
-        expect(line).to.not.match(/\d{4,}/); // no un-formatted 4+ digit amounts
+        // Strip the month-label year first — a calendar year is not a currency
+        // amount, so it shouldn't trip the un-formatted-amount check.
+        const withoutYear = line.replace(/\b(19|20)\d{2}\b/g, '');
+        expect(withoutYear).to.not.match(/\d{4,}/); // no un-formatted 4+ digit amounts
       }
     });
   });
