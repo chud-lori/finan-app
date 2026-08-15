@@ -96,10 +96,14 @@ const detectAnomalies = (transactions, opts = {}) => {
     ? { active: true, multiplier: opts.seasonal.multiplier || 1 }
     : { active: false, multiplier: 1 };
 
-  // Bucket expenses by category
+  // Bucket expenses by category. Savings-group outflow (investing / moving cash
+  // to savings) is flagged `is_savings` by the caller and skipped entirely — it
+  // is not consumption, so it must not enter a baseline or be flagged as an
+  // "unusually large" spend.
   const byCategory = new Map();
   for (const tx of transactions) {
     if ((tx.type || 'expense') !== 'expense') continue;
+    if (tx.is_savings) continue;
     if (!byCategory.has(tx.category)) byCategory.set(tx.category, []);
     byCategory.get(tx.category).push(tx);
   }

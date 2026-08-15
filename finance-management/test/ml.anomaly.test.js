@@ -40,6 +40,14 @@ describe('services/ml/anomaly — detectAnomalies', () => {
             const txs = build('food', [100], [99999]);
             expect(detectAnomalies(txs)).to.deep.equal([]);
         });
+
+        it('ignores savings-group outflow (is_savings) entirely', () => {
+            // A first-ever, extreme investment transfer must never be flagged — it
+            // is saved, not spent. It must also not seed a baseline for others.
+            const txs = build('reksa dana', [100_000, 100_000], [10_000_000])
+                .map(t => ({ ...t, is_savings: true }));
+            expect(detectAnomalies(txs)).to.deep.equal([]);
+        });
     });
 
     // The regression this module was rewritten for. With a population stddev over

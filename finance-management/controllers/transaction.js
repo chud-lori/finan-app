@@ -20,6 +20,7 @@ const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
 const { classifyVolatility } = require('../helpers/spendingVolatility');
 const { seasonalContext } = require('../helpers/seasonalRadar');
+const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
 const { seedDefaultCategories, DEFAULT_UTILITY_CATEGORY_NAMES } = require('../helpers/seedDefaultCategories');
 const { track } = require('../helpers/backgroundJobs');
 const nativeMl = require('../services/ml');
@@ -1009,16 +1010,26 @@ const getAnomalies = async (req, res) => {
         const startOfMonth = now.clone().startOf('month').toDate();
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
 
-        const [currentTxns, historicalTxns, priorCategories, categories, snapshots] = await Promise.all([
+        const [currentTxnsRaw, historicalTxnsRaw, priorCategoriesRaw, savingsNames, categories, snapshots] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: startOfMonth } }).lean(),
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: threeMonthsAgo, $lt: startOfMonth } }).lean(),
             Transaction.distinct('category', { user: req.user.id, type: 'expense', time: { $lt: startOfMonth } }),
+            getSavingsCategoryNames(req.user.id),
             // Category semantic group is a structured expected-lumpy signal (gotcha#566).
             Category.find({ user: req.user.id }).select('name group').lean(),
             // Monthly history for Seasonal Radar — is this month one the user
             // habitually overspends (their own Ramadan/Lebaran/holiday pattern)?
             Snapshot.find({ user: req.user.id }).select('yearMonth expense').lean(),
         ]);
+
+        // Savings-group outflow (investing, moving cash to savings) is not
+        // consumption — exclude it from the current set, the historical baseline
+        // and the "first time in this category" signal so it never reads as
+        // overspending.
+        const notSavings = (t) => !savingsNames.has((t.category || '').toLowerCase());
+        const currentTxns    = currentTxnsRaw.filter(notSavings);
+        const historicalTxns = historicalTxnsRaw.filter(notSavings);
+        const priorCategories = priorCategoriesRaw.filter(c => !savingsNames.has((c || '').toLowerCase()));
 
         const priorCategorySet = new Set(priorCategories.map(c => c.toLowerCase()));
         const catGroup = {};
@@ -1139,10 +1150,18 @@ const getExplainability = async (req, res) => {
         // enough to reflect the user's current life.
         const historyStart = moment(periodStart).subtract(6, 'month').toDate();
 
-        const [currentTxns, historyTxns] = await Promise.all([
+        const [currentTxnsRaw, historyTxnsRaw, savingsNames] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: periodStart, $lte: periodEnd } }).lean(),
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: historyStart, $lt: periodStart } }).lean(),
+            getSavingsCategoryNames(req.user.id),
         ]);
+
+        // Investing / moving cash to a savings-group category is a transfer, not
+        // spend — exclude it so it never surfaces as a top spending category or
+        // inflates the month-over-month spend baseline.
+        const notSavings = (t) => !savingsNames.has((t.category || '').toLowerCase());
+        const currentTxns = currentTxnsRaw.filter(notSavings);
+        const historyTxns = historyTxnsRaw.filter(notSavings);
 
         const totalExpense = currentTxns.reduce((s, t) => s + t.amount, 0);
 
@@ -1393,9 +1412,10 @@ const _runMLPipeline = async (userId, tz) => {
     const endOfMonth   = moment.tz(yearMonth + '-01', tz).endOf('month').toDate();
     const sixMonthsAgo = moment.tz(tz).subtract(6, 'months').startOf('month').toDate();
 
-    const [transactions, budgetDoc, categories, snapshots] = await Promise.all([
+    const [transactions, budgetDoc, savingsNames, categories, snapshots] = await Promise.all([
         Transaction.find({ user: userId, type: 'expense', time: { $gte: sixMonthsAgo, $lte: endOfMonth } }).lean(),
         Budget.findOne({ user: userId, yearMonth }).lean(),
+        getSavingsCategoryNames(userId),
         // Category group feeds the ML anomaly detector's lumpiness gate (gotcha#566).
         Category.find({ user: userId }).select('name group').lean(),
         // Monthly history for Seasonal Radar suppression.
@@ -1405,13 +1425,18 @@ const _runMLPipeline = async (userId, tz) => {
     const catGroup = {};
     categories.forEach(c => { if (c.name) catGroup[c.name] = c.group; });
 
-    // Current-month tx count (used for cache staleness check)
+    const isSavings = (tx) => savingsNames.has((tx.category || '').toLowerCase());
+
+    // Current-month tx count (used for cache staleness check). Counts ALL
+    // current-month expenses — it must stay in step with the countDocuments the
+    // ML-insights endpoints use as the cache key, so it is not savings-filtered.
     const currentMonthTxCount = transactions.filter(tx => tx.time >= startOfMonth).length;
 
-    // Daily totals for forecast
+    // Daily totals for the spend forecast — savings-group outflow is a transfer,
+    // not spend, so it is excluded from the projection.
     const dailyMap = {};
     for (const tx of transactions) {
-        if (tx.time >= startOfMonth) {
+        if (tx.time >= startOfMonth && !isSavings(tx)) {
             const day = moment.tz(tx.time, tz).date();
             dailyMap[day] = (dailyMap[day] || 0) + tx.amount;
         }
@@ -1426,6 +1451,8 @@ const _runMLPipeline = async (userId, tz) => {
         description:      tx.description,
         type:             tx.type,
         is_current_month: tx.time >= startOfMonth,
+        // Skipped by the anomaly detector — investing isn't overspending.
+        is_savings:       isSavings(tx),
     }));
 
     // Seasonal Radar: widen the anomaly bar during a month the user habitually

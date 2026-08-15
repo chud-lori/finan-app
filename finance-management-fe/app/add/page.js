@@ -141,6 +141,23 @@ function CategoryCombobox({ value, onChange, categories }) {
   );
 }
 
+// Light client-side hint only — the authoritative savings grouping lives on the
+// category's `group` field server-side. These terms cover the seeded savings
+// defaults plus the common ways users name an investment/transfer-to-savings, so
+// we can nudge them that this expense is tracked as saved, not spent.
+const SAVINGS_HINT_TERMS = [
+  'saving', 'tabungan', 'nabung', 'menabung',
+  'invest', 'investasi', 'reksa dana', 'reksadana', 'mutual fund',
+  'stock', 'saham', 'crypto', 'bitcoin', 'obligasi', 'bonds',
+  'deposit', 'deposito', 'emergency fund', 'dana darurat',
+  'emas', 'gold', 'pension', 'pensiun',
+];
+const looksLikeSavings = (category) => {
+  const c = (category || '').toLowerCase().trim();
+  if (!c) return false;
+  return SAVINGS_HINT_TERMS.some(term => c.includes(term) || term.includes(c));
+};
+
 // ─── Side panel ───────────────────────────────────────────────────────────────
 function SidePanel() {
   const formatAmount = useFormatAmount();
@@ -418,6 +435,22 @@ export default function AddPage() {
                       onChange={(val) => setForm(f => ({ ...f, category: val }))}
                       categories={[...new Set([form.category, ...categories, ...suggestions].filter(Boolean))]}
                     />
+                    {/* Savings-visibility nudge: recording a full income and logging
+                        investing as a savings-group expense keeps the savings rate
+                        and 50/30/20 honest. Only shown for expenses. */}
+                    {form.type === 'expense' && (
+                      looksLikeSavings(form.category) ? (
+                        <p className="mt-2 text-xs text-emerald-600 flex items-start gap-1.5">
+                          <span aria-hidden>🐖</span>
+                          <span>Tracked as savings — this counts as money saved, not spent, in your savings rate and 50/30/20.</span>
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-xs text-gray-400">
+                          Moving money to savings or investments (reksa dana, stocks, a deposit)? Log it under a{' '}
+                          <span className="font-medium text-gray-500">savings</span> category so it counts as saved, not spent.
+                        </p>
+                      )
+                    )}
                   </Field>
 
                   <Field label="Date & Time">

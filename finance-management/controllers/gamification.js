@@ -6,6 +6,7 @@ const Balance = require('../models/balance.model');
 const Transaction = require('../models/transaction.model');
 const logger = require('../helpers/logger');
 const { computeFinancialHealth } = require('../helpers/financialHealth');
+const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
 const { BaseResponseDTO } = require('../dtos/transaction.dto');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
@@ -19,33 +20,45 @@ const computeHealth = async (userId, tz) => {
     const sixMonthsAgo = now.clone().subtract(6, 'months').startOf('month').toDate();
     const yearMonth = now.format('YYYY-MM');
 
-    const [trailingTxns, sixMoExpenseTxns, monthExpenseTxns, balanceDoc, budgetDoc, goals] = await Promise.all([
+    const [trailingTxns, sixMoExpenseTxns, monthExpenseTxns, balanceDoc, budgetDoc, goals, savingsNames] = await Promise.all([
         // Trailing 3 complete months → a stable savings rate.
-        Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } }).select('amount type').lean(),
-        Transaction.find({ user: userId, type: 'expense', time: { $gte: sixMonthsAgo, $lt: monthStart } }).select('amount time').lean(),
-        Transaction.find({ user: userId, type: 'expense', time: { $gte: monthStart } }).select('amount').lean(),
+        Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } }).select('amount type category').lean(),
+        Transaction.find({ user: userId, type: 'expense', time: { $gte: sixMonthsAgo, $lt: monthStart } }).select('amount time category').lean(),
+        Transaction.find({ user: userId, type: 'expense', time: { $gte: monthStart } }).select('amount category').lean(),
         Balance.findOne({ user: userId }).select('amount').lean(),
         Budget.findOne({ user: userId, yearMonth }).lean(),
         Goal.find({ user: userId, achieve: { $ne: 1 } }).select('price savedAmount').lean(),
+        getSavingsCategoryNames(userId),
     ]);
 
-    // Savings rate over the trailing window.
+    // Money moved into a savings-group category is a transfer to yourself, not
+    // consumption — exclude it from every "expense" figure below so the score
+    // treats investing as saved, not spent.
+    const isSavings = (t) => savingsNames.has((t.category || '').toLowerCase());
+
+    // Savings rate over the trailing window. Savings-group outflow is added back
+    // as "saved": savingsRate = (income − nonSavingsExpense) / income.
     const trailIncome  = trailingTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const trailExpense = trailingTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const trailExpense = trailingTxns
+        .filter(t => t.type === 'expense' && !isSavings(t))
+        .reduce((s, t) => s + t.amount, 0);
     const savingsRate = trailIncome > 0 ? (trailIncome - trailExpense) / trailIncome : null;
 
-    // Emergency fund = balance ÷ average monthly expense over 6 complete months.
-    const monthsWithExpense = new Set(sixMoExpenseTxns.map(t => moment(t.time).tz(tz).format('YYYY-MM'))).size;
+    // Emergency fund = balance ÷ average monthly (non-savings) expense over 6
+    // complete months. Investing is not a recurring cost you must cover in an
+    // emergency, so it does not shrink the runway.
+    const nonSavingsSixMo = sixMoExpenseTxns.filter(t => !isSavings(t));
+    const monthsWithExpense = new Set(nonSavingsSixMo.map(t => moment(t.time).tz(tz).format('YYYY-MM'))).size;
     const avgMonthlyExpense = monthsWithExpense > 0
-        ? sixMoExpenseTxns.reduce((s, t) => s + t.amount, 0) / monthsWithExpense
+        ? nonSavingsSixMo.reduce((s, t) => s + t.amount, 0) / monthsWithExpense
         : null;
     const balanceAmt = balanceDoc?.amount ?? 0;
     const emergencyMonths = avgMonthlyExpense && avgMonthlyExpense > 0 ? Math.max(balanceAmt, 0) / avgMonthlyExpense : null;
 
-    // Budget pace = spent so far this month ÷ expected by now.
+    // Budget pace = (non-savings) spent so far this month ÷ expected by now.
     let budgetPaceRatio = null;
     if (budgetDoc && budgetDoc.amount > 0) {
-        const spentSoFar = monthExpenseTxns.reduce((s, t) => s + t.amount, 0);
+        const spentSoFar = monthExpenseTxns.filter(t => !isSavings(t)).reduce((s, t) => s + t.amount, 0);
         const expectedByNow = budgetDoc.amount * (now.date() / now.daysInMonth());
         budgetPaceRatio = expectedByNow > 0 ? spentSoFar / expectedByNow : (spentSoFar > 0 ? 2 : 0);
     }
