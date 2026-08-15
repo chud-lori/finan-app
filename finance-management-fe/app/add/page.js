@@ -286,12 +286,13 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Load all categories once on mount
+  // Load categories, filtered to the selected type so income categories
+  // (salary, bonus) don't show while adding an expense, and vice versa.
   useEffect(() => {
-    getCategories()
+    getCategories(form.type || null)
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
-  }, []);
+  }, [form.type]);
 
   // Refresh suggestions when type changes
   useEffect(() => {
