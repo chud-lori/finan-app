@@ -6,10 +6,12 @@ import AuthGuard from '@/components/AuthGuard';
 import {
   getRecommendation, getProfile, addGoal, getAllGoals, updateGoal, deleteGoal,
   getGroupSummary, getAnalytics, getNetWorth, saveNetWorth, getNetWorthHistory,
+  allocateToGoal, getWindfall, getZakat,
 } from '@/lib/api';
 import { useCurrency } from '@/components/CurrencyContext';
 import NetWorthTrendChart from '@/components/charts/NetWorthTrendChart';
 import { buildRuleSplit } from '@/lib/ruleSplit';
+import { suggestSplit } from '@/lib/windfallSplit';
 
 const currentYearMonth = () => {
   const d = new Date();
@@ -565,8 +567,68 @@ function GoalRow({ goal, onSaved, onDelete, onToggleAchieve }) {
   );
 }
 
+// Surplus sweep — reached from the dashboard nudge (?tool=goal&sweep=YYYY-MM&amount=N).
+// One tap moves the whole surplus onto a goal's own savedAmount and records the
+// Allocation that suppresses the nudge. Copy is careful: the money was never moved
+// anywhere real — it is your cash-flow surplus, just earmarked to a goal.
+function SurplusSweepBanner({ month, amount, goals, onSwept }) {
+  const { formatAmount } = useCurrency();
+  const [busyGoal, setBusyGoal] = useState(null);
+  const [error,    setError]    = useState('');
+  const activeGoals = goals.filter(g => g.achieve !== 1);
+
+  const sweep = async (goal) => {
+    setBusyGoal(goal.id); setError('');
+    try {
+      await allocateToGoal({ source: 'surplus', sourceKey: month, goalId: goal.id, amount });
+      onSwept();
+    } catch (err) {
+      setError(err.message || 'Could not sweep the surplus');
+    } finally {
+      setBusyGoal(null);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-4">
+      <div className="flex items-start gap-2.5">
+        <span className="text-base shrink-0">💰</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-violet-800">Sweep last month&apos;s surplus</p>
+          <p className="text-xs text-violet-700 mt-0.5">
+            You had a surplus of <strong>{formatAmount(amount)}</strong> in {monthLabel(month)}. Earmark it to a goal in one
+            tap — the amount is added to that goal&apos;s saved total. Nothing leaves any account; this is just your own cash-flow surplus.
+          </p>
+          {activeGoals.length === 0 ? (
+            <p className="text-xs text-violet-600 mt-2">Add a goal below first, then sweep the surplus into it.</p>
+          ) : (
+            <div className="mt-2.5 space-y-1.5">
+              {activeGoals.map(g => (
+                <button key={g.id} type="button" onClick={() => sweep(g)} disabled={busyGoal !== null}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-violet-200 bg-white hover:bg-violet-100 transition-colors disabled:opacity-60">
+                  <span className="text-xs font-medium text-gray-700 truncate">{g.description}</span>
+                  <span className="text-xs font-semibold text-violet-700 shrink-0">
+                    {busyGoal === g.id ? 'Adding…' : `+ ${formatAmount(amount)}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          {error && <p className="text-xs text-red-500 mt-1.5">{error}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SavingsGoalTool() {
   const { formatAmount, currency } = useCurrency();
+  const searchParams = useSearchParams();
+
+  // Surplus-sweep context carried by the nudge CTA.
+  const sweepMonth  = searchParams.get('sweep');
+  const sweepAmount = parseNum(searchParams.get('amount') || '');
+  const [swept, setSwept] = useState(false);
 
   // ── DB-backed goals ──
   const [goals,       setGoals]       = useState([]);
@@ -640,8 +702,19 @@ function SavingsGoalTool() {
   const activeGoals   = goals.filter(g => g.achieve !== 1);
   const achievedGoals = goals.filter(g => g.achieve === 1);
 
+  const showSweep = Boolean(sweepMonth) && sweepAmount > 0 && !swept && goalsLoaded;
+
   return (
     <div className="space-y-4">
+
+      {showSweep && (
+        <SurplusSweepBanner
+          month={sweepMonth}
+          amount={sweepAmount}
+          goals={goals}
+          onSwept={() => { setSwept(true); reloadGoals(); }}
+        />
+      )}
 
       {/* ── My Goals ── */}
       <ToolCard>
@@ -1702,6 +1775,306 @@ function NetWorthTool() {
   );
 }
 
+// ─── Tool 10: Windfall Planner (THR / bonus) ─────────────────────────────────
+// Detects a recent unusually large income server-side and lets the user split it
+// into their goals, one tap per goal. Each tap increments that goal's own
+// savedAmount (never a shared pool) and records the Allocation that suppresses
+// the dashboard windfall nudge. Emergency fund and debt payoff are just goals —
+// the split targets whatever active goals exist.
+function WindfallTool() {
+  const { formatAmount, currency } = useCurrency();
+  const [data,    setData]    = useState(null);
+  const [amounts, setAmounts] = useState({}); // goalId → formatted input string
+  const [loading, setLoading] = useState(true);
+  const [busy,    setBusy]    = useState(null); // goalId currently allocating
+  const [error,   setError]   = useState('');
+
+  const load = useCallback((prefill = false) => {
+    return getWindfall()
+      .then(res => {
+        const d = res.data ?? null;
+        setData(d);
+        if (prefill && d?.windfall && d.goals?.length) {
+          const { split } = suggestSplit(d.windfall.remaining, d.goals);
+          setAmounts(Object.fromEntries(Object.entries(split).map(([id, v]) => [id, fmtInput(String(v))])));
+        }
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(true); }, [load]);
+
+  const allocate = async (goalId) => {
+    const amount = parseNum(amounts[goalId] || '');
+    if (!amount || !data?.windfall) return;
+    setBusy(goalId); setError('');
+    try {
+      await allocateToGoal({ source: 'windfall', sourceKey: data.windfall.transactionId, goalId, amount });
+      setAmounts(a => ({ ...a, [goalId]: '' }));
+      await load(false);
+    } catch (err) {
+      setError(err.message || 'Could not allocate');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <ToolCard>
+        <div className="h-4 w-40 bg-gray-100 rounded animate-pulse mb-3" />
+        <div className="h-24 bg-gray-50 rounded-xl animate-pulse" />
+      </ToolCard>
+    );
+  }
+
+  const w = data?.windfall;
+
+  if (!w) {
+    return (
+      <div className="space-y-4">
+        <ToolCard>
+          <div className="text-center py-4">
+            <div className="text-3xl mb-2">🎁</div>
+            <p className="text-sm font-semibold text-gray-800">No recent windfall detected</p>
+            <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+              When a deposit lands that&apos;s well above your usual income — a bonus, THR, or tax refund — it shows up here
+              with a one-tap plan to split it into your goals before it gets absorbed into everyday spending.
+            </p>
+          </div>
+        </ToolCard>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Detected windfall */}
+      <div className="rounded-2xl border-2 border-indigo-300 bg-indigo-50 p-5 text-center">
+        <p className="text-xs text-indigo-500 font-medium mb-1">Windfall detected</p>
+        <p className="text-3xl font-black text-indigo-700 tabular-nums">{formatAmount(w.amount)}</p>
+        <p className="text-xs text-indigo-600 mt-1">
+          {new Date(w.date).toLocaleDateString()} · about {w.ratio}× your usual income of {formatAmount(w.typical)}
+        </p>
+        {w.allocated > 0 && (
+          <p className="text-xs text-indigo-500 mt-1.5">
+            {formatAmount(w.allocated)} earmarked so far · {formatAmount(w.remaining)} left to plan
+          </p>
+        )}
+      </div>
+
+      {data.goals.length === 0 ? (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+          <p className="text-xs text-amber-700">
+            You have no active goals to split this into yet. Create one in the <strong>Savings Goal</strong> tool — an
+            emergency fund or a debt-payoff goal both work — then come back to allocate.
+          </p>
+        </div>
+      ) : (
+        <>
+          <ToolCard>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-gray-700">Split into your goals</h4>
+              <span className="text-xs text-gray-400">{formatAmount(w.remaining)} to allocate</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              Amounts are pre-filled to fill each goal in turn — adjust any of them, then tap to add it to that goal.
+              The money is added to the goal&apos;s own saved total; nothing leaves any account.
+            </p>
+            <div className="space-y-2.5">
+              {data.goals.map(g => {
+                const need = Math.max((g.price || 0) - (g.savedAmount || 0), 0);
+                return (
+                  <div key={g.id} className="rounded-xl border border-gray-200 p-3">
+                    <div className="flex items-center justify-between mb-1.5 gap-2">
+                      <p className="text-sm font-medium text-gray-800 truncate">{g.description}</p>
+                      <span className="text-xs text-gray-400 shrink-0">
+                        {formatAmount(g.savedAmount || 0)} / {formatAmount(g.price)}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">{currency}</span>
+                        <input type="text" inputMode="numeric" value={amounts[g.id] || ''}
+                          onChange={e => setAmounts(a => ({ ...a, [g.id]: fmtInput(e.target.value) }))}
+                          placeholder={`Up to ${need ? formatAmount(need) : '—'}`}
+                          className="w-full pl-8 pr-2 py-1.5 rounded-lg border border-gray-300 text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
+                      </div>
+                      <button type="button" onClick={() => allocate(g.id)}
+                        disabled={busy !== null || !parseNum(amounts[g.id] || '')}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors disabled:opacity-50">
+                        {busy === g.id ? '…' : 'Allocate'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+          </ToolCard>
+
+          <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
+            <p className="text-xs text-gray-500">
+              This is a planning aid — the deposit itself already landed in your balance when you logged it. Allocating here
+              just earmarks part of it toward your goals so it isn&apos;t quietly absorbed into everyday spending.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Tool 11: Zakat Estimator (ID) ───────────────────────────────────────────
+// A planning ESTIMATE of zakat-maal (2.5% of the zakatable base from Net Worth)
+// vs this year's social-group giving. Not a fatwa — nisab/haul nuance is not
+// modelled. Optional and dismissible, including for non-Muslim users.
+function ZakatTool() {
+  const { formatAmount, currency } = useCurrency();
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
+  const [nisab,   setNisab]   = useState('');
+  const [hidden,  setHidden]  = useState(false);
+
+  const load = useCallback((nisabVal = null) => {
+    setLoading(true);
+    return getZakat(nisabVal)
+      .then(res => setData(res.data ?? null))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(null); }, [load]);
+
+  if (hidden) {
+    return (
+      <ToolCard>
+        <p className="text-xs text-gray-500 text-center py-2">
+          Zakat estimate hidden.{' '}
+          <button type="button" onClick={() => setHidden(false)} className="text-teal-600 font-medium underline underline-offset-2">Show again</button>
+        </p>
+      </ToolCard>
+    );
+  }
+
+  if (loading && !data) {
+    return (
+      <ToolCard>
+        <div className="h-4 w-40 bg-gray-100 rounded animate-pulse mb-3" />
+        <div className="h-24 bg-gray-50 rounded-xl animate-pulse" />
+      </ToolCard>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Estimate + not-a-fatwa disclaimer — shown first, deliberately */}
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <div className="flex items-start gap-2.5">
+          <span className="text-base shrink-0">ℹ️</span>
+          <div>
+            <p className="text-xs font-semibold text-amber-800">This is an estimate, not a fatwa</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Zakat-maal is commonly 2.5% of qualifying wealth held for one lunar year (haul) above the nisab threshold.
+              This figure is a rough planning aid from your Net Worth holdings — it does not track haul and applies nisab
+              only if you enter it. For anything binding, consult a scholar or your local amil. Optional for everyone —
+              hide it any time.
+            </p>
+            <button type="button" onClick={() => setHidden(true)}
+              className="text-xs text-amber-700 font-medium underline underline-offset-2 mt-1.5">
+              Hide this tool
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
+
+      {data && !data.hasHoldings ? (
+        <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
+          <p className="text-xs text-gray-500">
+            No Net Worth holdings saved yet. Add what you own in the <strong>Net Worth</strong> tool and this will estimate
+            2.5% of your zakatable assets.
+          </p>
+        </div>
+      ) : data && (
+        <>
+          <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5 text-center">
+            <p className="text-xs text-emerald-500 font-medium mb-1">Estimated zakat due · {data.year}</p>
+            <p className="text-3xl font-black text-emerald-700 tabular-nums">{formatAmount(data.zakatDue)}</p>
+            <p className="text-xs text-emerald-600 mt-1">2.5% of a {formatAmount(data.zakatableBase)} zakatable base</p>
+            {data.meetsNisab === false && (
+              <p className="text-xs text-amber-600 mt-1.5">Below the nisab you entered — nothing is due this year.</p>
+            )}
+          </div>
+
+          <ToolCard>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">How the base is built</h4>
+            <StatRow label="Zakatable assets" value={formatAmount(data.zakatableAssets)}
+              sub="Cash, investments, and money owed to you" />
+            <StatRow label="Deductible debts" value={`−${formatAmount(data.deductibleDebts)}`}
+              sub="Short-term / consumer debts" />
+            <StatRow label="Zakatable base" value={formatAmount(data.zakatableBase)} valueClass="text-gray-900" />
+            <StatRow label="Rate" value="2.5%" />
+          </ToolCard>
+
+          <ToolCard>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-gray-700">Your giving this year</h4>
+              <span className="text-xs text-gray-400">{data.coverage}% of estimate</span>
+            </div>
+            <div className="mb-2">
+              <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+                <span>{formatAmount(data.givingYtd)} given</span>
+                <span>{formatAmount(data.zakatDue)} estimated</span>
+              </div>
+              <ProgressBar value={data.givingYtd} max={data.zakatDue || 1} color="emerald" />
+            </div>
+            {data.remaining > 0 ? (
+              <p className="text-xs text-gray-500 mt-2">
+                About <strong className="text-gray-700">{formatAmount(data.remaining)}</strong> left against this year&apos;s estimate.
+              </p>
+            ) : data.zakatDue > 0 ? (
+              <p className="text-xs text-emerald-600 font-semibold mt-2">✓ Your recorded giving already meets the estimate.</p>
+            ) : null}
+            {data.socialCategories?.length === 0 && (
+              <p className="text-xs text-gray-400 mt-2">
+                Giving is counted from expenses in categories grouped as <strong>social</strong> (zakat, donation, sharing).
+                Assign that group to your giving categories on the <a href="/insights" className="text-teal-600 underline underline-offset-2">Insights page</a> so it&apos;s tracked here.
+              </p>
+            )}
+          </ToolCard>
+
+          {/* Optional nisab refinement */}
+          <ToolCard>
+            <p className="text-xs text-gray-500 mb-2">
+              Optional: enter today&apos;s nisab (the value of ~85 g gold) to apply the threshold. Below it, no zakat is due.
+            </p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">{currency}</span>
+                <input type="text" inputMode="numeric" value={nisab}
+                  onChange={e => setNisab(fmtInput(e.target.value))}
+                  placeholder="e.g. 85,000,000"
+                  className="w-full pl-12 pr-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+              </div>
+              <button type="button" onClick={() => load(parseNum(nisab) || null)}
+                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors">
+                Apply
+              </button>
+            </div>
+            {data.nisab != null && (
+              <p className="text-xs text-gray-400 mt-1.5">Applying a nisab of {formatAmount(data.nisab)}.</p>
+            )}
+          </ToolCard>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Right panel: tips + quick reference per tool ─────────────────────────────
 const TOOL_INFO = {
   afford: {
@@ -1783,6 +2156,24 @@ const TOOL_INFO = {
       { label: 'Trend',           value: 'One point per month' },
     ],
   },
+  windfall: {
+    tip:   { title: 'Pay your future first', body: 'A THR or bonus is the easiest money to save — you were living without it. Earmark a chunk to goals before lifestyle creep spends it for you.' },
+    refs:  [
+      { label: 'Detected when',   value: '≥ 1.8× usual income' },
+      { label: 'Window',          value: 'Last 45 days' },
+      { label: 'Split targets',   value: 'Your active goals' },
+      { label: 'Emergency / debt', value: 'Just make it a goal' },
+    ],
+  },
+  zakat: {
+    tip:   { title: 'Estimate, then verify', body: 'This is a planning figure, not a ruling. Nisab tracks the gold price and haul depends on when you acquired each asset — confirm with a scholar before you give.' },
+    refs:  [
+      { label: 'Rate',            value: '2.5% of base' },
+      { label: 'Base',            value: 'Cash + investment + receivable' },
+      { label: 'Less',            value: 'Short-term debts' },
+      { label: 'Giving tracked',  value: 'social-group expenses' },
+    ],
+  },
 };
 
 function RightPanel({ toolId }) {
@@ -1837,6 +2228,8 @@ const TOOLS = [
   { id: 'fire',      label: 'FIRE Calculator',      icon: '🔥', desc: 'Find your financial independence number',    Component: FireTool,       passbudget: false },
   { id: 'tax',       label: 'Tax Estimator',        icon: '🧾', desc: 'Estimate PPh 21 income tax (Indonesia)',     Component: TaxTool,        passbudget: false },
   { id: 'networth',  label: 'Net Worth',            icon: '📋', desc: 'Track assets vs liabilities',               Component: NetWorthTool,   passbudget: false },
+  { id: 'windfall',  label: 'Windfall Planner',     icon: '🎁', desc: 'Split a THR / bonus into your goals',       Component: WindfallTool,   passbudget: false },
+  { id: 'zakat',     label: 'Zakat Estimator',      icon: '🕌', desc: 'Estimate zakat & track giving (optional)',  Component: ZakatTool,      passbudget: false },
 ];
 
 const TOOL_IDS = TOOLS.map(t => t.id);
