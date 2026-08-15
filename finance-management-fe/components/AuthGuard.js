@@ -2,26 +2,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { checkAuth } from '@/lib/api';
-import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
+import { SkeletonLine } from '@/components/Skeleton';
+import Navbar from '@/components/Navbar';
 
 function PageSkeleton() {
   return (
-    <div className="min-h-screen bg-gray-50 animate-pulse">
-      {/* Navbar skeleton */}
-      <div className="bg-white border-b border-gray-200 h-14 flex items-center px-6 gap-6">
-        <SkeletonLine className="h-5 w-24 !bg-teal-100" />
-        <div className="hidden md:flex gap-3 flex-1">
-          {[80, 72, 48, 64, 60, 64].map((w, i) => (
-            <SkeletonLine key={i} className={`h-3.5 w-${w}`} style={{ width: w }} />
-          ))}
-        </div>
-        <div className="ml-auto flex gap-2">
-          <SkeletonBox className="h-7 w-7 rounded-lg" />
-          <SkeletonLine className="h-7 w-20 rounded-lg" />
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* The navbar is static chrome (no per-request data) — render it for real
+          during the auth check so only the content body flashes a skeleton. */}
+      <Navbar />
       {/* Content skeleton */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4 animate-pulse">
         <SkeletonLine className="h-5 w-40 mb-6" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[0, 1, 2].map(i => (

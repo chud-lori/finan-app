@@ -446,8 +446,8 @@ export default function AddPage() {
                         </p>
                       ) : (
                         <p className="mt-2 text-xs text-gray-400">
-                          Moving money to savings or investments (reksa dana, stocks, a deposit)? Log it under a{' '}
-                          <span className="font-medium text-gray-500">savings</span> category so it counts as saved, not spent.
+                          Moving money to savings or investments (mutual fund, stocks, a deposit)? Log it under a{' '}
+                          <span className="font-medium text-gray-500">savings-group</span> category (savings, mutual fund, stocks) so it counts as saved, not spent.
                         </p>
                       )
                     )}
