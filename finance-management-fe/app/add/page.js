@@ -104,13 +104,18 @@ function CategoryCombobox({ value, onChange, categories }) {
               <li
                 key={c}
                 onClick={() => select(c)}
-                className={`px-3.5 py-2 text-sm cursor-pointer transition-colors flex items-center justify-between ${
+                className={`px-3.5 py-2 text-sm cursor-pointer transition-colors flex items-center justify-between gap-2 ${
                   value === c.toLowerCase()
                     ? 'bg-teal-50 text-teal-700 font-medium'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <span className="capitalize">{toTitleCase(c)}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="capitalize truncate">{toTitleCase(c)}</span>
+                  {looksLikeSavings(c) && (
+                    <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">savings</span>
+                  )}
+                </span>
                 {value === c.toLowerCase() && (
                   <svg className="w-3.5 h-3.5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
