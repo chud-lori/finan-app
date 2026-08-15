@@ -10,7 +10,6 @@ import { logout as apiLogout } from '@/lib/api';
 const NAV_LINKS = [
   { href: '/dashboard',      label: 'Dashboard' },
   { href: '/analytics',      label: 'Analytics'  },
-  { href: '/reports',        label: 'Reports'    },
   { href: '/recommendation', label: 'Planner'    },
   { href: '/insights',       label: 'Insights'   },
 ];

@@ -25,12 +25,12 @@ const TABS = [
   },
   { key: 'add' }, // centre FAB
   {
-    href: '/reports',
-    label: 'Reports',
+    href: '/insights',
+    label: 'Insights',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          d="M9.663 17h4.673M12 3a6 6 0 00-3.6 10.8c.4.3.6.7.6 1.2v.5a1 1 0 001 1h4a1 1 0 001-1v-.5c0-.5.2-.9.6-1.2A6 6 0 0012 3z" />
       </svg>
     ),
   },

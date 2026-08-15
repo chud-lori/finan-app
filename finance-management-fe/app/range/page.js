@@ -4,6 +4,6 @@ import { useRouter } from 'next/navigation';
 
 export default function RangeRedirect() {
   const router = useRouter();
-  useEffect(() => { router.replace('/reports'); }, [router]);
+  useEffect(() => { router.replace('/analytics'); }, [router]);
   return null;
 }

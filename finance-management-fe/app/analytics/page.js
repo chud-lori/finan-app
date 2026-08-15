@@ -8,6 +8,7 @@ import { getAnalytics, getTransactions } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
+import RangeReport from '@/components/RangeReport';
 
 const DonutChart = dynamic(() => import('@/components/charts/DonutChart'), { ssr: false });
 const HBarChart  = dynamic(() => import('@/components/charts/HBarChart'),  { ssr: false });
@@ -315,6 +316,8 @@ export default function AnalyticsPage() {
   const [loadingMonthTxns, setLoadingMonthTxns] = useState(false);
 
   const load = useCallback(async () => {
+    // Range mode does its own fetching inside <RangeReport/>.
+    if (tab === 'Range') { setLoading(false); return; }
     setLoading(true);
     setError('');
     try {
@@ -413,7 +416,7 @@ export default function AnalyticsPage() {
               <p className="text-sm text-gray-500">Detailed breakdown of your income &amp; expenses</p>
             </div>
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl self-start sm:self-auto">
-              {['Monthly', 'Yearly'].map(t => (
+              {['Monthly', 'Yearly', 'Range'].map(t => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
@@ -427,7 +430,8 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Period selectors */}
+          {/* Period selectors (hidden in Range mode — RangeReport has its own) */}
+          {tab !== 'Range' && (
           <div className="mb-6 space-y-3">
             <div className="flex items-center gap-2">
               <button
@@ -463,12 +467,15 @@ export default function AnalyticsPage() {
               </div>
             )}
           </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
           )}
 
-          {loading ? (
+          {tab === 'Range' ? (
+            <RangeReport />
+          ) : loading ? (
             <div className="space-y-5">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[0,1,2,3].map(i => (
