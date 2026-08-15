@@ -800,6 +800,14 @@ Grouping is unchanged by this gate — this is a classification step, not a clus
 
 **API:** `detectRecurring(transactions, { asOf, utilityCategories })` → `{ recurring[], monthlyTotal, count, alerts[], frequent[], frequentMonthlyTotal }`. `utilityCategories` is an optional Set of exact lowercased category names that earn the looser amount gate. Also exports `merchantKey()` and `isBlockedCategory()`.
 
+### Money Recap (`services/ml/recap.js`)
+
+A rule-based, fully in-process monthly "wrapped" — no LLM, nothing leaves the box. `buildRecap(input)` is a pure function that stitches a plain-language `narrative[]` and a set of stat `tiles[]` out of signals the app already computes: the monthly `Snapshot` (this month vs the one before), the Financial Health score (`computeHealth`, reused from `controllers/gamification.js`), the logging streak, the net-worth reading (`NetWorthSnapshot`), the ML anomaly count (`MLInsight`) and the per-category top mover.
+
+Narrative discipline: lines never bake in a formatted amount — they speak in percentages, counts, category names and month labels so they read correctly in any currency. Raw amounts ride only on `tiles`, which the frontend formats via `useFormatAmount()`. Each tile carries `{ key, label, value, format: 'currency'|'percent'|'number', tone, delta? }`.
+
+Graceful degradation: `buildRecap` returns `{ available: false, reason }` when either the target month or its prior month is missing — a recap needs ≥1 full prior month to compare against. The `getRecap` controller reads snapshots O(1), caches per `(month, tz)`, and is invalidated by `cache.invalidateUser` on any transaction mutation. Covered by `test/ml.recap.test.js` (pure) and `test/recap.integration.test.js`.
+
 ---
 
 ## Environment variables
@@ -1145,6 +1153,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
 | GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category — see Category volatility section |
 | GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12, or ≤ 0.35 for flagged utility categories) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
+| GET | `/api/transaction/recap` | 30/min | ✓ | Money Recap — rule-based, fully in-process monthly "wrapped". Query: `?month=YYYY-MM` (defaults to the most recent complete month). Returns `{ available, month, monthLabel, narrative[], tiles[] }` stitched from the monthly Snapshot (this month vs prior), Financial Health score, streak, net-worth delta, ML anomaly count and top category mover. `available:false` with a `reason` until there is ≥1 full prior month. Narrative lines are currency-free; raw amounts ride only on `tiles` for the FE to format |
 | GET | `/api/transaction/time-to-zero` | 60/min | ✓ | Runway — days until balance reaches zero at current burn rate |
 | GET | `/api/transaction/active-months` | 60/min | ✓ | List of months with at least one transaction (reads from Snapshots) |
 | PUT | `/api/transaction/budget/:yearMonth` | 30/min | ✓ | Set budget for a month; body: `{ amount, updateDefault? }` |

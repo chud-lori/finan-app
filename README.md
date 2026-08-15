@@ -33,6 +33,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Anomaly detection** — flags unusually large transactions compared to your spending baseline
 - **Spending explainability** — shows which categories drive your spending the most
 - **Time-to-zero runway** — estimates when your balance hits zero if current spending continues
+- **Money Recap** — a monthly in-app "wrapped": a plain-language narrative plus stat tiles (net saved, spend vs last month, top category, streak, net-worth change) stitched entirely from your own numbers, no AI
 - **Category management** — rename categories (updates all transactions automatically) or delete unused ones; 28 default categories pre-loaded for every new account
 
 ### Plan
@@ -65,7 +66,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category |
 | Add transaction | Income or expense with smart category suggestions |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
-| Insights | Anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete) |
+| Insights | Money Recap (monthly wrap-up), anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete) |
 | Recommendation | 9 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, and more |
 | Range report | Custom date range with income/expense summary |
 | Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |

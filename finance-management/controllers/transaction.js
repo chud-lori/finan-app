@@ -23,6 +23,9 @@ const { seedDefaultCategories, DEFAULT_UTILITY_CATEGORY_NAMES } = require('../he
 const { track } = require('../helpers/backgroundJobs');
 const nativeMl = require('../services/ml');
 const nativeMlRecurring = require('../services/ml/recurring');
+const NetWorthSnapshot = require('../models/netWorthSnapshot.model');
+const { buildRecap } = require('../services/ml/recap');
+const { computeHealth } = require('./gamification');
 
 // Fire-and-forget: drop the cached insight for the mutated month, and — when that month is inside
 // the 6-month window the anomaly baselines are built from — the current month too.
@@ -1535,6 +1538,74 @@ const refreshMLInsights = async (req, res) => {
     }
 };
 
+// ── GET /api/transaction/recap ────────────────────────────────────────────────
+// Money Recap: a rule-based, fully in-process monthly "wrapped". Stitches a
+// plain-language narrative + stat tiles out of signals already computed — the
+// monthly Snapshot (this month vs prior), Financial Health, streak, net-worth
+// delta, ML anomaly count and top category mover. No LLM, nothing leaves the box.
+const getRecap = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const userTz = validTz(req.query.tz);
+        const now    = moment.tz(userTz);
+
+        // Target month: ?month=YYYY-MM, defaulting to the most recent COMPLETE
+        // month (a recap summarises a finished month).
+        const monthParam = typeof req.query.month === 'string' ? req.query.month : null;
+        if (monthParam && !/^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam)) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid month — expected YYYY-MM'));
+        }
+        const targetYm   = monthParam || now.clone().subtract(1, 'month').format('YYYY-MM');
+        const priorYm    = moment.tz(targetYm + '-01', 'YYYY-MM-DD', userTz).subtract(1, 'month').format('YYYY-MM');
+        const monthLabel = moment.tz(targetYm + '-01', 'YYYY-MM-DD', userTz).format('MMMM YYYY');
+
+        const cacheParams = `${targetYm}:${userTz}`;
+        const cached = cache.get(userId, 'recap', cacheParams);
+        if (cached) return res.status(200).json(cached);
+
+        const [curSnap, priorSnap, nwCur, nwPrior, user, mlDoc] = await Promise.all([
+            Snapshot.findOne({ user: userId, yearMonth: targetYm }).lean(),
+            Snapshot.findOne({ user: userId, yearMonth: priorYm }).lean(),
+            NetWorthSnapshot.findOne({ user: userId, yearMonth: targetYm }).select('netWorth').lean(),
+            NetWorthSnapshot.findOne({ user: userId, yearMonth: priorYm }).select('netWorth').lean(),
+            User.findById(userId).select('streakDays longestStreak').lean(),
+            MLInsight.findOne({ user: userId, yearMonth: targetYm }).select('anomalyCount').lean(),
+        ]);
+
+        // Financial Health is a current-standing score, reused from gamification.
+        // Non-fatal — a failure just drops that one tile.
+        let health = null;
+        try { health = await computeHealth(userId, userTz); } catch (e) {
+            logger.warn(`Recap health compute failed for ${userId}: ${e.message}`);
+        }
+
+        const toSnapInput = (s) => s ? {
+            income:  s.income  || 0,
+            expense: s.expense || 0,
+            txCount: s.txCount || 0,
+            byCategory: (s.byCategory || []).map(c => ({ category: c.category, total: c.total, count: c.count })),
+        } : null;
+
+        const recap = buildRecap({
+            month:      targetYm,
+            monthLabel,
+            current:    toSnapInput(curSnap),
+            prior:      toSnapInput(priorSnap),
+            netWorth:   { current: nwCur ? nwCur.netWorth : null, prior: nwPrior ? nwPrior.netWorth : null },
+            streak:     { current: user?.streakDays || 0, longest: user?.longestStreak || 0 },
+            health:     health && health.score != null ? { score: health.score } : null,
+            anomalyCount: mlDoc ? (mlDoc.anomalyCount ?? null) : null,
+        });
+
+        const response = BaseResponseDTO.success('Money recap', recap);
+        cache.set(userId, 'recap', cacheParams, response);
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error(`Get recap error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
+    }
+};
+
 module.exports = {
     addTransaction,
     getUserTransaction,
@@ -1557,4 +1628,5 @@ module.exports = {
     setBudget,
     getMLInsights,
     refreshMLInsights,
+    getRecap,
 };

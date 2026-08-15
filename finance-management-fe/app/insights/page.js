@@ -6,6 +6,7 @@ import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsi
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
+import MoneyRecap from '@/components/MoneyRecap';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1063,6 +1064,8 @@ export default function InsightsPage() {
           <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Your finances, translated into plain language</p>
 
           {health?.score != null && <HealthScoreCard health={health} />}
+
+          <MoneyRecap />
 
           <InsightFeed
             explain={explain} ttz={ttz} anomaly={anomaly} ml={ml} recurring={recurring}
