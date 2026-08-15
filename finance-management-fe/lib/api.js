@@ -302,6 +302,21 @@ export const getGroupSummary = (month) => {
   return apiFetch(`/api/category/group-summary?${qs}`);
 };
 
+// ── Group budgets (envelope-lite soft caps) ───────────────────────────────────
+
+export const getGroupBudgets = (month) => {
+  const qs = new URLSearchParams({ tz: browserTz() });
+  if (month) qs.set('month', month);
+  return apiFetch(`/api/group-budget?${qs}`);
+};
+
+// amount <= 0 / null clears the cap
+export const setGroupBudget = (group, amount) =>
+  apiFetch(`/api/group-budget/${group}`, {
+    method: 'PUT',
+    body: JSON.stringify({ amount }),
+  });
+
 export const classifyAllCategories = () =>
   apiFetch('/api/category/classify-all', { method: 'POST' });
 

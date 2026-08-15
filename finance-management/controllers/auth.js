@@ -307,6 +307,7 @@ const deleteAccount = async (req, res) => {
             require('../models/category.model'),
             require('../models/goal.model'),
             require('../models/budget.model'),
+            require('../models/groupBudget.model'),
             require('../models/preference.model'),
             require('../models/snapshot.model'),
             require('../models/mlinsight.model'),

@@ -71,8 +71,8 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category |
 | Add transaction | Income or expense with smart category suggestions, plus a savings/investment nudge — log money moved to savings under a savings category so it counts as saved, not spent |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
-| Insights | Money Recap (monthly wrap-up), Payday Runway (safe-to-spend before next income), anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete). Savings & investment visibility: investing logged as a savings-group expense is treated as saved (not spent) across savings rate, 50/30/20 and anomaly baselines |
-| Recommendation | 11 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, windfall planner, zakat estimator, and more |
+| Insights | Money Recap (monthly wrap-up), Payday Runway (safe-to-spend before next income), anomaly detection (seasonal- and lumpy-category aware — an expected Ramadan/Lebaran or social-spending spike isn't flagged), spending explainability, time-to-zero runway, smart category classification, category management (rename / delete), optional envelope-lite group budgets (soft caps per essential / discretionary / savings / social). Savings & investment visibility: investing logged as a savings-group expense is treated as saved (not spent) across savings rate, 50/30/20 and anomaly baselines |
+| Recommendation | 11 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, windfall planner, zakat estimator, and more — plus a Seasonal Radar heads-up that pre-warns before your own seasonal spikes with a suggested set-aside |
 | Range report | Custom date range with income/expense summary |
 | Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |
 | Settings | Theme toggle, change password, logout all devices, delete account |

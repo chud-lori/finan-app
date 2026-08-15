@@ -19,6 +19,7 @@ const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
 const { classifyVolatility } = require('../helpers/spendingVolatility');
+const { seasonalContext } = require('../helpers/seasonalRadar');
 const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
 const { seedDefaultCategories, DEFAULT_UTILITY_CATEGORY_NAMES } = require('../helpers/seedDefaultCategories');
 const { track } = require('../helpers/backgroundJobs');
@@ -1013,11 +1014,16 @@ const getAnomalies = async (req, res) => {
         const startOfMonth = now.clone().startOf('month').toDate();
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
 
-        const [currentTxnsRaw, historicalTxnsRaw, priorCategoriesRaw, savingsNames] = await Promise.all([
+        const [currentTxnsRaw, historicalTxnsRaw, priorCategoriesRaw, savingsNames, categories, snapshots] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: startOfMonth } }).lean(),
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: threeMonthsAgo, $lt: startOfMonth } }).lean(),
             Transaction.distinct('category', { user: req.user.id, type: 'expense', time: { $lt: startOfMonth } }),
             getSavingsCategoryNames(req.user.id),
+            // Category semantic group is a structured expected-lumpy signal (gotcha#566).
+            Category.find({ user: req.user.id }).select('name group').lean(),
+            // Monthly history for Seasonal Radar — is this month one the user
+            // habitually overspends (their own Ramadan/Lebaran/holiday pattern)?
+            Snapshot.find({ user: req.user.id }).select('yearMonth expense').lean(),
         ]);
 
         // Savings-group outflow (investing, moving cash to savings) is not
@@ -1030,6 +1036,13 @@ const getAnomalies = async (req, res) => {
         const priorCategories = priorCategoriesRaw.filter(c => !savingsNames.has((c || '').toLowerCase()));
 
         const priorCategorySet = new Set(priorCategories.map(c => c.toLowerCase()));
+        const catGroup = {};
+        categories.forEach(c => { if (c.name) catGroup[c.name.toLowerCase()] = c.group; });
+
+        // Seasonal Radar context for the current month (multiplier 1 = no change
+        // outside a seasonal month). Excludes the in-progress month from the
+        // learned baseline so the spike being judged can't soften its own gate.
+        const season = seasonalContext(snapshots, now.year(), now.month() + 1, now.format('YYYY-MM'));
 
         // Per-category average + monthly totals from historical data. The monthly
         // series feeds a volatility read so a naturally-spiky category needs a
@@ -1045,7 +1058,10 @@ const getAnomalies = async (req, res) => {
         });
 
         // Ratio a transaction must clear to flag, by how volatile its category is.
-        const RATIO_GATE = { fixed: 1.5, semi: 2, flexible: 4, unknown: 2 };
+        // 'unknown' is raised 2→3: too little history should not fire at a low bar
+        // (gotcha#566 — sparse lumpy categories were mis-gated as 'unknown').
+        const RATIO_GATE = { fixed: 1.5, semi: 2, flexible: 4, unknown: 3 };
+        const LUMPY_TX_PER_MONTH = 2; // few, big, irregular hits a month → inherently lumpy
 
         const anomalies = [];
         currentTxns.forEach(t => {
@@ -1061,15 +1077,39 @@ const getAnomalies = async (req, res) => {
                 const avg = hist.total / hist.count;
                 const ratio = t.amount / avg;
                 const monthTotals = Object.values(hist.months);
-                const { volatility } = classifyVolatility(monthTotals, monthTotals.length ? hist.count / monthTotals.length : null);
-                const gate = RATIO_GATE[volatility] ?? 2;
+                const txPerMonth = monthTotals.length ? hist.count / monthTotals.length : null;
+                const { volatility } = classifyVolatility(monthTotals, txPerMonth);
+                let gate = RATIO_GATE[volatility] ?? 3;
+
+                // gotcha#566: the ratio test runs on a SINGLE transaction, but the
+                // gate is picked from MONTHLY-TOTAL volatility. Low-frequency lumpy
+                // categories (social "traktir"/gifts, one big irregular hit a month)
+                // read as tame/unknown, so a normal 2–3x treat cried wolf. Two
+                // structured lumpiness signals promote such a category to the
+                // flexible gate — but never a genuinely flat 'fixed' category, whose
+                // small jumps are the real signal:
+                //   (1) semantic group is social/discretionary (expected-lumpy)
+                //   (2) it posts few transactions per active month
+                const grp = catGroup[cat];
+                const lumpy = volatility !== 'fixed' &&
+                    (grp === 'social' || grp === 'discretionary' ||
+                     (txPerMonth != null && txPerMonth <= LUMPY_TX_PER_MONTH));
+                if (lumpy) gate = Math.max(gate, RATIO_GATE.flexible);
+
+                // Seasonal Radar: during a month the user habitually overspends, a
+                // bigger bill is expected — widen the gate and reframe rather than alarm.
+                if (season.isSeasonal) gate *= season.multiplier;
+
                 if (ratio >= gate) {
                     const ratio1 = Math.round(ratio * 10) / 10;
                     flags.push({
                         type: 'high_amount',
                         ratio: ratio1,
                         avg: Math.round(avg),
-                        message: `This is ${ratio1}x higher than your normal ${t.category} spend`,
+                        ...(season.isSeasonal ? { seasonal: true } : {}),
+                        message: season.isSeasonal
+                            ? `${ratio1}x your normal ${t.category} spend — a lot even for ${season.label}`
+                            : `This is ${ratio1}x higher than your normal ${t.category} spend`,
                     });
                 }
             }
@@ -1376,11 +1416,18 @@ const _runMLPipeline = async (userId, tz) => {
     const endOfMonth   = moment.tz(yearMonth + '-01', tz).endOf('month').toDate();
     const sixMonthsAgo = moment.tz(tz).subtract(6, 'months').startOf('month').toDate();
 
-    const [transactions, budgetDoc, savingsNames] = await Promise.all([
+    const [transactions, budgetDoc, savingsNames, categories, snapshots] = await Promise.all([
         Transaction.find({ user: userId, type: 'expense', time: { $gte: sixMonthsAgo, $lte: endOfMonth } }).lean(),
         Budget.findOne({ user: userId, yearMonth }).lean(),
         getSavingsCategoryNames(userId),
+        // Category group feeds the ML anomaly detector's lumpiness gate (gotcha#566).
+        Category.find({ user: userId }).select('name group').lean(),
+        // Monthly history for Seasonal Radar suppression.
+        Snapshot.find({ user: userId }).select('yearMonth expense').lean(),
     ]);
+
+    const catGroup = {};
+    categories.forEach(c => { if (c.name) catGroup[c.name] = c.group; });
 
     const isSavings = (tx) => savingsNames.has((tx.category || '').toLowerCase());
 
@@ -1403,6 +1450,7 @@ const _runMLPipeline = async (userId, tz) => {
         id:               tx._id.toString(),
         amount:           tx.amount,
         category:         tx.category,
+        group:            catGroup[tx.category], // expected-lumpy signal for gotcha#566
         date:             moment.tz(tx.time, tz).format('YYYY-MM-DD'),
         description:      tx.description,
         type:             tx.type,
@@ -1411,12 +1459,17 @@ const _runMLPipeline = async (userId, tz) => {
         is_savings:       isSavings(tx),
     }));
 
+    // Seasonal Radar: widen the anomaly bar during a month the user habitually
+    // overspends. Excludes the in-progress month from its own learned baseline.
+    const season = seasonalContext(snapshots, now.year(), now.month() + 1, yearMonth);
+
     const analyzePayload = {
         transactions:  txPayload,
         daily_totals:  Object.entries(dailyMap).map(([day, amount]) => ({ day: parseInt(day, 10), amount })),
         current_day:   now.date(),
         days_in_month: now.daysInMonth(),
         budget:        budgetDoc?.amount ?? null,
+        seasonal:      { active: season.isSeasonal, multiplier: season.multiplier },
     };
 
     const aiData = nativeMl.analyze(analyzePayload);

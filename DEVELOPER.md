@@ -609,6 +609,25 @@ When reading, the backend first looks for a `Budget` document; falls back to `Pr
 
 ---
 
+### GroupBudget
+
+```
+Collection: groupbudgets
+```
+
+Optional **envelope-lite soft caps** per spending group, layered on top of the single monthly `Budget` (they do not replace it). Opt-in: a user with no caps has zero rows and the feature stays invisible. Caps are **recurring monthly envelopes** — not keyed on `yearMonth` — so a cap set once applies every month. They are advisory: nothing is blocked when a cap is exceeded, the UI just turns the progress bar red.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required | |
+| `group` | String | required, enum | one of `essential`, `discretionary`, `savings`, `social` (the steerable groups — `income`/`other` are not cappable) |
+| `amount` | Number | required, min 0 | soft cap in the user's currency |
+| `createdAt` / `updatedAt` | Date | auto | |
+
+**Indexes:** `{ user: 1, group: 1 }` unique — one cap per group per user. Setting a cap upserts the row; clearing it (`amount ≤ 0`) deletes the row so "no cap" and "cap of 0" are never confused. `GET /api/group-budget` joins each group's cap to the current-month expense for that group (same category→group aggregation as `getGroupSummary`) and returns `spent`, `pct`, `remaining`, and `over`.
+
+---
+
 ### NetWorth
 
 ```
@@ -764,7 +783,11 @@ Guards: only over-spending is reported, and a baseline with no spread at all (`M
 | `flexible` | 3.0 | 5.0 |
 | `unknown`  | 1.3 | 3.5 (too little history → default) |
 
-The rule-based fallback `getAnomalies` applies the same idea to its mean-ratio test: flag threshold is `{ fixed: 1.5, semi: 2, flexible: 4, unknown: 2 }`×.
+The rule-based fallback `getAnomalies` applies the same idea to its mean-ratio test: flag threshold is `{ fixed: 1.5, semi: 2, flexible: 4, unknown: 3 }`×.
+
+**Lumpy-category gate (gotcha#566).** The volatility class is derived from *monthly totals*, but the score runs on a *single transaction*. Low-frequency lumpy categories — social "traktir"/gifts, one big irregular hit a month — read as tame or `unknown`, so a normal 2–3× treat cried wolf. Both detectors now promote a category to the **flexible** bar when either structured lumpiness signal holds: (1) its semantic `group` is `social` or `discretionary` (expected-lumpy by nature), or (2) it posts ≤ 2 transactions per active month. The promotion never touches a genuinely flat `fixed` category, whose small jumps are the real signal. `unknown` was also raised 2→3× so sparse history no longer fires at a low bar. `services/ml/anomaly.js` reads the group off `tx.group` (attached by `_runMLPipeline` from the category → group map); `getAnomalies` loads it directly.
+
+**Seasonal suppression (Seasonal Radar).** During a month the user habitually overspends (Ramadan/Lebaran/holidays — see below), every gate is widened by a multiplier so an expected festive spike is not flagged, while a genuine blow-out still clears the raised bar. `detectAnomalies(transactions, { seasonal: { active, multiplier } })`; `getAnomalies` multiplies its ratio gate by the same factor and reframes the message ("…a lot even for Ramadan / Lebaran season").
 
 | Samples per category | Algorithm | Threshold |
 |----------------------|-----------|-----------|
@@ -862,6 +885,18 @@ A forward-looking "safe to spend before your next income". Pure math, fully in-p
 The `getRunway` controller supplies the balance, the income history (9 months), the upcoming recurring bills, and a discretionary run-rate computed as last-30-day expense minus the recurring monthly share (so bills are not double-counted). It caches per `tz` (invalidated by `cache.invalidateUser`).
 
 Graceful degradation: when income cadence can't be read (variable / gig income — fewer than 3 events or an irregular schedule), it falls back to `mode:'rolling'` — a plain rolling runway with no payday horizon. Framed as a guide, not a guarantee (`note` is always returned). Covered by `test/ml.runway.test.js` (pure) and `test/runway.integration.test.js`.
+
+---
+
+### Seasonal Radar (`helpers/seasonalRadar.js`)
+
+Learns a user's recurring seasonal spending spikes from their **own monthly `Snapshot` history**, with an in-process Hijri/Ramadan calendar as a cold-start prior for the Ramadan / Lebaran / THR season (the biggest recurring spike for Indonesian users). **No external API and no network** — Hijri dates are a bundled static table (`RAMADAN_SEASON`, the Gregorian month(s) each year's fasting-and-Lebaran spend lands in) and the personal signal is learned entirely from which calendar months the user historically overspends.
+
+- `monthlyProfile(snapshots, excludeYm)` buckets months by calendar month (1–12), takes each month's average expense, and divides by the user's overall monthly average. A month at ≥ `SEASONAL_RATIO` (1.25×) the baseline is a personal spike. The in-progress month is excluded so the spike being judged can't move its own baseline.
+- `seasonalContext(snapshots, year, monthNum, excludeYm)` → `{ isSeasonal, ratio, multiplier, source, label }`. Learned spikes win (`source: 'history'`, or `'both'` when the month is also on the Hijri calendar) with the gate multiplier = the observed ratio clamped to `[1.25, 2.0]`; a Hijri-only month (`source: 'hijri'`) gets a modest fixed 1.4× prior. Consumed by both anomaly detectors for the suppression above.
+- `lookAhead(snapshots, { year, month }, horizon = 2)` returns the soonest upcoming seasonal month with a suggested set-aside. With ≥ 12 months of history it quotes a number (`baseline × (ratio − 1)`); under a year (`coldStart`) or on a Hijri-only signal it degrades to a generic, numberless heads-up. Powers the recommendation nudge below.
+
+Two consumers: **anomaly suppression** (`getAnomalies` + `services/ml/anomaly.js`) and the **look-ahead set-aside nudge** in `controllers/recommendation.js`. Covered by `test/seasonalRadar.test.js` and the seasonal cases in `test/ml.anomaly.test.js`.
 
 ---
 
@@ -1263,6 +1298,13 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | PATCH | `/api/category/:id/rename` | 30/min | ✓ | Rename a category; body: `{ name }`. Updates all referencing transactions atomically. 409 if new name already exists |
 | DELETE | `/api/category/:id` | 30/min | ✓ | Delete a category. 409 if any transaction uses it (returns count). 400 if `:id` is not a valid ObjectId |
 
+### Group budgets (envelope-lite soft caps)
+
+| Method | Path | Rate limit | Auth | Description |
+|--------|------|-----------|------|-------------|
+| GET | `/api/group-budget` | 30/min | ✓ | The four cappable groups, each with `cap`, current-month `spent`, `pct`, `remaining`, `over`; query: `?month=YYYY-MM&tz=IANA`. `hasCaps` is false until the user sets one |
+| PUT | `/api/group-budget/:group` | 30/min | ✓ | Set or clear a soft cap; body: `{ amount }`. `:group` ∈ essential/discretionary/savings/social. `amount ≤ 0`/null clears (deletes the row) |
+
 ### Gamification
 
 | Method | Path | Rate limit | Auth | Description |
@@ -1326,6 +1368,14 @@ an optional `?nisab=` input — below it, `zakatDue` is 0 (`meetsNisab: false`).
 an **estimate, not a fatwa** (no haul tracking); the FE labels it as such and lets
 any user hide the tool. The zakatable-asset and deductible-liability type lists live
 in `helpers/zakat.js` and are keyed to the `NetWorth` holding `type` enum.
+
+The **Seasonal Radar look-ahead** nudge follows the same suppression contract:
+Seasonal Radar's `lookAhead()` pre-warns before a personal seasonal spike
+(Ramadan/Lebaran/holidays, learned from snapshot history) with a suggested
+set-aside; it is suppressed once the user has a `Goal` reading as a seasonal fund
+(`/ramadan|lebaran|thr|hari raya|seasonal|holiday|festive/i`), and its CTA opens the
+goal planner prefilled with that description + target so the suppressing state is one
+click away.
 
 ---
 

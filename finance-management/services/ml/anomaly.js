@@ -23,6 +23,7 @@ const { classifyVolatility } = require('../../helpers/spendingVolatility');
 
 const MIN_BASELINE  = 2;    // need at least 2 other transactions to compare against
 const MZ_SATURATE   = 14;   // modified z at which the severity bar reads full
+const LUMPY_TX_PER_MONTH = 2; // few, big, irregular hits a month → inherently lumpy
 
 // Sensitivity is gated by how volatile the category normally is. A spike in a
 // naturally-spiky category (sharing, food) is expected, so it needs a much
@@ -80,12 +81,20 @@ const buildResult = (tx, multiple, score, categoryTypical, category, baselineCou
 const clip01 = (x) => Math.max(0, Math.min(1, x));
 
 /**
- * @param {Array<{id, amount, category, date, description, type, is_current_month}>} transactions
+ * @param {Array<{id, amount, category, date, description, type, is_current_month, group?}>} transactions
+ * @param {{ seasonal?: { active:boolean, multiplier:number } }} [opts]
+ *        seasonal: when active, widen every threshold by `multiplier` so a month
+ *        the user habitually overspends (Ramadan/Lebaran/holidays, from Seasonal
+ *        Radar) doesn't turn an expected festive spike into an alert.
  * @returns {Array<{id, description, category, amount, date, score, severity, multiple, category_avg, baseline_count, label}>}
  *          Top 10, sorted by score desc.
  */
-const detectAnomalies = (transactions) => {
+const detectAnomalies = (transactions, opts = {}) => {
   if (!Array.isArray(transactions) || transactions.length === 0) return [];
+
+  const seasonal = opts.seasonal && opts.seasonal.active
+    ? { active: true, multiplier: opts.seasonal.multiplier || 1 }
+    : { active: false, multiplier: 1 };
 
   // Bucket expenses by category. Savings-group outflow (investing / moving cash
   // to savings) is flagged `is_savings` by the caller and skipped entirely — it
@@ -117,11 +126,29 @@ const detectAnomalies = (transactions) => {
       if (ym) { monthly[ym] = (monthly[ym] || 0) + Number(t.amount); priorCount++; }
     }
     const monthKeys = Object.keys(monthly);
-    const { volatility } = classifyVolatility(
-      monthKeys.map((k) => monthly[k]),
-      monthKeys.length > 0 ? priorCount / monthKeys.length : null,
-    );
-    const tune = CLASS_TUNING[volatility] || CLASS_TUNING.unknown;
+    const txPerMonth = monthKeys.length > 0 ? priorCount / monthKeys.length : null;
+    const { volatility } = classifyVolatility(monthKeys.map((k) => monthly[k]), txPerMonth);
+
+    // gotcha#566: promote lumpy categories to the flexible gate. The category's
+    // semantic group (social/discretionary) and its low transaction frequency are
+    // both expected-lumpy signals — but never override a genuinely flat 'fixed'
+    // category, whose small jumps are the real signal. `group` is per-category, so
+    // any transaction in the bucket carries it (undefined when the caller omits it).
+    const grp = txs.find((t) => t.group)?.group;
+    const lumpy = volatility !== 'fixed' &&
+      (grp === 'social' || grp === 'discretionary' ||
+       (txPerMonth != null && txPerMonth <= LUMPY_TX_PER_MONTH));
+    let tune = CLASS_TUNING[lumpy ? 'flexible' : volatility] || CLASS_TUNING.unknown;
+
+    // Seasonal Radar: widen the bar during a habitually-overspent month so an
+    // expected festive spike is not flagged, while a genuine blow-out still clears it.
+    if (seasonal.active) {
+      tune = {
+        minMultiple: tune.minMultiple * seasonal.multiplier,
+        mz:          tune.mz * seasonal.multiplier,
+        flat:        tune.flat * seasonal.multiplier,
+      };
+    }
 
     for (const tx of current) {
       // Leave-one-out: compare this transaction against every other one in the
