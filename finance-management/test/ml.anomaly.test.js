@@ -181,4 +181,58 @@ describe('services/ml/anomaly — detectAnomalies', () => {
             expect(out.find(a => a.category === 'electricity')).to.exist;
         });
     });
+
+    // gotcha#566: the volatility class comes from MONTHLY totals, but the score
+    // runs on a SINGLE transaction. Low-frequency lumpy categories (social
+    // "traktir"/gifts) were mis-gated and a normal treat cried wolf. The category's
+    // semantic group is a structured expected-lumpy signal that promotes it to the
+    // flexible bar — without ever softening a genuinely flat category.
+    describe('lumpy-category gate via semantic group (gotcha#566)', () => {
+        it('a social-group treat that a groupless read WOULD flag is suppressed', () => {
+            const past = [100_000, 120_000, 150_000];
+            // Groupless: mis-gated as 'unknown' (1.3x bar) → a 2.5x treat fires.
+            expect(detectAnomalies(build('sharing', past, [300_000]))
+                .find(a => a.category === 'sharing'), 'baseline should fire').to.exist;
+            // With the social group it is expected-lumpy → flexible bar → not an alert.
+            const tagged = build('sharing', past, [300_000]).map(t => ({ ...t, group: 'social' }));
+            expect(detectAnomalies(tagged).find(a => a.category === 'sharing')).to.be.undefined;
+        });
+
+        it('still flags a genuine blow-out even in a social-group category', () => {
+            const tagged = build('sharing', [100_000, 120_000, 150_000], [800_000]).map(t => ({ ...t, group: 'social' }));
+            expect(detectAnomalies(tagged).find(a => a.category === 'sharing')).to.exist;
+        });
+    });
+
+    // Seasonal Radar suppression: during a month the user habitually overspends
+    // (Ramadan/Lebaran/holidays), the bar is widened by a multiplier so an expected
+    // festive spike is not flagged — while a genuine blow-out still clears it.
+    describe('seasonal suppression', () => {
+        // Several transactions per month across four months, with real per-tx
+        // spread (median 100k, MAD 20k) but stable monthly totals — so the category
+        // is 'semi' (not promoted to lumpy by frequency) and the mz path is modest.
+        const buildBusy = (category, current) => {
+            const monthAmts = [70_000, 90_000, 110_000, 130_000];
+            const txs = [];
+            [1, 2, 3, 4].forEach(m => monthAmts.forEach((amount, i) => txs.push({
+                id: `${category}-m${m}-${i}`, amount, category,
+                date: `2026-0${m}-10`, description: 'p', type: 'expense', is_current_month: false,
+            })));
+            txs.push({ id: `${category}-cur`, amount: current, category, date: '2026-08-10', description: 'c', type: 'expense', is_current_month: true });
+            return txs;
+        };
+
+        it('flags a moderate spike normally but suppresses it in a seasonal month', () => {
+            const txs = buildBusy('food', 250_000); // 2.5x — flags off-season
+            expect(detectAnomalies(txs).find(a => a.category === 'food')).to.exist;
+            const seasonal = { active: true, multiplier: 1.5 };
+            expect(detectAnomalies(txs, { seasonal }).find(a => a.category === 'food')).to.be.undefined;
+        });
+
+        it('still flags a genuine blow-out during a seasonal month', () => {
+            const txs = buildBusy('food', 400_000); // 4x — beyond even a festive month
+            const seasonal = { active: true, multiplier: 1.5 };
+            expect(detectAnomalies(txs, { seasonal }).find(a => a.category === 'food')).to.exist;
+        });
+    });
 });

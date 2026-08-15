@@ -3,6 +3,8 @@ const Transaction = require('../models/transaction.model');
 const Goal = require('../models/goal.model');
 const Balance = require('../models/balance.model');
 const MLInsight = require('../models/mlinsight.model');
+const Snapshot = require('../models/snapshot.model');
+const { lookAhead } = require('../helpers/seasonalRadar');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 
@@ -17,7 +19,7 @@ const getSmartRecommendations = async (req, res) => {
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
         const weekAgo       = now.clone().subtract(7, 'days').toDate();
 
-        const [thisMonthTxns, last3MonthsTxns, recentTxn, goals, balance, mlCache] = await Promise.all([
+        const [thisMonthTxns, last3MonthsTxns, recentTxn, goals, balance, mlCache, snapshots] = await Promise.all([
             Transaction.find({ user: userId, time: { $gte: monthStart, $lte: monthEnd } })
                 .select('amount type category').lean(),
             Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } })
@@ -28,6 +30,8 @@ const getSmartRecommendations = async (req, res) => {
             Goal.find({ user: userId }).select('description price savedAmount achieve createdAt').lean(),
             Balance.findOne({ user: userId }).select('amount').lean(),
             MLInsight.findOne({ user: userId }).sort({ createdAt: -1 }).select('anomalyCount').lean(),
+            // Monthly history for the Seasonal Radar look-ahead nudge.
+            Snapshot.find({ user: userId }).select('yearMonth expense').lean(),
         ]);
 
         const recs = [];
@@ -160,6 +164,38 @@ const getSmartRecommendations = async (req, res) => {
                 body:  'AI analysis flagged some spending patterns that look out of the ordinary. Review your Insights for details.',
                 cta:  { label: 'View AI Insights', href: '/insights' },
             });
+        }
+
+        // ── 7. Seasonal Radar look-ahead ──────────────────────────────────────
+        // Pre-warn before a personal seasonal spike (Ramadan/Lebaran/holidays,
+        // learned from the user's own snapshot history with an in-process Hijri
+        // prior) with a suggested set-aside. Suppressed once the user has a Goal
+        // whose description reads as a seasonal fund — the CTA creates exactly that
+        // state, so the nudge is dismissible instead of nagging forever.
+        const hasSeasonalGoal = goals.some(g => /ramadan|lebaran|thr|hari raya|seasonal|holiday|festive/i.test(g.description || ''));
+        if (!hasSeasonalGoal) {
+            const ahead = lookAhead(snapshots, { year: now.year(), month: now.month() + 1 }, 2);
+            if (ahead) {
+                const when = ahead.monthsAway === 1 ? 'next month' : `in ${ahead.monthsAway} months`;
+                const params = new URLSearchParams({ tool: 'goal' });
+                let body;
+                if (ahead.coldStart || ahead.suggestedSetAside == null) {
+                    // <1yr history (or Hijri-only signal): generic heads-up, no number.
+                    body = `${ahead.monthName} tends to be a higher-spending stretch${ahead.label ? ` (${ahead.label})` : ''}. Setting a little aside now softens the hit.`;
+                } else {
+                    params.set('desc', `${ahead.monthName} set-aside`);
+                    params.set('target', String(ahead.suggestedSetAside));
+                    body = `You usually spend about ${ahead.ratio}× your normal in ${ahead.monthName}. Setting aside ~${Math.round(ahead.suggestedSetAside).toLocaleString()} ${when} keeps ${ahead.label || 'the season'} from denting your budget.`;
+                }
+                recs.push({
+                    id:   'seasonal_lookahead',
+                    type: 'tip',
+                    icon: '🗓️',
+                    title: `${ahead.monthName} spike coming — set aside early`,
+                    body,
+                    cta:  { label: 'Plan a set-aside goal', href: `/recommendation?${params.toString()}` },
+                });
+            }
         }
 
         // Prioritise: warning → info → success → tip; cap at 5
