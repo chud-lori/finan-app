@@ -52,6 +52,33 @@ describe('buildRuleSplit — 50/30/20 mapping', () => {
     expect(split.buckets.find((b) => b.key === 'savings').amount).to.equal(0);
   });
 
+  it('counts savings-group outflow exactly once (no double-count)', () => {
+    // Investing is logged as a savings-group expense. The savings bucket must be
+    // the invested amount + the leftover cash — NOT the invested amount + a
+    // surplus that was itself inflated by excluding the investment from spend.
+    //   income          = 10,000,000
+    //   real spend       = essential 4,000,000 + discretionary 2,000,000 = 6,000,000
+    //   savings-group    = 3,000,000 (the investment)
+    // Correct savings bucket = 3,000,000 (invested) + 1,000,000 (idle cash) = 4,000,000.
+    // The double-count trap would yield 3,000,000 + (10,000,000 − 6,000,000) = 7,000,000.
+    const groups = {
+      essential: 4_000_000,
+      discretionary: 2_000_000,
+      savings: 3_000_000,
+      total: 9_000_000,
+    };
+    const split = buildRuleSplit(groups, 10_000_000);
+    const by = Object.fromEntries(split.buckets.map((b) => [b.key, b.amount]));
+
+    expect(split.surplus).to.equal(1_000_000);      // income − total outflow
+    expect(by.savings).to.equal(4_000_000);         // invested + idle, counted once
+    expect(by.savings).to.not.equal(7_000_000);     // the double-count value
+
+    // Every rupiah of income is accounted for exactly once across the buckets
+    // (no unclassified here), proving nothing is counted twice.
+    expect(by.needs + by.wants + by.savings).to.equal(10_000_000);
+  });
+
   it('surfaces income/other groups as unclassified, not forced into a bucket', () => {
     const groups = { essential: 1_000_000, other: 500_000, income: 300_000, total: 1_800_000 };
     const split = buildRuleSplit(groups, 5_000_000);
