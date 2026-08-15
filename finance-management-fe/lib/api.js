@@ -271,6 +271,17 @@ export const getSmartRecommendations = () =>
 export const allocateToGoal = (body) =>
   apiFetch('/api/recommendations/allocate', { method: 'POST', body: JSON.stringify(body) });
 
+// Detects a recent unusually large income (THR / bonus) + returns active goals.
+export const getWindfall = () =>
+  apiFetch(`/api/recommendations/windfall?tz=${encodeURIComponent(browserTz())}`);
+
+// Zakat-maal estimate from net-worth holdings + social-group giving YTD.
+export const getZakat = (nisab = null) => {
+  const qs = new URLSearchParams({ tz: browserTz() });
+  if (nisab) qs.set('nisab', nisab);
+  return apiFetch(`/api/recommendations/zakat?${qs}`);
+};
+
 // ── Category groups ───────────────────────────────────────────────────────────
 
 export const getGroupSummary = (month) => {

@@ -150,7 +150,7 @@ finan-app/                          ← monorepo root
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
     │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown; year nav bounded by availableYears; clicking a bar in yearly view opens month transaction modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
-    │   ├── recommendation/page.js  ← 9 financial planning calculators
+    │   ├── recommendation/page.js  ← 11 financial planning tools (incl. Windfall Planner, Zakat Estimator)
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
     │   └── settings/page.js        ← Theme, password change, sessions, delete account
     ├── components/
@@ -1236,6 +1236,8 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 |--------|------|-----------|------|-------------|
 | GET | `/api/recommendations` | 20/min | ✓ | 1–5 personalised rule-based nudges; query: `?tz=IANA` |
 | POST | `/api/recommendations/allocate` | 30/min | ✓ | one-tap allocation of a surplus/windfall into a goal; body: `{ source, sourceKey, goalId, amount }` |
+| GET | `/api/recommendations/windfall` | 30/min | ✓ | detect a recent unusually large income (THR/bonus) + active goals to split into; query: `?tz=IANA` |
+| GET | `/api/recommendations/zakat` | 30/min | ✓ | zakat-maal estimate from net-worth + social-group giving YTD; query: `?tz=IANA`, optional `?nisab=` |
 
 **Every nudge CTA must lead to a persistent action.** A nudge is only suppressed by
 state stored in the database, so its CTA has to be able to create that state — a link
@@ -1260,6 +1262,31 @@ formats it in the user's currency (the server never embeds a currency figure).
 
 The same `allocate` endpoint backs the windfall planner with `source: 'windfall'`
 and `sourceKey` = the large income transaction's id (see the Windfall section).
+
+**Windfall planner (`GET /api/recommendations/windfall`).** `helpers/windfall.js`
+`detectWindfall()` finds the largest income in the last 45 days and calls it a
+windfall when it is ≥ 1.8× the median of the user's income over the last 365 days
+(median is robust — a single windfall barely moves it). The endpoint returns the
+detected windfall (with `allocated` / `remaining` / `handled` derived from existing
+`Allocation` rows for that transaction) plus the user's active goals. The FE
+Windfall Planner tool pre-fills a suggested split (`lib/windfallSplit.js`, fill
+goals oldest-first up to each goal's remaining need) and each "Allocate" button
+calls `/allocate` with `source: 'windfall'`. The `windfall_<txnId>` dashboard nudge
+appears when a windfall is detected and the user has an active goal, and suppresses
+itself once any `Allocation` exists for that transaction id. Emergency fund and
+debt payoff are not special-cased — they are just goals; there is no debt-account
+model, so a debt-payoff target is a user-created goal.
+
+**Zakat estimator (`GET /api/recommendations/zakat`).** `helpers/zakat.js`
+`estimateZakat()` returns 2.5% of a zakatable base = liquid assets
+(`cash + investment + receivable` holding types) − short-term debts
+(`credit_card + bnpl + payable + loan`), with illiquid personal-use assets
+(property, vehicle, mortgage) excluded. Giving YTD sums this year's **expense**
+transactions in categories grouped `social` (zakat / donation / sharing). Nisab is
+an optional `?nisab=` input — below it, `zakatDue` is 0 (`meetsNisab: false`). It is
+an **estimate, not a fatwa** (no haul tracking); the FE labels it as such and lets
+any user hide the tool. The zakatable-asset and deductible-liability type lists live
+in `helpers/zakat.js` and are keyed to the `NetWorth` holding `type` enum.
 
 ---
 

@@ -5,6 +5,7 @@ const Balance = require('../models/balance.model');
 const MLInsight = require('../models/mlinsight.model');
 const Snapshot = require('../models/snapshot.model');
 const Allocation = require('../models/allocation.model');
+const { detectWindfall } = require('../helpers/windfall');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 
@@ -195,6 +196,33 @@ const getSmartRecommendations = async (req, res) => {
                     body:  'You spent less than you earned last month. Sweep some of that surplus into a goal before it blends into this month\'s spending — it stays your money, just earmarked.',
                     cta:  { label: 'Sweep surplus to a goal', href: `/recommendation?${params.toString()}` },
                 });
+            }
+
+            // ── 8. Windfall (THR / bonus) not yet allocated ──────────────────
+            // A recent income far above the user's usual gets a nudge to plan a
+            // split into goals. Suppressed once any Allocation exists for that
+            // transaction — the Windfall Planner tool writes it via /allocate.
+            const windowStart   = now.clone().subtract(45, 'days').toDate();
+            const baselineStart = now.clone().subtract(365, 'days').toDate();
+            const [recentIncome, baselineIncome] = await Promise.all([
+                Transaction.find({ user: userId, type: 'income', time: { $gte: windowStart } })
+                    .select('amount time').lean(),
+                Transaction.find({ user: userId, type: 'income', time: { $gte: baselineStart } })
+                    .select('amount').lean(),
+            ]);
+            const windfall = detectWindfall(recentIncome, baselineIncome.map(t => t.amount));
+            if (windfall) {
+                const handled = await Allocation.exists({ user: userId, source: 'windfall', sourceKey: windfall.transactionId });
+                if (!handled) {
+                    recs.push({
+                        id:   `windfall_${windfall.transactionId}`,
+                        type: 'info',
+                        icon: '🎁',
+                        title: 'Large income just landed',
+                        body:  'A recent deposit is well above your usual income — a bonus or THR, perhaps. Plan a split into your goals before it gets absorbed into everyday spending.',
+                        cta:  { label: 'Plan your windfall', href: '/recommendation?tool=windfall' },
+                    });
+                }
             }
         }
 
