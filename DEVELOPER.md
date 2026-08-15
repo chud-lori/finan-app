@@ -118,6 +118,7 @@ finan-app/                          ← monorepo root
 │   │   ├── mailer.js               ← Resend SDK (password reset + email verification)
 │   │   ├── snapshot.js             ← refreshSnapshot() + applySnapshotDelta()
 │   │   ├── spendingVolatility.js  ← classifyVolatility() — CV-based fixed/flexible category class
+│   │   ├── savingsCategories.js   ← getSavingsCategoryNames() — group==='savings' names to exclude from spend
 │   │   ├── financialHealth.js     ← computeFinancialHealth() — 0-100 score from 4 pillars
 │   │   ├── cache.js                ← in-process request cache
 │   │   └── logger.js               ← Winston logger
@@ -339,9 +340,29 @@ Category.updateOne({ group, groupConfidence })
 
 **User override learning:** When a user manually moves a category to a different group (`PATCH /api/category/:id/group`), `groupOverridden: true` is set. On the next classification run for that user, the overridden categories are loaded and used as learning hints — so future categories with similar names are matched to the user-defined group before the in-process classifier is consulted.
 
-**Default categories:** 28 expense + 9 income categories are seeded per-user from `categories.json` via `seedDefaultCategories()`. This runs fire-and-forget on new user registration (email/password and Google OAuth). For existing users with zero categories, `GET /api/transaction/category` triggers a passive seed before returning results — no manual migration needed.
+**Default categories:** 31 expense + 9 income categories are seeded per-user from `categories.json` via `seedDefaultCategories()`. This runs fire-and-forget on new user registration (email/password and Google OAuth). For existing users with zero categories, `GET /api/transaction/category` triggers a passive seed before returning results — no manual migration needed. Three of the expense defaults (`savings`, `reksa dana`, `stocks`) carry a `group: "savings"` in `categories.json`; `seedDefaultCategories()` writes that group **only on insert** (`$setOnInsert`), so a later user re-group is never clobbered by an idempotent re-seed, and because the seeded group is not `'other'`, `classifyAll` leaves it untouched.
 
 **`classifyAll` (`POST /api/category/classify-all`):** Processes all categories where `group === 'other'` AND `groupOverridden !== true`. Safe to call repeatedly. Called automatically on the Insights page load.
+
+---
+
+### Savings & investment visibility
+
+Transaction `type` is only `income | expense` — there is no `transfer`. Investing (reksa dana / DCA / a deposit) leaves spendable cash but is **not consumption**, so users would otherwise skip recording it and only enter leftover income, corrupting the savings rate, 50/30/20 split and net-worth flow.
+
+**Option A convention:** record the *full* income and log the investment as an **expense in a `group === 'savings'` category**. The atomic `$inc` balance still decrements (the cash really left), but every "spend" metric treats savings-group outflow as *saved, not spent*:
+
+| Metric | Where | Treatment |
+|--------|-------|-----------|
+| Savings rate | `controllers/gamification.js#computeHealth` | `(income − nonSavingsExpense) / income` — savings-group outflow is excluded from the expense figure (also excluded from the emergency-fund avg-expense and budget-pace denominators). |
+| Explainability spend | `controllers/transaction.js#getExplainability` | savings-group txns dropped from `totalOutcome`, top categories and the MoM baseline. |
+| Anomaly baseline (rule) | `controllers/transaction.js#getAnomalies` | savings-group txns removed from the current set, historical baseline and the "first-time category" signal. |
+| Anomaly baseline (ML) | `services/ml/anomaly.js#detectAnomalies` | skips any tx flagged `is_savings`; the flag is set in `_runMLPipeline` and savings-group outflow is also excluded from the forecast's `daily_totals`. |
+| 50/30/20 | `finance-management-fe/lib/ruleSplit.js#buildRuleSplit` | savings bucket = `savingsGroup + max(income − nonSavingsExpense − savingsGroup, 0)`. |
+
+**The double-count trap (50/30/20):** if savings-group outflow is excluded from expense, the surplus rises by exactly that amount. Adding both the raised surplus *and* the savings-group total to the savings bucket would count the invested rupiah twice. `buildRuleSplit` computes the surplus against **income − total outflow** (`income − nonSavingsExpense − savingsGroup`, i.e. the old `income − totalExpense`), so each rupiah lands in exactly one place: invested money in `savingsGroup`, idle cash in the surplus. Covered by a regression test in `lib/ruleSplit.test.js`.
+
+The category → savings lookup is centralised in `helpers/savingsCategories.js#getSavingsCategoryNames(userId)` (a lowercased `Set` of `group === 'savings'` category names).
 
 ---
 
