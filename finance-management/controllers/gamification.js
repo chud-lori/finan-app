@@ -154,4 +154,4 @@ const getGamificationSummary = async (req, res) => {
     }
 };
 
-module.exports = { getGamificationSummary };
+module.exports = { getGamificationSummary, computeHealth };

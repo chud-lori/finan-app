@@ -33,6 +33,8 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Anomaly detection** — flags unusually large transactions compared to your spending baseline
 - **Spending explainability** — shows which categories drive your spending the most
 - **Time-to-zero runway** — estimates when your balance hits zero if current spending continues
+- **Money Recap** — a monthly in-app "wrapped": a plain-language narrative plus stat tiles (net saved, spend vs last month, top category, streak, net-worth change) stitched entirely from your own numbers, no AI
+- **Payday Runway** — forward safe-to-spend before your next expected income: detects your income cadence, projects the balance forward using upcoming bills and your everyday spending pace, and flags the day the balance would run out (degrades to a rolling 30-day view for variable income)
 - **Category management** — rename categories (updates all transactions automatically) or delete unused ones; 28 default categories pre-loaded for every new account
 
 ### Plan
@@ -69,7 +71,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category |
 | Add transaction | Income or expense with smart category suggestions, plus a savings/investment nudge — log money moved to savings under a savings category so it counts as saved, not spent |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
-| Insights | Anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete). Savings & investment visibility: investing logged as a savings-group expense is treated as saved (not spent) across savings rate, 50/30/20 and anomaly baselines |
+| Insights | Money Recap (monthly wrap-up), Payday Runway (safe-to-spend before next income), anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete). Savings & investment visibility: investing logged as a savings-group expense is treated as saved (not spent) across savings rate, 50/30/20 and anomaly baselines |
 | Recommendation | 11 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, windfall planner, zakat estimator, and more |
 | Range report | Custom date range with income/expense summary |
 | Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |

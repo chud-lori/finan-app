@@ -180,6 +180,18 @@ export const getRecurring = () =>
 export const getTimeToZero = () =>
   apiFetch(`/api/transaction/time-to-zero?tz=${encodeURIComponent(browserTz())}`);
 
+// Money Recap — monthly in-app "wrapped". Pass a YYYY-MM month, or omit for the
+// most recent complete month.
+export const getRecap = (month = null) => {
+  const qs = new URLSearchParams({ tz: browserTz() });
+  if (month) qs.set('month', month);
+  return apiFetch(`/api/transaction/recap?${qs}`);
+};
+
+// Payday Runway — forward safe-to-spend before the next expected income.
+export const getRunway = () =>
+  apiFetch(`/api/transaction/runway?tz=${encodeURIComponent(browserTz())}`);
+
 export const getMLInsights = () =>
   apiFetch(`/api/transaction/ml-insights?tz=${encodeURIComponent(browserTz())}`);
 
