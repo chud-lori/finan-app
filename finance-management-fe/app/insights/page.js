@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup } from '@/lib/api';
+import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup, getGroupBudgets, setGroupBudget } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -719,6 +719,138 @@ function SpendingMixBar({ data }) {
   );
 }
 
+// ── Group Budgets (envelope-lite soft caps) ───────────────────────────────────
+// Opt-in soft caps per spending group, layered on top of the single monthly
+// budget. Reuses GROUP_META (colours/labels) and the Spending Mix bar look. When
+// the user has set no caps it stays a single unobtrusive line so it never
+// clutters the core tracker.
+
+const CAP_GROUPS = ['essential', 'discretionary', 'savings', 'social'];
+
+function GroupBudgetCaps({ data, onSave, savingGroup }) {
+  const formatAmount = useFormatAmount();
+  const [editing, setEditing] = useState(false);
+  const [drafts, setDrafts]   = useState({}); // group -> string being typed
+
+  if (!data?.groups) return null;
+  const byGroup = Object.fromEntries(data.groups.map(g => [g.group, g]));
+  const hasCaps = data.hasCaps;
+
+  const startEditing = () => {
+    const seed = {};
+    for (const g of CAP_GROUPS) seed[g] = byGroup[g]?.cap != null ? String(byGroup[g].cap) : '';
+    setDrafts(seed);
+    setEditing(true);
+  };
+
+  const commit = async (group) => {
+    const raw = drafts[group];
+    const amount = raw === '' || raw == null ? 0 : Number(raw);
+    if (Number.isNaN(amount) || amount < 0) return;
+    await onSave(group, amount);
+  };
+
+  // Collapsed opt-in state — no caps set and not editing.
+  if (!hasCaps && !editing) {
+    return (
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
+        <div className="px-5 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">🧧 Group Budgets</h2>
+            <Tooltip text="Optional soft caps for each spending group (essential, discretionary, savings, social), layered on top of your single monthly budget. Nothing is blocked — a cap just shows a progress bar so you can steer before month-end." align="left" fixed />
+          </div>
+          <button
+            onClick={startEditing}
+            className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 shrink-0"
+          >
+            Set caps
+          </button>
+        </div>
+        <p className="px-5 pb-4 -mt-1 text-xs text-gray-500 dark:text-slate-400">
+          Keep each spending group in check with an optional monthly cap.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
+      <div className="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">🧧 Group Budgets</h2>
+          <Tooltip text="Optional soft caps per spending group, on top of your single monthly budget. Leave a cap blank to remove it." align="left" fixed />
+        </div>
+        <button
+          onClick={() => setEditing(e => !e)}
+          className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 shrink-0"
+        >
+          {editing ? 'Done' : 'Edit caps'}
+        </button>
+      </div>
+
+      <div className="p-5 space-y-4">
+        {CAP_GROUPS.map(group => {
+          const meta = GROUP_META[group] ?? GROUP_META.other;
+          const row  = byGroup[group] || { spent: 0, cap: null, pct: null, over: false };
+          const busy = savingGroup === group;
+          const pct  = row.cap && row.cap > 0 ? Math.min((row.spent / row.cap) * 100, 100) : 0;
+          const over = row.over;
+
+          return (
+            <div key={group}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-base shrink-0">{meta.icon}</span>
+                <span className="text-sm font-semibold text-gray-800 dark:text-slate-200 flex-1">{meta.label}</span>
+                {row.cap != null && !editing && (
+                  <span className={`text-xs font-semibold tabular-nums ${over ? 'text-rose-500' : 'text-gray-500 dark:text-slate-400'}`}>
+                    {formatAmount(row.spent)} / {formatAmount(row.cap)}
+                    {over && ' · over'}
+                  </span>
+                )}
+                {editing && (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      placeholder="No cap"
+                      value={drafts[group] ?? ''}
+                      onChange={(e) => setDrafts(d => ({ ...d, [group]: e.target.value }))}
+                      onBlur={() => commit(group)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                      disabled={busy}
+                      className="w-32 text-xs text-right tabular-nums border border-gray-200 dark:border-slate-700 rounded-lg px-2 py-1 bg-white dark:bg-slate-900 text-gray-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-40"
+                    />
+                    {busy && <span className="w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />}
+                  </div>
+                )}
+              </div>
+
+              {/* Progress bar — only when a cap exists */}
+              {row.cap != null ? (
+                <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div
+                    className={`h-2 rounded-full transition-all duration-700 ${over ? 'bg-rose-500' : meta.bar}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              ) : (
+                !editing && <p className="text-xs text-gray-400 dark:text-slate-500">No cap set · {formatAmount(row.spent)} spent</p>
+              )}
+            </div>
+          );
+        })}
+
+        {editing && (
+          <p className="text-[11px] text-gray-400 dark:text-slate-500 pt-1">
+            Caps recur every month. Clear a field to remove its cap. Nothing is blocked — this is a guide, not a hard limit.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Financial Health Score ────────────────────────────────────────────────────
 const HEALTH_BANDS = {
   excellent:       { label: 'Excellent',      ring: '#10b981', chip: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' },
@@ -946,6 +1078,8 @@ export default function InsightsPage() {
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [reclassifying, setReclassifying] = useState(false);
   const [movingCategory, setMovingCategory] = useState(null); // category name being moved
+  const [groupBudgets, setGroupBudgets] = useState(null);
+  const [savingGroupBudget, setSavingGroupBudget] = useState(null);
   const [loading,      setLoading]      = useState({ ttz: true, explain: true, recurring: true, anomaly: true, ml: true });
   const [refreshing,   setRefreshing]   = useState(false);
   const [errors,       setErrors]       = useState({});
@@ -990,6 +1124,9 @@ export default function InsightsPage() {
       }
     })();
 
+    // Group budgets (soft caps) — non-fatal; card hides on failure
+    getGroupBudgets().then(res => setGroupBudgets(res.data)).catch(() => {});
+
     // ML insights — apply metadata separately
     (async () => {
       try {
@@ -1026,6 +1163,19 @@ export default function InsightsPage() {
       // silent — group stays as-is on failure
     } finally {
       setMovingCategory(null);
+    }
+  };
+
+  const handleSaveGroupBudget = async (group, amount) => {
+    setSavingGroupBudget(group);
+    try {
+      await setGroupBudget(group, amount);
+      const res = await getGroupBudgets();
+      setGroupBudgets(res.data);
+    } catch {
+      // silent — cap stays as-is on failure
+    } finally {
+      setSavingGroupBudget(null);
     }
   };
 
@@ -1070,6 +1220,8 @@ export default function InsightsPage() {
           />
 
           {explain?.volatilityBreakdown && <SpendingMixBar data={explain.volatilityBreakdown} />}
+
+          {groupBudgets && <GroupBudgetCaps data={groupBudgets} onSave={handleSaveGroupBudget} savingGroup={savingGroupBudget} />}
 
           {(recurring?.count > 0 || recurring?.frequent?.length > 0) && <RecurringCard data={recurring} />}
 

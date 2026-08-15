@@ -65,7 +65,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category |
 | Add transaction | Income or expense with smart category suggestions |
 | Analytics | Monthly/yearly charts, category breakdown, period comparison |
-| Insights | Anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete) |
+| Insights | Anomaly detection, spending explainability, time-to-zero runway, smart category classification, category management (rename / delete), optional envelope-lite group budgets (soft caps per essential / discretionary / savings / social) |
 | Recommendation | 9 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, and more |
 | Range report | Custom date range with income/expense summary |
 | Profile | Financial identity, currency & format preferences, CSV import/export, danger zone |

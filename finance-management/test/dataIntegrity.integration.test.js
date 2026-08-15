@@ -12,6 +12,7 @@ const Transaction = require('../models/transaction.model');
 const Category    = require('../models/category.model');
 const Goal        = require('../models/goal.model');
 const Budget      = require('../models/budget.model');
+const GroupBudget = require('../models/groupBudget.model');
 const Preference  = require('../models/preference.model');
 const Snapshot    = require('../models/snapshot.model');
 const MLInsight   = require('../models/mlinsight.model');
@@ -140,6 +141,7 @@ describe('Data integrity regressions', () => {
             await chai.request(server).post('/api/goal/add').set('Cookie', cookie)
                 .send({ description: 'Emergency fund', price: 1000000 });
             await Budget.create({ user: userId, yearMonth: '2026-08', amount: 5000000 });
+            await GroupBudget.create({ user: userId, group: 'discretionary', amount: 2000000 });
             await Preference.create({ user: userId, currency: 'idr' });
             // The transaction above already wrote a snapshot via applySnapshotDelta,
             // so upsert rather than insert.
@@ -162,6 +164,7 @@ describe('Data integrity regressions', () => {
             const leftovers = {};
             for (const [name, Model] of Object.entries({
                 transaction: Transaction, category: Category, goal: Goal, budget: Budget,
+                groupBudget: GroupBudget,
                 preference: Preference, snapshot: Snapshot, mlinsight: MLInsight,
                 networth: NetWorth, networthSnapshot: NetWorthSnapshot,
             })) {
@@ -172,6 +175,7 @@ describe('Data integrity regressions', () => {
 
             expect(leftovers).to.deep.equal({
                 transaction: 0, category: 0, goal: 0, budget: 0,
+                groupBudget: 0,
                 preference: 0, snapshot: 0, mlinsight: 0,
                 networth: 0, networthSnapshot: 0, balance: 0, user: 0,
             });

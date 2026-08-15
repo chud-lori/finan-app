@@ -562,6 +562,25 @@ When reading, the backend first looks for a `Budget` document; falls back to `Pr
 
 ---
 
+### GroupBudget
+
+```
+Collection: groupbudgets
+```
+
+Optional **envelope-lite soft caps** per spending group, layered on top of the single monthly `Budget` (they do not replace it). Opt-in: a user with no caps has zero rows and the feature stays invisible. Caps are **recurring monthly envelopes** — not keyed on `yearMonth` — so a cap set once applies every month. They are advisory: nothing is blocked when a cap is exceeded, the UI just turns the progress bar red.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required | |
+| `group` | String | required, enum | one of `essential`, `discretionary`, `savings`, `social` (the steerable groups — `income`/`other` are not cappable) |
+| `amount` | Number | required, min 0 | soft cap in the user's currency |
+| `createdAt` / `updatedAt` | Date | auto | |
+
+**Indexes:** `{ user: 1, group: 1 }` unique — one cap per group per user. Setting a cap upserts the row; clearing it (`amount ≤ 0`) deletes the row so "no cap" and "cap of 0" are never confused. `GET /api/group-budget` joins each group's cap to the current-month expense for that group (same category→group aggregation as `getGroupSummary`) and returns `spent`, `pct`, `remaining`, and `over`.
+
+---
+
 ### NetWorth
 
 ```
@@ -1197,6 +1216,13 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | PATCH | `/api/category/:id/group` | 30/min | ✓ | Override a category's spending group; body: `{ group }` — sets `groupOverridden: true` |
 | PATCH | `/api/category/:id/rename` | 30/min | ✓ | Rename a category; body: `{ name }`. Updates all referencing transactions atomically. 409 if new name already exists |
 | DELETE | `/api/category/:id` | 30/min | ✓ | Delete a category. 409 if any transaction uses it (returns count). 400 if `:id` is not a valid ObjectId |
+
+### Group budgets (envelope-lite soft caps)
+
+| Method | Path | Rate limit | Auth | Description |
+|--------|------|-----------|------|-------------|
+| GET | `/api/group-budget` | 30/min | ✓ | The four cappable groups, each with `cap`, current-month `spent`, `pct`, `remaining`, `over`; query: `?month=YYYY-MM&tz=IANA`. `hasCaps` is false until the user sets one |
+| PUT | `/api/group-budget/:group` | 30/min | ✓ | Set or clear a soft cap; body: `{ amount }`. `:group` ∈ essential/discretionary/savings/social. `amount ≤ 0`/null clears (deletes the row) |
 
 ### Gamification
 
