@@ -291,12 +291,13 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Load all categories once on mount
+  // Load categories, filtered to the selected type so income categories
+  // (salary, bonus) don't show while adding an expense, and vice versa.
   useEffect(() => {
-    getCategories()
+    getCategories(form.type || null)
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
-  }, []);
+  }, [form.type]);
 
   // Refresh suggestions when type changes
   useEffect(() => {
@@ -451,8 +452,8 @@ export default function AddPage() {
                         </p>
                       ) : (
                         <p className="mt-2 text-xs text-gray-400">
-                          Moving money to savings or investments (reksa dana, stocks, a deposit)? Log it under a{' '}
-                          <span className="font-medium text-gray-500">savings</span> category so it counts as saved, not spent.
+                          Moving money to savings or investments (mutual fund, stocks, a deposit)? Log it under a{' '}
+                          <span className="font-medium text-gray-500">savings-group</span> category (savings, mutual fund, stocks) so it counts as saved, not spent.
                         </p>
                       )
                     )}
