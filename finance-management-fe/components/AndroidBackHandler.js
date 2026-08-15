@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
  * When the user is already at the "home" of the app and presses back,
  * we show a toast and exit on a second press within 2 seconds.
  */
-const ROOT_PATHS = ['/dashboard', '/analytics', '/reports', '/profile', '/recommendation', '/insights'];
+const ROOT_PATHS = ['/dashboard', '/analytics', '/profile', '/recommendation', '/insights'];
 
 export default function AndroidBackHandler() {
   const pathname = usePathname();

@@ -29,7 +29,7 @@
     { "name": "vehicle",                     "type": "expense" },
     { "name": "snack",                       "type": "expense" },
     { "name": "savings",                     "type": "expense", "group": "savings" },
-    { "name": "reksa dana",                  "type": "expense", "group": "savings" },
+    { "name": "mutual fund",                 "type": "expense", "group": "savings" },
     { "name": "stocks",                      "type": "expense", "group": "savings" },
     { "name": "salary",                      "type": "income"  },
     { "name": "freelance",                   "type": "income"  },

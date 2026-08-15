@@ -420,22 +420,16 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Quick-access tools — visible on mobile only */}
-          <div className="sm:hidden grid grid-cols-2 gap-3 mb-6">
+          {/* Quick-access to Planner — mobile only. Insights lives in the bottom
+              nav now, so it no longer needs a shortcut tile here; Planner is the
+              one primary page not in the bottom bar. */}
+          <div className="sm:hidden mb-6">
             <Link href="/recommendation"
               className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-gray-200 shadow-sm active:bg-gray-50 transition-colors">
               <span className="text-2xl">💡</span>
               <div>
                 <p className="text-sm font-semibold text-gray-900">Planner</p>
-                <p className="text-xs text-gray-400">FIRE & debt payoff</p>
-              </div>
-            </Link>
-            <Link href="/insights"
-              className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-gray-200 shadow-sm active:bg-gray-50 transition-colors">
-              <span className="text-2xl">🔍</span>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Insights</p>
-                <p className="text-xs text-gray-400">AI spending analysis</p>
+                <p className="text-xs text-gray-400">FIRE, debt payoff, budgeting & 11 tools</p>
               </div>
             </Link>
           </div>

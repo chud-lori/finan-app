@@ -104,13 +104,18 @@ function CategoryCombobox({ value, onChange, categories }) {
               <li
                 key={c}
                 onClick={() => select(c)}
-                className={`px-3.5 py-2 text-sm cursor-pointer transition-colors flex items-center justify-between ${
+                className={`px-3.5 py-2 text-sm cursor-pointer transition-colors flex items-center justify-between gap-2 ${
                   value === c.toLowerCase()
                     ? 'bg-teal-50 text-teal-700 font-medium'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <span className="capitalize">{toTitleCase(c)}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="capitalize truncate">{toTitleCase(c)}</span>
+                  {looksLikeSavings(c) && (
+                    <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">savings</span>
+                  )}
+                </span>
                 {value === c.toLowerCase() && (
                   <svg className="w-3.5 h-3.5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -286,12 +291,13 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Load all categories once on mount
+  // Load categories, filtered to the selected type so income categories
+  // (salary, bonus) don't show while adding an expense, and vice versa.
   useEffect(() => {
-    getCategories()
+    getCategories(form.type || null)
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
-  }, []);
+  }, [form.type]);
 
   // Refresh suggestions when type changes
   useEffect(() => {
@@ -446,8 +452,8 @@ export default function AddPage() {
                         </p>
                       ) : (
                         <p className="mt-2 text-xs text-gray-400">
-                          Moving money to savings or investments (reksa dana, stocks, a deposit)? Log it under a{' '}
-                          <span className="font-medium text-gray-500">savings</span> category so it counts as saved, not spent.
+                          Moving money to savings or investments (mutual fund, stocks, a deposit)? Log it under a{' '}
+                          <span className="font-medium text-gray-500">savings-group</span> category (savings, mutual fund, stocks) so it counts as saved, not spent.
                         </p>
                       )
                     )}
