@@ -10,7 +10,7 @@ import AndroidBackHandler from "@/components/AndroidBackHandler";
 
 export const metadata = {
   title: 'Finan App — Personal Finance Tracker & Planner',
-  description: 'Free personal finance tracker with budgets, FIRE calculator, AI insights, and 9+ planning tools. Multi-currency support. No ads, free forever.',
+  description: 'Free personal finance tracker with budgets, FIRE calculator, AI insights, and 11+ planning tools. Multi-currency support. No ads, free forever.',
   metadataBase: new URL('https://finance.lori.my.id'),
   manifest: '/manifest.json',
   icons: {
