@@ -177,7 +177,7 @@ function LandingFooter() {
               A free personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.
             </p>
             <p className="text-sm leading-relaxed text-gray-400 max-w-xs">
-              9 planning tools, multi-currency support, AI insights, CSV import/export. Free forever.
+              11 planning tools, multi-currency support, AI insights, CSV import/export. Free forever.
             </p>
             <div className="flex items-center gap-2 mt-5">
               <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
@@ -566,7 +566,7 @@ export default function LandingPage() {
                 {
                   icon: '⚡',
                   title: 'Fully free, always',
-                  desc: 'No credit card required. No freemium gates. Every feature — tracking, analytics, all 9 planning tools, AI insights — is 100% free.',
+                  desc: 'No credit card required. No freemium gates. Every feature — tracking, analytics, all 11 planning tools, AI insights — is 100% free.',
                   anim: 'up',
                 },
                 {
