@@ -265,6 +265,12 @@ export const getGamificationSummary = () =>
 export const getSmartRecommendations = () =>
   apiFetch(`/api/recommendations?tz=${encodeURIComponent(browserTz())}`);
 
+// One-tap allocation of a surplus or windfall into a goal. Atomic per-goal
+// increment server-side; writes the state that suppresses the prompting nudge.
+// body: { source: 'surplus'|'windfall', sourceKey, goalId, amount }
+export const allocateToGoal = (body) =>
+  apiFetch('/api/recommendations/allocate', { method: 'POST', body: JSON.stringify(body) });
+
 // ── Category groups ───────────────────────────────────────────────────────────
 
 export const getGroupSummary = (month) => {

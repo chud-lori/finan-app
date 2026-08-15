@@ -50,6 +50,8 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 | Tax Estimator | Estimate Indonesian PPh 21 tax (progressive + TER awareness); auto-fills from your average income |
 | Net Worth | Track assets vs liabilities with a saved monthly trend — one point per month |
 
+**Smart nudges** on the dashboard turn your data into one-tap actions. The **surplus sweep** nudge appears when last month's income beat its spending: one tap earmarks part of that leftover to a savings goal (added to that goal's own balance — nothing leaves any account), and the nudge clears itself once you act.
+
 ### Preferences
 - **Currency** — IDR and other currencies; affects all formatting throughout the app
 - **Number format** — dot grouping (5.000.000) or comma grouping (5,000,000)

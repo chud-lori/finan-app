@@ -3,6 +3,8 @@ const Transaction = require('../models/transaction.model');
 const Goal = require('../models/goal.model');
 const Balance = require('../models/balance.model');
 const MLInsight = require('../models/mlinsight.model');
+const Snapshot = require('../models/snapshot.model');
+const Allocation = require('../models/allocation.model');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 
@@ -160,6 +162,40 @@ const getSmartRecommendations = async (req, res) => {
                 body:  'AI analysis flagged some spending patterns that look out of the ordinary. Review your Insights for details.',
                 cta:  { label: 'View AI Insights', href: '/insights' },
             });
+        }
+
+        // ── 7. Surplus sweep — earmark last month's leftover to a goal ───────
+        // If the last completed month ran a surplus (income > expense) and the
+        // user has an unachieved goal to feed, nudge them to sweep part of it in
+        // before it blends into this month's spend. Suppressed once an Allocation
+        // exists for that month — the CTA lands on the Savings Goal tool, whose
+        // one-tap "sweep here" button writes exactly that Allocation. No money was
+        // auto-moved: this is cash-flow surplus, a suggestion.
+        const activeGoals = goals.filter(g => g.achieve !== 1);
+        if (activeGoals.length > 0) {
+            const lastMonthYM = now.clone().subtract(1, 'month').format('YYYY-MM');
+            const [lastSnap, alreadySwept] = await Promise.all([
+                Snapshot.findOne({ user: userId, yearMonth: lastMonthYM }).select('income expense').lean(),
+                Allocation.exists({ user: userId, source: 'surplus', sourceKey: lastMonthYM }),
+            ]);
+            const surplus = lastSnap ? Math.round((lastSnap.income || 0) - (lastSnap.expense || 0)) : 0;
+            if (lastSnap && lastSnap.income > 0 && surplus > 0 && !alreadySwept) {
+                // Amount stays in the CTA params only — the FE formats it in the
+                // user's currency; the server never embeds a currency figure.
+                const params = new URLSearchParams({
+                    tool:   'goal',
+                    sweep:  lastMonthYM,
+                    amount: String(surplus),
+                });
+                recs.push({
+                    id:   'surplus_sweep',
+                    type: 'tip',
+                    icon: '💰',
+                    title: 'You had a surplus last month',
+                    body:  'You spent less than you earned last month. Sweep some of that surplus into a goal before it blends into this month\'s spending — it stays your money, just earmarked.',
+                    cta:  { label: 'Sweep surplus to a goal', href: `/recommendation?${params.toString()}` },
+                });
+            }
         }
 
         // Prioritise: warning → info → success → tip; cap at 5

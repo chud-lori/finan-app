@@ -542,6 +542,32 @@ Collection: goals
 
 ---
 
+### Allocation
+
+```
+Collection: allocations
+```
+
+Records a one-tap allocation of a cash-flow surplus or an income windfall into a
+`Goal`. **Not a money-movement ledger and never a shared pool** — the money moves
+onto the target goal's own `savedAmount` (atomic `$inc`). The row exists so the
+prompting nudge can suppress itself: a surplus month or windfall transaction with
+an `Allocation` is "handled" and no longer nudged.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required, indexed | |
+| `source` | String | enum: `surplus \| windfall`, required | what prompted the allocation |
+| `sourceKey` | String | required, ≤64 chars | `surplus` → `'YYYY-MM'` of the surplus month; `windfall` → the income transaction id |
+| `goal` | ObjectId | ref: Goal, required | the funded goal |
+| `amount` | Number | required, min 0 | amount added to the goal's `savedAmount` |
+| `createdAt` / `updatedAt` | Date | auto | |
+
+**Indexes:** `{ user: 1, source: 1, sourceKey: 1 }` (non-unique — a windfall can be
+split across several goals). In `userScopedModels`, so `deleteAccount` clears it.
+
+---
+
 ### Budget
 
 ```
@@ -1209,6 +1235,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
 | GET | `/api/recommendations` | 20/min | ✓ | 1–5 personalised rule-based nudges; query: `?tz=IANA` |
+| POST | `/api/recommendations/allocate` | 30/min | ✓ | one-tap allocation of a surplus/windfall into a goal; body: `{ source, sourceKey, goalId, amount }` |
 
 **Every nudge CTA must lead to a persistent action.** A nudge is only suppressed by
 state stored in the database, so its CTA has to be able to create that state — a link
@@ -1217,6 +1244,22 @@ emergency-fund nudge is the reference case: it is suppressed by any `Goal` whose
 description matches `/emergency/i` (achieved or not — hence the goal query is
 unfiltered on `achieve`), and its CTA carries `?tool=emergency&monthly=&saved=` so the
 Emergency Fund tool prefills and offers a one-click "Track this as a goal".
+
+**Surplus-sweep nudge (`surplus_sweep`).** When the last completed month ran a
+surplus (`Snapshot.income − Snapshot.expense > 0`) and the user has an unachieved
+goal, the nudge invites them to earmark part of that surplus to a goal. Its CTA
+carries `?tool=goal&sweep=YYYY-MM&amount=N`, opening the Savings Goal tool with a
+one-tap "sweep here" button per active goal. Tapping it calls `POST
+/api/recommendations/allocate` with `source: 'surplus'`, `sourceKey: 'YYYY-MM'`,
+which (a) increments that goal's **own** `savedAmount` via an atomic `$inc` — never
+a shared pool — and (b) writes an `Allocation` row. The nudge query suppresses
+itself the moment an `Allocation` exists for `(user, source: 'surplus', sourceKey:
+that month)`. Copy never claims money was moved anywhere real — it is cash-flow
+surplus, a suggestion, and the amount is carried only in CTA params so the FE
+formats it in the user's currency (the server never embeds a currency figure).
+
+The same `allocate` endpoint backs the windfall planner with `source: 'windfall'`
+and `sourceKey` = the large income transaction's id (see the Windfall section).
 
 ---
 
