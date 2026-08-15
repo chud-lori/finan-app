@@ -151,7 +151,7 @@ finan-app/                          ← monorepo root
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
     │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown; year nav bounded by availableYears; clicking a bar in yearly view opens month transaction modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
-    │   ├── recommendation/page.js  ← 9 financial planning calculators
+    │   ├── recommendation/page.js  ← 11 financial planning tools (incl. Windfall Planner, Zakat Estimator)
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
     │   └── settings/page.js        ← Theme, password change, sessions, delete account
     ├── components/
@@ -560,6 +560,32 @@ Collection: goals
 | `updatedAt` | Date | auto | |
 
 **Note:** `savedAmount` is goal-specific. Do not use balance or any shared pool.
+
+---
+
+### Allocation
+
+```
+Collection: allocations
+```
+
+Records a one-tap allocation of a cash-flow surplus or an income windfall into a
+`Goal`. **Not a money-movement ledger and never a shared pool** — the money moves
+onto the target goal's own `savedAmount` (atomic `$inc`). The row exists so the
+prompting nudge can suppress itself: a surplus month or windfall transaction with
+an `Allocation` is "handled" and no longer nudged.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required, indexed | |
+| `source` | String | enum: `surplus \| windfall`, required | what prompted the allocation |
+| `sourceKey` | String | required, ≤64 chars | `surplus` → `'YYYY-MM'` of the surplus month; `windfall` → the income transaction id |
+| `goal` | ObjectId | ref: Goal, required | the funded goal |
+| `amount` | Number | required, min 0 | amount added to the goal's `savedAmount` |
+| `createdAt` / `updatedAt` | Date | auto | |
+
+**Indexes:** `{ user: 1, source: 1, sourceKey: 1 }` (non-unique — a windfall can be
+split across several goals). In `userScopedModels`, so `deleteAccount` clears it.
 
 ---
 
@@ -1248,6 +1274,9 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
 | GET | `/api/recommendations` | 20/min | ✓ | 1–5 personalised rule-based nudges; query: `?tz=IANA` |
+| POST | `/api/recommendations/allocate` | 30/min | ✓ | one-tap allocation of a surplus/windfall into a goal; body: `{ source, sourceKey, goalId, amount }` |
+| GET | `/api/recommendations/windfall` | 30/min | ✓ | detect a recent unusually large income (THR/bonus) + active goals to split into; query: `?tz=IANA` |
+| GET | `/api/recommendations/zakat` | 30/min | ✓ | zakat-maal estimate from net-worth + social-group giving YTD; query: `?tz=IANA`, optional `?nisab=` |
 
 **Every nudge CTA must lead to a persistent action.** A nudge is only suppressed by
 state stored in the database, so its CTA has to be able to create that state — a link
@@ -1256,6 +1285,47 @@ emergency-fund nudge is the reference case: it is suppressed by any `Goal` whose
 description matches `/emergency/i` (achieved or not — hence the goal query is
 unfiltered on `achieve`), and its CTA carries `?tool=emergency&monthly=&saved=` so the
 Emergency Fund tool prefills and offers a one-click "Track this as a goal".
+
+**Surplus-sweep nudge (`surplus_sweep`).** When the last completed month ran a
+surplus (`Snapshot.income − Snapshot.expense > 0`) and the user has an unachieved
+goal, the nudge invites them to earmark part of that surplus to a goal. Its CTA
+carries `?tool=goal&sweep=YYYY-MM&amount=N`, opening the Savings Goal tool with a
+one-tap "sweep here" button per active goal. Tapping it calls `POST
+/api/recommendations/allocate` with `source: 'surplus'`, `sourceKey: 'YYYY-MM'`,
+which (a) increments that goal's **own** `savedAmount` via an atomic `$inc` — never
+a shared pool — and (b) writes an `Allocation` row. The nudge query suppresses
+itself the moment an `Allocation` exists for `(user, source: 'surplus', sourceKey:
+that month)`. Copy never claims money was moved anywhere real — it is cash-flow
+surplus, a suggestion, and the amount is carried only in CTA params so the FE
+formats it in the user's currency (the server never embeds a currency figure).
+
+The same `allocate` endpoint backs the windfall planner with `source: 'windfall'`
+and `sourceKey` = the large income transaction's id (see the Windfall section).
+
+**Windfall planner (`GET /api/recommendations/windfall`).** `helpers/windfall.js`
+`detectWindfall()` finds the largest income in the last 45 days and calls it a
+windfall when it is ≥ 1.8× the median of the user's income over the last 365 days
+(median is robust — a single windfall barely moves it). The endpoint returns the
+detected windfall (with `allocated` / `remaining` / `handled` derived from existing
+`Allocation` rows for that transaction) plus the user's active goals. The FE
+Windfall Planner tool pre-fills a suggested split (`lib/windfallSplit.js`, fill
+goals oldest-first up to each goal's remaining need) and each "Allocate" button
+calls `/allocate` with `source: 'windfall'`. The `windfall_<txnId>` dashboard nudge
+appears when a windfall is detected and the user has an active goal, and suppresses
+itself once any `Allocation` exists for that transaction id. Emergency fund and
+debt payoff are not special-cased — they are just goals; there is no debt-account
+model, so a debt-payoff target is a user-created goal.
+
+**Zakat estimator (`GET /api/recommendations/zakat`).** `helpers/zakat.js`
+`estimateZakat()` returns 2.5% of a zakatable base = liquid assets
+(`cash + investment + receivable` holding types) − short-term debts
+(`credit_card + bnpl + payable + loan`), with illiquid personal-use assets
+(property, vehicle, mortgage) excluded. Giving YTD sums this year's **expense**
+transactions in categories grouped `social` (zakat / donation / sharing). Nisab is
+an optional `?nisab=` input — below it, `zakatDue` is 0 (`meetsNisab: false`). It is
+an **estimate, not a fatwa** (no haul tracking); the FE labels it as such and lets
+any user hide the tool. The zakatable-asset and deductible-liability type lists live
+in `helpers/zakat.js` and are keyed to the `NetWorth` holding `type` enum.
 
 ---
 
