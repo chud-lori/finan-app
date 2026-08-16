@@ -7,20 +7,56 @@ const Transaction = require('../models/transaction.model');
 const Balance    = require('../models/balance.model');
 const cache      = require('../helpers/cache');
 const logger     = require('../helpers/logger');
+const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
 const { BaseResponseDTO } = require('../dtos/base.dto');
 
 const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
-function deriveSpendingStyle(snapshots) {
+// ── Savings-aware snapshot maths ─────────────────────────────────────────────
+//
+// Snapshot docs store RAW monthly rollups: `expense` is every outflow, and
+// `byCategory` breaks that same expense total down per category (see
+// helpers/snapshot.js — byCategory is populated from expense txns only, so the
+// per-category totals sum exactly to `expense`).
+//
+// Since Savings & Investment Visibility, money logged in a `group === 'savings'`
+// category is a transfer to yourself, not consumption — `computeHealth` in
+// controllers/gamification.js already excludes it from its savings rate. The
+// Profile identity has to agree, or the same screen shows two different savings
+// rates for the same user.
+//
+// We subtract the savings share out of `byCategory` rather than re-reading the
+// ledger like computeHealth does: this endpoint runs on every profile load on a
+// small VPS, the 12 snapshot docs are already in hand, and the only extra cost
+// is one indexed `Category.find({user, group:'savings'})` — versus scanning up
+// to a year of raw transactions. The result is identical because byCategory is
+// an exact decomposition of `expense`.
+const savingsOutflowOf = (snapshot, savingsNames) =>
+    (snapshot.byCategory || []).reduce(
+        (s, c) => s + (savingsNames.has((c.category || '').toLowerCase()) ? (c.total || 0) : 0),
+        0,
+    );
+
+// Non-savings expense for one month, i.e. what the user actually spent.
+// Clamped at 0: snapshots are advisory, so a drifted rollup must never produce
+// a negative "spend".
+const spendOf = (snapshot, savingsNames) =>
+    Math.max(0, (snapshot.expense || 0) - savingsOutflowOf(snapshot, savingsNames));
+
+function deriveSpendingStyle(snapshots, savingsNames) {
     if (!snapshots.length) return 'New Saver';
 
-    const totalExpense = snapshots.reduce((s, sn) => s + sn.expense, 0);
+    // Spending style describes consumption habits — an investment transfer is
+    // not a habit to name the user after, so savings categories are dropped
+    // from both the total and the per-category ranking.
+    const totalExpense = snapshots.reduce((s, sn) => s + spendOf(sn, savingsNames), 0);
     const avgMonthly   = snapshots.length ? totalExpense / snapshots.length : 0;
 
     // Aggregate categories across all snapshot months
     const catMap = {};
     snapshots.forEach(sn => {
         (sn.byCategory || []).forEach(c => {
+            if (savingsNames.has((c.category || '').toLowerCase())) return;
             if (!catMap[c.category]) catMap[c.category] = { total: 0, count: 0 };
             catMap[c.category].total += c.total;
             catMap[c.category].count += c.count;
@@ -46,26 +82,41 @@ const getProfile = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const [user, snapshots, prefs] = await Promise.all([
-            User.findById(userId).select('name username email createdAt lastLoginAt lastActivityAt lastActivityType googleId').lean(),
+        const [user, snapshots, prefs, savingsNames] = await Promise.all([
+            User.findById(userId).select('name username email emailVerified createdAt lastLoginAt lastActivityAt lastActivityType googleId').lean(),
             Snapshot.find({ user: userId }).sort({ yearMonth: -1 }).limit(12).lean(),
             Preference.findOne({ user: userId }).lean(),
+            getSavingsCategoryNames(userId),
         ]);
 
         if (!user) return res.status(404).json(BaseResponseDTO.error('User not found'));
 
-        // Financial identity
-        const totalExpense = snapshots.reduce((s, sn) => s + sn.expense, 0);
+        // Financial identity.
+        //
+        // "Expense" here means SPENDING — savings-group outflow is excluded (see
+        // spendOf above), so the identity agrees with the Financial Health score
+        // rendered on the same screen. Formula:
+        //     spend_m       = snapshot.expense − Σ byCategory[savings].total
+        //     avgSavingsRate = (Σ income − Σ spend) / Σ income
+        // Money moved into an investment category therefore raises the savings
+        // rate instead of dragging it down.
+        const totalExpense = snapshots.reduce((s, sn) => s + spendOf(sn, savingsNames), 0);
         const totalIncome  = snapshots.reduce((s, sn) => s + sn.income,  0);
-        const incomeMonths  = snapshots.filter(sn => sn.income  > 0).length || 1;
-        const expenseMonths = snapshots.filter(sn => sn.expense > 0).length || 1;
+        const incomeMonths  = snapshots.filter(sn => sn.income > 0).length || 1;
+        // Average over months that had real spending — a month of pure investing
+        // is not a zero-spend month for averaging purposes either way, but a
+        // month with only savings outflow must not dilute the average.
+        const expenseMonths = snapshots.filter(sn => spendOf(sn, savingsNames) > 0).length || 1;
         const avgMonthlyExpense = Math.round(totalExpense / expenseMonths);
         const avgMonthlyIncome  = Math.round(totalIncome  / incomeMonths);
         const avgSavingsRate    = totalIncome > 0 ? Math.round(((totalIncome - totalExpense) / totalIncome) * 100) : 0;
 
+        // Top category is a *spending* headline — a savings category winning it
+        // would tell the user their biggest "expense" is their investing.
         const catMap = {};
         snapshots.forEach(sn => {
             (sn.byCategory || []).forEach(c => {
+                if (savingsNames.has((c.category || '').toLowerCase())) return;
                 if (!catMap[c.category]) catMap[c.category] = 0;
                 catMap[c.category] += c.total;
             });
@@ -81,7 +132,7 @@ const getProfile = async (req, res) => {
             avgSavingsRate,
             topCategory,
             topCategoryPct,
-            spendingStyle:  deriveSpendingStyle(snapshots),
+            spendingStyle:  deriveSpendingStyle(snapshots, savingsNames),
             monthsTracked:  snapshots.length,
         };
 
@@ -96,7 +147,10 @@ const getProfile = async (req, res) => {
         };
 
         res.status(200).json(BaseResponseDTO.success('Profile retrieved', {
-            user:        { name: user.name, username: user.username, email: user.email },
+            // `emailVerified` defaults to true on the model for backward compat;
+            // only password accounts created after the verification flow landed
+            // can be false. Coerced so the FE badge never sees undefined.
+            user:        { name: user.name, username: user.username, email: user.email, verified: user.emailVerified !== false },
             account: {
                 memberSince:      user.createdAt,
                 lastLoginAt:      user.lastLoginAt || null,

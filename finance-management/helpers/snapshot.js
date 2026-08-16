@@ -85,19 +85,38 @@ async function applySnapshotDelta(userId, yearMonth, { incomeDelta = 0, expenseD
             { upsert: true }
         );
 
-        // Step 2: update byCategory array for expense additions
+        // Step 2: update byCategory array for expense additions.
+        //
+        // Presence of the category is decided by the QUERY FILTER + `matchedCount`,
+        // never by `modifiedCount`. The schema has `timestamps: true`, so Mongoose
+        // appends `$set: { updatedAt }` to every update — the document therefore
+        // always counts as modified and `modifiedCount` is 1 even when the
+        // arrayFilters identifier matched no element. Keying the fallback off
+        // `modifiedCount === 0` meant the `$push` never ran and `byCategory` stayed
+        // empty forever on the single-add path (only refreshSnapshot repopulated
+        // it), which silently emptied the profile's top-category and spending-style
+        // maths.
         if (category && expenseDelta > 0) {
             const catResult = await Snapshot.updateOne(
-                { user: userId, yearMonth },
-                { $inc: { 'byCategory.$[cat].total': expenseDelta, 'byCategory.$[cat].count': 1 } },
-                { arrayFilters: [{ 'cat.category': category }] }
+                { user: userId, yearMonth, 'byCategory.category': category },
+                { $inc: { 'byCategory.$.total': expenseDelta, 'byCategory.$.count': 1 } }
             );
-            // Category not yet in array for this month — push a new entry
-            if (catResult.modifiedCount === 0) {
-                await Snapshot.updateOne(
-                    { user: userId, yearMonth },
+            // Category not yet in array for this month — push a new entry. The
+            // `$ne` guard makes the push idempotent if a concurrent add inserted
+            // the same category between the two statements.
+            if (catResult.matchedCount === 0) {
+                const pushResult = await Snapshot.updateOne(
+                    { user: userId, yearMonth, 'byCategory.category': { $ne: category } },
                     { $push: { byCategory: { category, total: expenseDelta, count: 1 } } }
                 );
+                // Guard rejected the push → someone else pushed the category first;
+                // apply this delta on top of theirs so it is not silently dropped.
+                if (pushResult.matchedCount === 0) {
+                    await Snapshot.updateOne(
+                        { user: userId, yearMonth, 'byCategory.category': category },
+                        { $inc: { 'byCategory.$.total': expenseDelta, 'byCategory.$.count': 1 } }
+                    );
+                }
             }
         }
     } catch (err) {

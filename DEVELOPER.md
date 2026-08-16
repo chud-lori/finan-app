@@ -359,10 +359,36 @@ Transaction `type` is only `income | expense` — there is no `transfer`. Invest
 | Anomaly baseline (rule) | `controllers/transaction.js#getAnomalies` | savings-group txns removed from the current set, historical baseline and the "first-time category" signal. |
 | Anomaly baseline (ML) | `services/ml/anomaly.js#detectAnomalies` | skips any tx flagged `is_savings`; the flag is set in `_runMLPipeline` and savings-group outflow is also excluded from the forecast's `daily_totals`. |
 | 50/30/20 | `finance-management-fe/lib/ruleSplit.js#buildRuleSplit` | savings bucket = `savingsGroup + max(income − nonSavingsExpense − savingsGroup, 0)`. |
+| Profile financial identity | `controllers/profile.js#getProfile` | `avgMonthlyExpense`, `avgSavingsRate`, `topCategory` and `spendingStyle` all computed on non-savings expense — see below. |
 
 **The double-count trap (50/30/20):** if savings-group outflow is excluded from expense, the surplus rises by exactly that amount. Adding both the raised surplus *and* the savings-group total to the savings bucket would count the invested rupiah twice. `buildRuleSplit` computes the surplus against **income − total outflow** (`income − nonSavingsExpense − savingsGroup`, i.e. the old `income − totalExpense`), so each rupiah lands in exactly one place: invested money in `savingsGroup`, idle cash in the surplus. Covered by a regression test in `lib/ruleSplit.test.js`.
 
 The category → savings lookup is centralised in `helpers/savingsCategories.js#getSavingsCategoryNames(userId)` (a lowercased `Set` of `group === 'savings'` category names).
+
+#### Profile financial identity
+
+`GET /api/profile` derives the identity block from the user's last 12 `Snapshot` docs. Snapshots store **raw** rollups, so the savings share is subtracted out of `byCategory` before any figure is derived:
+
+```
+savingsOutflow_m = Σ byCategory[c].total  where c.category ∈ savingsCategoryNames
+spend_m          = max(0, snapshot.expense − savingsOutflow_m)
+
+avgMonthlyExpense = Σ spend_m / (# months with spend_m > 0)
+avgSavingsRate    = (Σ income − Σ spend_m) / Σ income
+topCategory       = argmax over byCategory totals, savings categories excluded
+spendingStyle     = derived from the same savings-excluded totals
+```
+
+Two decisions worth keeping:
+
+- **Excluded, not just relabelled.** `avgMonthlyExpense` is presented to the user as *spending*, so an investment transfer must not appear in it, and `topCategory` must never name a savings category — otherwise the profile tells the user their biggest expense is their investing. `expenseMonths` counts months with real spend, so a month of pure investing does not dilute the average.
+- **Snapshot subtraction, not a ledger re-read.** `computeHealth` re-reads transactions because it needs per-month windows anyway; `getProfile` does not. This endpoint runs on every profile load on a small VPS, the snapshots are already fetched, and `byCategory` is an exact decomposition of `expense` — so the only added cost is one indexed `Category.find({ user, group: 'savings' })` instead of a 12-month transaction scan. The two paths produce the same savings rate.
+
+Before this, the identity counted savings-group outflow as expense while the Financial Health Score on the same screen did not, so one screen showed two different savings rates for the same user (10M income / 4M spend / 3M invested read as 30% instead of 60%). Regression coverage: `test/profileIdentity.integration.test.js`.
+
+Snapshot months written before the `applySnapshotDelta` `byCategory` fix (see *Snapshot system*) have an empty `byCategory`; `spend_m` then degrades safely to the raw `expense` — the old number, never a negative or inflated one. Those months self-heal on the next `refreshSnapshot()`.
+
+The `user` block also carries `verified` (from `User.emailVerified`, coerced with `!== false` since the field defaults to `true` for pre-verification-flow accounts) so the FE can render a verified badge.
 
 ---
 
@@ -401,11 +427,15 @@ POST /api/transaction/ml-insights/refresh
 
 | Operation | Method | Notes |
 |-----------|--------|-------|
-| Single transaction add | `applySnapshotDelta()` | Atomic `$inc` + `arrayFilters` — O(1) |
+| Single transaction add | `applySnapshotDelta()` | Atomic positional `$inc` (+ guarded `$push` for a new category) — O(1) |
 | Transaction delete | `refreshSnapshot()` | Full recompute from ledger — always correct |
 | CSV import | `refreshSnapshot()` | Full recompute after all rows inserted |
 
 `refreshSnapshot()` never throws to the caller. If it fails, it logs and swallows the error — snapshots are advisory, not canonical. The `POST /api/profile/reconcile-balance` endpoint recomputes the balance from the raw transaction ledger if snapshots drift.
+
+**`byCategory` upsert — never branch on `modifiedCount`.** The schema declares `timestamps: true`, so Mongoose appends `$set: { updatedAt }` to every update; the document therefore always reports `modifiedCount: 1`, even when an `arrayFilters` identifier matched no array element. `applySnapshotDelta()` decides whether the category already exists from the **query filter plus `matchedCount`** (`{ …, 'byCategory.category': category }` with the positional `$` operator), falling back to a `$ne`-guarded `$push`. An earlier `modifiedCount === 0` check meant the push never fired, so any snapshot built purely from single adds carried an empty `byCategory` and the profile's top-category / spending-style maths silently read as "no categories". Months written before the fix stay empty until a `refreshSnapshot()` (delete, edit, or import) rebuilds them.
+
+`byCategory` is an exact decomposition of `expense` — it is populated from expense transactions only, so the per-category totals sum to the month's `expense`. Consumers rely on that to subtract a subset (e.g. savings-group outflow) without re-reading the ledger.
 
 ---
 

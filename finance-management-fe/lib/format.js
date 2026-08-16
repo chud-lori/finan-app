@@ -30,6 +30,19 @@ export const formatDate = (dateStr, timezone) => {
   return new Intl.DateTimeFormat('id-ID', opts).format(new Date(dateStr));
 };
 
+// Coarse relative time for account metadata (last login, session last-seen).
+// Falls back to a "Mon YYYY" label past 30 days — beyond that an exact day
+// count reads as noise.
+export const timeAgo = (date) => {
+  if (!date) return null;
+  const secs = Math.floor((Date.now() - new Date(date)) / 1000);
+  if (secs < 60)    return 'just now';
+  if (secs < 3600)  return `${Math.floor(secs / 60)} minute${Math.floor(secs / 60) !== 1 ? 's' : ''} ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)} hour${Math.floor(secs / 3600) !== 1 ? 's' : ''} ago`;
+  if (secs < 86400 * 30) return `${Math.floor(secs / 86400)} day${Math.floor(secs / 86400) !== 1 ? 's' : ''} ago`;
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+};
+
 export const parseAmount = (str) =>
   Number(String(str).replace(/[Rp\s,.]/g, '').replace(/[^0-9]/g, ''));
 
