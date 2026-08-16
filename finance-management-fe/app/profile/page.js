@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
@@ -9,19 +10,18 @@ import {
   updatePreferences,
   exportTransactions,
   importCsv,
-  deleteAccount,
-  changePassword,
-  logout,
-  logoutAllDevices,
-  getSessions,
-  revokeSession,
+  getGamificationSummary,
+  getNetWorth,
   listAllCategories,
   renameCategoryApi,
   deleteCategoryApi,
   repairCategoryTypes,
 } from '@/lib/api';
-import { toTitleCase } from '@/lib/format';
+import { toTitleCase, timeAgo } from '@/lib/format';
+import { describeLastBackup, getLastExportAt, markExportedNow } from '@/lib/backupReminder';
 import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
+import { Card, Toggle } from '@/components/SectionCard';
+import MobileLogoutButton from '@/components/MobileLogoutButton';
 import MonthCalendarPicker from '@/components/MonthCalendarPicker';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -50,17 +50,6 @@ const CSV_COLUMNS = [
 
 const IMPORT_STEPS = ['Reading file', 'Uploading', 'Processing rows', 'Saving'];
 
-// ─── Relative time helper ─────────────────────────────────────────────────────
-function timeAgo(date) {
-  if (!date) return null;
-  const secs = Math.floor((Date.now() - new Date(date)) / 1000);
-  if (secs < 60)   return 'just now';
-  if (secs < 3600) return `${Math.floor(secs / 60)} minute${Math.floor(secs / 60) !== 1 ? 's' : ''} ago`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)} hour${Math.floor(secs / 3600) !== 1 ? 's' : ''} ago`;
-  if (secs < 86400 * 30) return `${Math.floor(secs / 86400)} day${Math.floor(secs / 86400) !== 1 ? 's' : ''} ago`;
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-}
-
 function memberSince(date) {
   if (!date) return '—';
   return new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -73,125 +62,6 @@ function styleColor(label = '') {
   if (label.includes('Minimalist')) return 'bg-emerald-100 text-emerald-700';
   if (label.includes('New Saver'))  return 'bg-sky-100 text-sky-700';
   return 'bg-teal-100 text-teal-700';
-}
-
-// ─── Delete modal ─────────────────────────────────────────────────────────────
-function DeleteModal({ username, onCancel, onConfirmed }) {
-  const [input,   setInput]   = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
-
-  const handleDelete = async () => {
-    if (input !== username) { setError('Username does not match'); return; }
-    setLoading(true);
-    try {
-      await deleteAccount();
-      onConfirmed();
-    } catch (e) {
-      setError(e.message || 'Failed to delete account');
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 w-full max-w-sm">
-        <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
-          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01M10.293 4.293a1 1 0 011.414 0L21 14.586A2 2 0 0119.586 17H4.414A2 2 0 013 14.586L10.293 4.293z" />
-          </svg>
-        </div>
-        <h3 className="text-base font-bold text-gray-900 text-center">Delete account</h3>
-        <p className="text-xs text-gray-500 text-center mt-1">
-          This action is permanent and cannot be undone.
-        </p>
-
-        {/* What gets deleted */}
-        <div className="mt-3 mb-3 rounded-xl bg-red-50 border border-red-200 p-3 space-y-1.5">
-          <p className="text-xs font-semibold text-red-700 mb-1">The following will be permanently deleted:</p>
-          {[
-            'Your account and login credentials',
-            'All transactions (income & expense)',
-            'All custom categories',
-            'All preferences and settings',
-          ].map(item => (
-            <div key={item} className="flex items-start gap-1.5">
-              <svg className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              <span className="text-xs text-red-700">{item}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Export suggestion */}
-        <div className="mb-3 rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-start gap-2">
-          <svg className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01M10.293 4.293a1 1 0 011.414 0L21 14.586A2 2 0 0119.586 17H4.414A2 2 0 013 14.586L10.293 4.293z" />
-          </svg>
-          <p className="text-xs text-amber-800">
-            <span className="font-semibold">Export your data first.</span>{' '}
-            Use the <span className="font-medium">Export Data</span> section above to download a CSV backup of all your transactions before deleting.
-          </p>
-        </div>
-
-        <p className="text-xs text-gray-700 mb-1.5">
-          Type <span className="font-semibold">{username}</span> to confirm:
-        </p>
-        <input type="text" value={input} onChange={e => setInput(e.target.value)}
-          placeholder={username}
-          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 mb-3" />
-        {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
-        <div className="flex gap-2">
-          <button onClick={onCancel} disabled={loading}
-            className="flex-1 py-2 rounded-xl border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-            Cancel
-          </button>
-          <button onClick={handleDelete} disabled={loading || input !== username}
-            className="flex-1 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
-            {loading && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Generic confirm modal ────────────────────────────────────────────────────
-function ConfirmModal({ title, message, confirmLabel = 'Confirm', danger = false, loading = false, onCancel, onConfirm }) {
-  useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onCancel(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onCancel]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onCancel}>
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-3 ${danger ? 'bg-red-100' : 'bg-amber-100'}`}>
-          <svg className={`w-5 h-5 ${danger ? 'text-red-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.293 4.293a1 1 0 011.414 0L21 14.586A2 2 0 0119.586 17H4.414A2 2 0 013 14.586L10.293 4.293z" />
-          </svg>
-        </div>
-        <h3 className="text-base font-bold text-gray-900 text-center">{title}</h3>
-        <p className="text-sm text-gray-500 text-center mt-1 mb-5">{message}</p>
-        <div className="flex gap-2">
-          <button onClick={onCancel} disabled={loading}
-            className="flex-1 py-2 rounded-xl border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-            Cancel
-          </button>
-          <button onClick={onConfirm} disabled={loading}
-            className={`flex-1 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5 ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
-            {loading && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ─── Upload progress overlay ──────────────────────────────────────────────────
@@ -314,7 +184,7 @@ function ImportSuccessModal({ result, onClose }) {
   );
 }
 
-// ─── Reusable section card ────────────────────────────────────────────────────
+// ─── Manage categories ────────────────────────────────────────────────────────
 const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
 const GROUP_BADGE = {
@@ -572,39 +442,53 @@ function ManageCategoriesModal({ onClose }) {
   );
 }
 
-function Card({ title, subtitle, danger = false, children }) {
-  return (
-    <div className={`bg-white rounded-2xl border shadow-sm ${danger ? 'border-red-200' : 'border-gray-200'}`}>
-      <div className={`px-4 py-3 border-b rounded-t-2xl ${danger ? 'border-red-100' : 'border-gray-100'}`}>
-        <h2 className={`text-xs font-semibold uppercase tracking-wide ${danger ? 'text-red-500' : 'text-gray-500'}`}>{title}</h2>
-        {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
+// ─── Financial Health strip ───────────────────────────────────────────────────
+// Compact read-only echo of the full HealthScoreCard on /insights — same score,
+// same bands, no pillar breakdown. Insights stays the place to dig in.
+const HEALTH_BANDS = {
+  excellent:       { label: 'Excellent',    ring: '#059669', chip: 'bg-emerald-100 text-emerald-700' },
+  healthy:         { label: 'Healthy',      ring: '#0d9488', chip: 'bg-teal-100 text-teal-700'       },
+  building:        { label: 'Building',     ring: '#d97706', chip: 'bg-amber-100 text-amber-700'     },
+  needs_attention: { label: 'Getting started', ring: '#e11d48', chip: 'bg-rose-100 text-rose-700'    },
+};
 
-// ─── Toggle group (2 options) ─────────────────────────────────────────────────
-function Toggle({ options, value, onChange }) {
+function HealthStrip({ health }) {
+  const band   = HEALTH_BANDS[health.band] || HEALTH_BANDS.building;
+  const R      = 24;
+  const C      = 2 * Math.PI * R;
+  const offset = C * (1 - Math.min(100, Math.max(0, health.score)) / 100);
+
   return (
-    <div className="grid p-1 bg-gray-100 rounded-xl" style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>
-      {options.map(o => (
-        <button key={o.val} type="button" onClick={() => onChange(o.val)}
-          className={`py-1.5 rounded-lg text-sm font-semibold transition-all ${
-            value === o.val ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'
-          }`}>
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <Link
+      href="/insights#health"
+      className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 hover:border-teal-200 hover:bg-teal-50/40 transition-colors"
+    >
+      <div className="relative shrink-0" style={{ width: 58, height: 58 }}>
+        <svg width="58" height="58" viewBox="0 0 58 58">
+          <circle cx="29" cy="29" r={R} fill="none" strokeWidth="6" className="stroke-gray-200" />
+          <circle cx="29" cy="29" r={R} fill="none" strokeWidth="6" stroke={band.ring} strokeLinecap="round"
+            strokeDasharray={C} strokeDashoffset={offset} transform="rotate(-90 29 29)"
+            style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-lg font-black text-gray-900 tabular-nums">{health.score}</span>
+        </div>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-bold text-gray-900">Financial Health</p>
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${band.chip}`}>{band.label}</span>
+        </div>
+        <p className="text-xs text-gray-400 mt-0.5">Savings, buffer, budget &amp; goals — see the breakdown →</p>
+      </div>
+    </Link>
   );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const formatAmount = useFormatAmount();
-  const { refreshCurrency, clearCurrency } = useCurrency();
-  const router = useRouter();
+  const { refreshCurrency } = useCurrency();
 
   const [profile,        setProfile]        = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -637,32 +521,20 @@ export default function ProfilePage() {
   const [csvPreview,    setCsvPreview]    = useState(null); // { headers, rows }
   const importInputRef = useRef(null);
 
-  const [showDeleteModal,   setShowDeleteModal]   = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
-  // Change password
-  const [pwForm,    setPwForm]    = useState({ current: '', next: '', confirm: '' });
-  const [pwSaving,  setPwSaving]  = useState(false);
-  const [pwMsg,     setPwMsg]     = useState(null); // { ok, text }
-  const [showPwForm, setShowPwForm] = useState(false);
+  // Financial-identity extras. Each is optional garnish on the card — a failed
+  // call just drops its tile rather than failing the whole page.
+  const [health,   setHealth]   = useState(null);
+  const [streak,   setStreak]   = useState(null);
+  const [netWorth, setNetWorth] = useState(null);
 
-  // Logout all devices
-  const [logoutAllLoading, setLogoutAllLoading] = useState(false);
-  const [showLogoutAllConfirm, setShowLogoutAllConfirm] = useState(false);
-  const [logoutAllError, setLogoutAllError] = useState(null);
+  // Last-backup nudge (localStorage — the backend keeps no export audit trail)
+  const [lastExportAt, setLastExportAt] = useState(undefined); // undefined = not yet read
 
-  // Sessions
-  const [sessions,        setSessions]        = useState([]);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
-  const [revokingId,      setRevokingId]      = useState(null);
-  const [sessionError,    setSessionError]    = useState(null);
-
-  // ── Load profile ──────────────────────────────────────────────────────────
+  // ── Load profile + the identity extras, in parallel ───────────────────────
   useEffect(() => {
-    getSessions()
-      .then(res => setSessions(res.data?.sessions || []))
-      .catch(() => {})
-      .finally(() => setSessionsLoading(false));
+    setLastExportAt(getLastExportAt());
 
     getProfile()
       .then(res => {
@@ -672,6 +544,17 @@ export default function ProfilePage() {
       })
       .catch(e => setProfileError(e.message || 'Failed to load profile'))
       .finally(() => setLoadingProfile(false));
+
+    getGamificationSummary()
+      .then(res => {
+        setHealth(res.data?.health || null);
+        setStreak(res.data?.streak || null);
+      })
+      .catch(() => {});
+
+    getNetWorth()
+      .then(res => setNetWorth(res.data || null))
+      .catch(() => {});
   }, []);
 
   // ── Save preferences ──────────────────────────────────────────────────────
@@ -711,6 +594,8 @@ export default function ProfilePage() {
                  : 'transactions-all.csv';
       a.click();
       URL.revokeObjectURL(url);
+      // Only a download that actually fired counts as a backup.
+      setLastExportAt(markExportedNow());
     } catch (e) {
       setExportError(e.message || 'Export failed');
     } finally {
@@ -772,63 +657,7 @@ export default function ProfilePage() {
     }
   };
 
-  // ── Change password ───────────────────────────────────────────────────────
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    if (pwForm.next !== pwForm.confirm) {
-      setPwMsg({ ok: false, text: 'New passwords do not match' }); return;
-    }
-    if (pwForm.next.length < 8) {
-      setPwMsg({ ok: false, text: 'New password must be at least 8 characters' }); return;
-    }
-    setPwSaving(true); setPwMsg(null);
-    try {
-      await changePassword({ currentPassword: pwForm.current, newPassword: pwForm.next });
-      setPwMsg({ ok: true, text: 'Password changed. Please log in again.' });
-      setPwForm({ current: '', next: '', confirm: '' });
-      setTimeout(() => {
-        try { localStorage.removeItem('username'); } catch {}
-        clearCurrency();
-        router.replace('/login');
-      }, 1500);
-    } catch (e) {
-      setPwMsg({ ok: false, text: e.message || 'Failed to change password' });
-    } finally {
-      setPwSaving(false);
-    }
-  };
-
-  // ── Logout all devices ────────────────────────────────────────────────────
-  const handleLogoutAll = async () => {
-    setShowLogoutAllConfirm(false);
-    setLogoutAllLoading(true);
-    setLogoutAllError(null);
-    try {
-      await logoutAllDevices();
-      try { localStorage.removeItem('username'); } catch {}
-      clearCurrency();
-      router.replace('/login');
-    } catch (e) {
-      setLogoutAllError(e.message || 'Failed to sign out all devices');
-      setLogoutAllLoading(false);
-    }
-  };
-
-  // ── Revoke single session ─────────────────────────────────────────────────
-  const handleRevokeSession = async (id) => {
-    setRevokingId(id);
-    setSessionError(null);
-    try {
-      await revokeSession(id);
-      setSessions(prev => prev.filter(s => s.id !== id));
-    } catch (e) {
-      setSessionError(e.message || 'Failed to revoke session');
-    } finally {
-      setRevokingId(null);
-    }
-  };
-
-  // ── Delete account ────────────────────────────────────────────────────────
+  // ── Save name / username ──────────────────────────────────────────────────
   const handleSaveIdentity = async () => {
     setIdentityError('');
     setIdentitySaving(true);
@@ -843,12 +672,6 @@ export default function ProfilePage() {
     }
   };
 
-  const handleDeleteConfirmed = () => {
-    try { localStorage.removeItem('username'); } catch {}
-    clearCurrency();
-    router.replace('/login');
-  };
-
   // ─── Data shortcuts ───────────────────────────────────────────────────────
   const user     = profile?.user     || {};
   const identity = profile?.identity || {};
@@ -858,29 +681,35 @@ export default function ProfilePage() {
     || (exportPeriod === 'yearly'  && !exportYear)
     || (exportPeriod === 'range'   && (!exportRangeStart || !exportRangeEnd));
 
+  // Backup nudge — hold the line back until localStorage has been read so the
+  // "never exported" copy can't flash at a user who exports every week.
+  const backup = lastExportAt === undefined ? null : describeLastBackup(lastExportAt);
+
+  // Net worth is only meaningful once the user has actually saved holdings.
+  // A `seeded` payload is the backend's draft suggestion, not a real figure.
+  const hasNetWorth = !!netWorth && !netWorth.seeded
+    && (netWorth.assets?.length > 0 || netWorth.liabilities?.length > 0);
+
+  // The card has something to say if any one source came back with data.
+  const hasIdentityData = identity.monthsTracked > 0 || health?.score != null || hasNetWorth;
+
+  const identityTiles = [
+    { label: 'Avg Monthly Income',  value: formatAmount(identity.avgMonthlyIncome  || 0), accent: 'emerald', show: identity.monthsTracked > 0 },
+    { label: 'Avg Monthly Expense', value: formatAmount(identity.avgMonthlyExpense || 0), accent: 'rose',    show: identity.monthsTracked > 0 },
+    { label: 'Avg Savings Rate',    value: `${identity.avgSavingsRate ?? 0}%`,            show: identity.monthsTracked > 0,
+      accent: identity.avgSavingsRate > 20 ? 'emerald' : identity.avgSavingsRate > 0 ? 'teal' : 'rose' },
+    { label: 'Net Worth',           value: formatAmount(netWorth?.netWorth || 0),         show: hasNetWorth,
+      accent: (netWorth?.netWorth || 0) >= 0 ? 'teal' : 'rose' },
+    { label: 'Months Tracked',      value: `${identity.monthsTracked || 0} mo`, accent: 'gray',  show: identity.monthsTracked > 0 },
+    { label: 'Logging Streak',      value: `🔥 ${streak?.current ?? 0} day${streak?.current === 1 ? '' : 's'}`, accent: 'amber', show: streak?.current > 0 },
+  ].filter(t => t.show);
+
   return (
     <AuthGuard>
       {importLoading && <UploadProgress filename={importFiles.length === 1 ? importFiles[0].name : `${importFiles.length} files`} />}
       {importResult  && <ImportSuccessModal result={importResult} onClose={() => setImportResult(null)} />}
-      {showDeleteModal && (
-        <DeleteModal
-          username={user.username || ''}
-          onCancel={() => setShowDeleteModal(false)}
-          onConfirmed={handleDeleteConfirmed}
-        />
-      )}
       {showCategoryModal && (
         <ManageCategoriesModal onClose={() => setShowCategoryModal(false)} />
-      )}
-      {showLogoutAllConfirm && (
-        <ConfirmModal
-          title="Sign out all devices?"
-          message="This will end all active sessions including this one. You'll need to sign in again on every device."
-          confirmLabel="Sign out all"
-          loading={logoutAllLoading}
-          onCancel={() => setShowLogoutAllConfirm(false)}
-          onConfirm={handleLogoutAll}
-        />
       )}
 
       <div className="min-h-screen bg-gray-50">
@@ -903,7 +732,7 @@ export default function ProfilePage() {
                       autoFocus
                       value={identityFields.name}
                       onChange={e => setIdentityFields(f => ({ ...f, name: e.target.value }))}
-                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      className="w-full text-base sm:text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
                       placeholder="Your name"
                     />
                   </div>
@@ -912,7 +741,7 @@ export default function ProfilePage() {
                     <input
                       value={identityFields.username}
                       onChange={e => setIdentityFields(f => ({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
-                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                      className="w-full text-base sm:text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
                       placeholder="username (letters, numbers, _)"
                     />
                     <p className="text-xs text-gray-400 mt-0.5">3–30 chars, letters / numbers / underscores</p>
@@ -942,7 +771,25 @@ export default function ProfilePage() {
                     </button>
                   </div>
                   {user.username && <p className="text-xs text-gray-400">@{user.username}</p>}
-                  {user.email && <p className="text-xs text-gray-500 truncate">{user.email}</p>}
+                  {user.email && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                      {/* `verified` is absent on older API responses — no badge
+                          beats a wrong badge, so only an explicit true shows it. */}
+                      {user.verified === true && (
+                        <span
+                          title="Email verified"
+                          className="inline-flex items-center gap-0.5 shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700"
+                        >
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" clipRule="evenodd"
+                              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
+                          </svg>
+                          Verified
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {identity.spendingStyle && (
                     <span className={`inline-block mt-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${styleColor(identity.spendingStyle)}`}>
                       {identity.spendingStyle}
@@ -954,16 +801,30 @@ export default function ProfilePage() {
 
             {/* Account meta row */}
             {!editingIdentity && (
-              <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-gray-100">
-                {profile?.account?.memberSince && (
-                  <span className="text-xs text-gray-400">Member since {memberSince(profile.account.memberSince)}</span>
-                )}
-                {profile?.account?.lastLoginAt && (
-                  <span className="text-xs text-gray-400">· Last login {timeAgo(profile.account.lastLoginAt)}</span>
-                )}
-                {profile?.account?.hasPassword === false && (
-                  <span className="text-xs bg-sky-50 text-sky-600 font-medium px-2 py-0.5 rounded-full border border-sky-200">Google account</span>
-                )}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t border-gray-100">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                  {profile?.account?.memberSince && (
+                    <span className="text-xs text-gray-400">Member since {memberSince(profile.account.memberSince)}</span>
+                  )}
+                  {profile?.account?.lastLoginAt && (
+                    <span className="text-xs text-gray-400">· Last login {timeAgo(profile.account.lastLoginAt)}</span>
+                  )}
+                  {profile?.account?.hasPassword === false && (
+                    <span className="text-xs bg-sky-50 text-sky-600 font-medium px-2 py-0.5 rounded-full border border-sky-200">Google account</span>
+                  )}
+                </div>
+                {/* Only route to password / sessions / delete-account. Mobile has
+                    no Navbar user menu, so this is the sole way in from a phone. */}
+                <Link
+                  href="/settings"
+                  className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:border-teal-300 hover:text-teal-700 hover:bg-teal-50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Security &amp; account →
+                </Link>
               </div>
             )}
           </div>
@@ -979,170 +840,52 @@ export default function ProfilePage() {
             <div className="space-y-4">
 
               {/* Financial Identity */}
-              <Card title="Financial Identity" subtitle="Avg across months with activity">
+              <Card title="Financial Identity" subtitle="Your money at a glance — averages across months with activity">
                 {loadingProfile ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {[1,2,3,4].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
+                  <div className="space-y-3">
+                    <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                      {[1,2,3,4].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
+                    </div>
                   </div>
-                ) : identity.monthsTracked === 0 ? (
+                ) : !hasIdentityData ? (
                   <p className="text-sm text-gray-400 text-center py-4">Add some transactions to see your financial identity.</p>
                 ) : (
                   <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { label: 'Avg Monthly Income',  value: formatAmount(identity.avgMonthlyIncome  || 0), accent: 'emerald' },
-                        { label: 'Avg Monthly Expense',  value: formatAmount(identity.avgMonthlyExpense || 0), accent: 'rose'    },
-                        { label: 'Avg Savings Rate',     value: `${identity.avgSavingsRate ?? 0}%`,         accent: identity.avgSavingsRate > 20 ? 'emerald' : identity.avgSavingsRate > 0 ? 'teal' : 'rose' },
-                        { label: 'Months Tracked',       value: `${identity.monthsTracked || 0} mo`,        accent: 'gray'    },
-                      ].map(({ label, value, accent }) => {
-                        const colors = {
-                          emerald: 'bg-emerald-50 text-emerald-700',
-                          rose:    'bg-rose-50 text-rose-700',
-                          teal:    'bg-teal-50 text-teal-700',
-                          gray:    'bg-gray-50 text-gray-700',
-                        };
-                        return (
-                          <div key={label} className={`rounded-xl p-3 ${colors[accent]}`}>
-                            <p className="text-xs font-medium opacity-70 leading-tight mb-1">{label}</p>
-                            <p className="text-base font-black">{value}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {health?.score != null && <HealthStrip health={health} />}
+
+                    {identityTiles.length > 0 && (
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                        {identityTiles.map(({ label, value, accent }) => {
+                          const colors = {
+                            emerald: 'bg-emerald-50 text-emerald-700',
+                            rose:    'bg-rose-50 text-rose-700',
+                            teal:    'bg-teal-50 text-teal-700',
+                            amber:   'bg-amber-50 text-amber-700',
+                            gray:    'bg-gray-50 text-gray-700',
+                          };
+                          return (
+                            <div key={label} className={`rounded-xl p-3 ${colors[accent]}`}>
+                              <p className="text-xs font-medium opacity-70 leading-tight mb-1">{label}</p>
+                              <p className="text-base font-black tabular-nums break-words">{value}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {identity.topCategory && (
-                      <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
-                        <div>
+                      <div className="flex items-center justify-between gap-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                        <div className="min-w-0">
                           <p className="text-xs text-gray-400">Top category</p>
-                          <p className="text-sm font-bold text-gray-900 capitalize mt-0.5">{toTitleCase(identity.topCategory)}</p>
+                          <p className="text-sm font-bold text-gray-900 capitalize mt-0.5 truncate">{toTitleCase(identity.topCategory)}</p>
                         </div>
-                        <span className="text-xl font-black text-teal-600">{identity.topCategoryPct}%</span>
+                        <span className="text-xl font-black text-teal-600 tabular-nums shrink-0">{identity.topCategoryPct}%</span>
                       </div>
                     )}
                   </div>
                 )}
               </Card>
-
-              {/* Security */}
-              <Card title="Security">
-                <div className="space-y-3">
-                  {profile?.account?.hasPassword !== false && (
-                    <div>
-                      <button
-                        onClick={() => { setShowPwForm(v => !v); setPwMsg(null); }}
-                        className="w-full flex items-center justify-between py-2 text-sm font-medium text-gray-800 hover:text-teal-600 transition-colors"
-                      >
-                        <span>Change password</span>
-                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${showPwForm ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      {showPwForm && (
-                        <form onSubmit={handleChangePassword} className="mt-2 space-y-2">
-                          {[
-                            { key: 'current',  placeholder: 'Current password' },
-                            { key: 'next',     placeholder: 'New password (8+ chars)' },
-                            { key: 'confirm',  placeholder: 'Confirm new password' },
-                          ].map(({ key, placeholder }) => (
-                            <input
-                              key={key}
-                              type="password"
-                              placeholder={placeholder}
-                              value={pwForm[key]}
-                              onChange={e => setPwForm(f => ({ ...f, [key]: e.target.value }))}
-                              required
-                              className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                            />
-                          ))}
-                          {pwMsg && (
-                            <p className={`text-xs ${pwMsg.ok ? 'text-emerald-600' : 'text-red-600'}`}>{pwMsg.text}</p>
-                          )}
-                          <button type="submit" disabled={pwSaving}
-                            className="w-full py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
-                            {pwSaving && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                            Update password
-                          </button>
-                        </form>
-                      )}
-                    </div>
-                  )}
-                  <div className={`${profile?.account?.hasPassword !== false ? 'border-t border-gray-100 pt-3' : ''}`}>
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">Logout all devices</p>
-                        {profile?.account?.lastLoginAt && (
-                          <p className="text-xs text-gray-400 mt-0.5">Last login: {timeAgo(profile.account.lastLoginAt)}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => setShowLogoutAllConfirm(true)}
-                        disabled={logoutAllLoading}
-                        className="shrink-0 px-3 py-1.5 rounded-xl border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                      >
-                        {logoutAllLoading
-                          ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin inline-block" />
-                          : 'Sign out all'
-                        }
-                      </button>
-                    </div>
-                    {logoutAllError && (
-                      <p className="text-xs text-rose-600 mt-2">{logoutAllError}</p>
-                    )}
-                  </div>
-                </div>
-              </Card>
-
-              {/* Active Sessions */}
-              <Card title="Active Sessions" subtitle="Devices currently signed in to your account">
-                {sessionError && (
-                  <p className="text-xs text-rose-600 mb-3">{sessionError}</p>
-                )}
-                {sessionsLoading ? (
-                  <div className="space-y-3">
-                    {[0, 1, 2].map(i => (
-                      <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
-                    ))}
-                  </div>
-                ) : sessions.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">No active sessions found.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {sessions.map(s => (
-                      <div key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border ${s.isCurrent ? 'border-teal-200 bg-teal-50 dark:bg-teal-950/30' : 'border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40'}`}>
-                        {/* Device icon */}
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm ${s.isCurrent ? 'bg-teal-100 dark:bg-teal-900/50' : 'bg-gray-200 dark:bg-slate-700'}`}>
-                          {s.device?.os?.toLowerCase().includes('ios') || s.device?.os?.toLowerCase().includes('iphone') || s.device?.os?.toLowerCase().includes('android') ? '📱' : '🖥️'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-medium text-gray-800 dark:text-slate-200 truncate">{s.device?.name || 'Unknown device'}</p>
-                            {s.isCurrent && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-400 shrink-0">Current</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
-                            Last seen {timeAgo(s.lastSeen)}
-                            {s.device?.ip && s.device.ip !== 'unknown' ? ` · ${s.device.ip}` : ''}
-                          </p>
-                        </div>
-                        {!s.isCurrent && (
-                          <button
-                            onClick={() => handleRevokeSession(s.id)}
-                            disabled={revokingId === s.id}
-                            className="shrink-0 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-xs font-medium text-gray-500 dark:text-slate-400 hover:border-red-300 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40 transition-colors"
-                          >
-                            {revokingId === s.id ? '…' : 'Revoke'}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-
-            </div>
-
-            {/* ── RIGHT COLUMN ── */}
-            <div className="space-y-4">
 
               {/* Preferences */}
               <Card title="Preferences" subtitle="Currency, timezone & formatting">
@@ -1197,7 +940,7 @@ export default function ProfilePage() {
                           setPrefs(p => ({ ...p, monthlyBudget: raw || 0 }));
                         }}
                         placeholder={new Intl.NumberFormat(prefs.numberFormat === 'comma' ? 'en-US' : 'id-ID', { style: 'decimal' }).format(5000000)}
-                        className="w-full pl-12 pr-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                        className="w-full pl-12 pr-3 py-2 rounded-xl border border-gray-300 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                       />
                     </div>
                   </div>
@@ -1209,6 +952,11 @@ export default function ProfilePage() {
                   </button>
                 </div>
               </Card>
+
+            </div>
+
+            {/* ── RIGHT COLUMN ── */}
+            <div className="space-y-4">
 
               {/* Export */}
               <Card title="Export Data">
@@ -1226,7 +974,7 @@ export default function ProfilePage() {
                   {exportPeriod === 'yearly' && (
                     <input type="number" min="2000" max={new Date().getFullYear()} value={exportYear}
                       onChange={e => setExportYear(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                      className="w-full px-3 py-2 rounded-xl border border-gray-300 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                   )}
                   {exportPeriod === 'monthly' && (
                     <MonthCalendarPicker
@@ -1263,6 +1011,18 @@ export default function ProfilePage() {
                       : 'Download CSV'
                     }
                   </button>
+                  {backup && (
+                    <p className={`flex items-start gap-1.5 text-xs ${backup.stale ? 'text-amber-600' : 'text-gray-400'}`}>
+                      <svg className="w-3.5 h-3.5 shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M12 8v4l2.5 2.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>
+                        {backup.text}
+                        {backup.stale && <span className="font-medium"> — a fresh backup takes a second.</span>}
+                      </span>
+                    </p>
+                  )}
                 </div>
               </Card>
 
@@ -1387,36 +1147,7 @@ export default function ProfilePage() {
                 </div>
               </Card>
 
-              {/* Danger Zone */}
-              <Card danger title="Danger Zone">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Delete account</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Permanently wipes all your data.</p>
-                  </div>
-                  <button onClick={() => setShowDeleteModal(true)}
-                    className="shrink-0 px-4 py-1.5 rounded-xl border border-red-300 text-red-600 text-sm font-semibold hover:bg-red-50">
-                    Delete
-                  </button>
-                </div>
-              </Card>
-
-              {/* Log out — visible on mobile only (desktop has it in the top Navbar) */}
-              <button
-                onClick={async () => {
-                  await logout().catch(() => {});
-                  try { localStorage.removeItem('username'); } catch {}
-                  clearCurrency();
-                  router.replace('/login');
-                }}
-                className="md:hidden w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-50 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Log out
-              </button>
+              <MobileLogoutButton />
 
             </div>
           </div>
