@@ -97,7 +97,7 @@ function MonthPicker({ value, options, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-1.5 w-44 bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
+        <div className="absolute left-0 z-50 mt-1.5 w-44 bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
           <div ref={listRef} className="max-h-64 overflow-y-auto py-1">
             {options.map((o) => {
               const isSelected = o.value === value;
@@ -483,7 +483,7 @@ export default function DashboardPage() {
                   value={search}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Search description…"
-                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                  className="w-full pl-8 pr-3 py-1.5 text-base sm:text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                 />
                 {search && (
                   <button
