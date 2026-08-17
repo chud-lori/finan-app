@@ -586,6 +586,7 @@ Collection: goals
 | `achieve` | Number | enum: `0 \| 1` | 0 = not yet, 1 = achieved |
 | `price` | Number | required | target amount |
 | `savedAmount` | Number | default 0, min 0 | amount saved so far; progress = `savedAmount / price * 100` |
+| `kind` | String | enum: `general \| emergency`, default `general` | structured purpose — `emergency` suppresses the emergency-fund nudge (no name matching); set by the Emergency Fund tool's save, backfilled once by `migrateGoalKinds` |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
 
@@ -669,7 +670,7 @@ Current holdings — exactly one document per user. User-declared, not derived f
 | Field | Type | Constraints | Notes |
 |-------|------|-------------|-------|
 | `user` | ObjectId | ref: User, required, unique | one doc per user |
-| `assets` | Array | `[{ label, amount, type }]` | `type` ∈ cash, investment, property, vehicle, receivable, other |
+| `assets` | Array | `[{ label, amount, type }]` | `type` ∈ cash, emergency_fund, investment, property, vehicle, receivable, other |
 | `liabilities` | Array | `[{ label, amount, type }]` | `type` ∈ loan, mortgage, credit_card, bnpl, payable, other |
 | `createdAt` / `updatedAt` | Date | auto | |
 
@@ -1353,10 +1354,13 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 **Every nudge CTA must lead to a persistent action.** A nudge is only suppressed by
 state stored in the database, so its CTA has to be able to create that state — a link
 into a pure calculator is a dead end and the nudge reappears forever. The
-emergency-fund nudge is the reference case: it is suppressed by any `Goal` whose
-description matches `/emergency/i` (achieved or not — hence the goal query is
-unfiltered on `achieve`), and its CTA carries `?tool=emergency&monthly=&saved=` so the
-Emergency Fund tool prefills and offers a one-click "Track this as a goal".
+emergency-fund nudge is the reference case: it is suppressed only by STRUCTURED
+records — a `Goal` with `kind: 'emergency'` (achieved or not — hence the goal query
+is unfiltered on `achieve`) or a net-worth asset row typed `emergency_fund`. No name
+matching at runtime (users name things anything); legacy emergency-named goals were
+flagged once by the `migrateGoalKinds` startup migration. The CTA carries
+`?tool=emergency&monthly=&saved=` so the Emergency Fund tool prefills and offers a
+one-click "Track this as a goal", which saves with `kind: 'emergency'`.
 
 **Surplus-sweep nudge (`surplus_sweep`).** When the last completed month ran a
 surplus (`Snapshot.income − Snapshot.expense > 0`) and the user has an unachieved
@@ -1390,7 +1394,7 @@ model, so a debt-payoff target is a user-created goal.
 
 **Zakat estimator (`GET /api/recommendations/zakat`).** `helpers/zakat.js`
 `estimateZakat()` returns 2.5% of a zakatable base = liquid assets
-(`cash + investment + receivable` holding types) − short-term debts
+(`cash + emergency_fund + investment + receivable` holding types) − short-term debts
 (`credit_card + bnpl + payable + loan`), with illiquid personal-use assets
 (property, vehicle, mortgage) excluded. Giving YTD sums this year's **expense**
 transactions in categories grouped `social` (zakat / donation / sharing). Nisab is

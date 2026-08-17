@@ -1,10 +1,15 @@
 const { BaseRequestDTO, BaseResponseDTO } = require('./base.dto');
 
+const GOAL_KINDS = ['general', 'emergency'];
+
 class AddGoalRequestDTO extends BaseRequestDTO {
     constructor(data) {
         super(data);
         this.description = data.description;
         this.price = data.price;
+        // Optional structured purpose; anything outside the allowlist falls back
+        // to 'general' rather than erroring — the field is a hint, not user text.
+        this.kind = GOAL_KINDS.includes(data.kind) ? data.kind : 'general';
     }
 
     validate() {
@@ -55,6 +60,7 @@ class GoalResponseDTO {
         this.price = goal.price;
         this.savedAmount = goal.savedAmount ?? 0;
         this.achieve = goal.achieve ?? 0;
+        this.kind = goal.kind ?? 'general';
         this.progress = goal.price > 0 ? Math.min(100, Math.round(((goal.savedAmount ?? 0) / goal.price) * 100)) : 0;
         this.createdAt = goal.createdAt;
         this.updatedAt = goal.updatedAt;

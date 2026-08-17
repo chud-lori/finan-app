@@ -22,6 +22,12 @@ const connectDB = async () => {
       } catch (err) {
         console.error(`Index migration error: ${err && err.message}`);
       }
+      try {
+        const { migrateGoalKinds } = require('../helpers/migrateGoalKinds');
+        await migrateGoalKinds();
+      } catch (err) {
+        console.error(`Goal kind migration error: ${err && err.message}`);
+      }
       return response;
     } catch (error) {
       console.error(`Mongo error: ${error}`);

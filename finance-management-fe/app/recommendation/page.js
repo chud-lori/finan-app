@@ -946,7 +946,9 @@ function EmergencyFundTool() {
   const loadGoal = useCallback(() => {
     return getAllGoals()
       .then(res => {
-        const found = (res.data?.goals ?? []).find(g => /emergency/i.test(g.description));
+        // kind is the structured signal (legacy emergency-named goals were
+        // migrated to it server-side) — no name matching.
+        const found = (res.data?.goals ?? []).find(g => g.kind === 'emergency');
         setGoal(found ?? null);
       })
       .catch(() => {})
@@ -966,7 +968,7 @@ function EmergencyFundTool() {
   const handleSaveGoal = async (months, target) => {
     setSavingGoal(months); setGoalError('');
     try {
-      await addGoal(`Emergency fund (${months} months)`, Math.round(target));
+      await addGoal(`Emergency fund (${months} months)`, Math.round(target), 'emergency');
       await loadGoal();
       // The save buttons disappear once a goal exists, so bring the confirmation
       // into view — otherwise the action reads as "nothing happened".
@@ -1534,8 +1536,9 @@ function TaxTool({ identity }) {
 // snapshot for the current month, so the trend line gets a point per month
 // rather than a point per edit.
 const ASSET_TYPES = [
-  { val: 'cash',       label: 'Cash & savings' },
-  { val: 'investment', label: 'Investment' },
+  { val: 'cash',           label: 'Cash & savings' },
+  { val: 'emergency_fund', label: 'Emergency fund' },
+  { val: 'investment',     label: 'Investment' },
   { val: 'property',   label: 'Property' },
   { val: 'vehicle',    label: 'Vehicle' },
   { val: 'receivable', label: 'Owed to me' },
@@ -1565,20 +1568,24 @@ function HoldingRows({ rows, types, accent, namePlaceholder, onEdit, onRemove, o
   return (
     <div className="space-y-2">
       {rows.map((r, i) => (
-        <div key={r.key} className="flex gap-2 items-center">
+        // Mobile: the label takes its own full-width line, type + amount + remove
+        // share the second — three fixed-width controls on one phone row squeezed
+        // the name input down to a few characters. sm+ keeps the single row.
+        <div key={r.key} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
           <input type="text" placeholder={`${namePlaceholder} ${i + 1}`} value={r.label}
             onChange={e => onEdit(r.key, 'label', e.target.value)}
             maxLength={60}
-            className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+            className="w-full sm:w-auto sm:flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-gray-200 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+          {/* pr-7 keeps the option text clear of the native dropdown chevron */}
           <select value={r.type} onChange={e => onEdit(r.key, 'type', e.target.value)}
-            className="w-28 shrink-0 px-2 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+            className="flex-1 sm:flex-none sm:w-32 min-w-0 shrink pl-2 pr-7 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
             {types.map(t => <option key={t.val} value={t.val}>{t.label}</option>)}
           </select>
-          <div className="relative w-36 shrink-0">
+          <div className="relative flex-1 sm:flex-none sm:w-36 min-w-0">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none max-w-[2.5rem] truncate">{currency}</span>
             <input type="text" inputMode="numeric" placeholder="0" value={r.amount}
               onChange={e => onEdit(r.key, 'amount', fmtInput(e.target.value))}
-              className="w-full pl-11 pr-2 py-1.5 rounded-lg border border-gray-200 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+              className="w-full pl-11 pr-2 py-1.5 rounded-lg border border-gray-200 text-base sm:text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           </div>
           <button type="button" onClick={() => onRemove(r.key)} aria-label="Remove row"
             className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none shrink-0">×</button>
@@ -2169,7 +2176,7 @@ const TOOL_INFO = {
     tip:   { title: 'Estimate, then verify', body: 'This is a planning figure, not a ruling. Nisab tracks the gold price and haul depends on when you acquired each asset — confirm with a scholar before you give.' },
     refs:  [
       { label: 'Rate',            value: '2.5% of base' },
-      { label: 'Base',            value: 'Cash + investment + receivable' },
+      { label: 'Base',            value: 'Liquid assets (cash, emergency fund, investments)' },
       { label: 'Less',            value: 'Short-term debts' },
       { label: 'Giving tracked',  value: 'social-group expenses' },
     ],

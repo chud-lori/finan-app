@@ -222,8 +222,8 @@ export const importCsv = (files) => {
 
 // ── Goals ─────────────────────────────────────────────────────────────────────
 
-export const addGoal = (description, price) =>
-  apiFetch('/api/goal/add', { method: 'POST', body: JSON.stringify({ description, price }) });
+export const addGoal = (description, price, kind = 'general') =>
+  apiFetch('/api/goal/add', { method: 'POST', body: JSON.stringify({ description, price, kind }) });
 
 export const getAllGoals = () =>
   apiFetch('/api/goal/goals');
