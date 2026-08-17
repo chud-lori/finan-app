@@ -946,7 +946,9 @@ function EmergencyFundTool() {
   const loadGoal = useCallback(() => {
     return getAllGoals()
       .then(res => {
-        const found = (res.data?.goals ?? []).find(g => /emergency/i.test(g.description));
+        // kind is the structured signal (legacy emergency-named goals were
+        // migrated to it server-side) — no name matching.
+        const found = (res.data?.goals ?? []).find(g => g.kind === 'emergency');
         setGoal(found ?? null);
       })
       .catch(() => {})
@@ -966,7 +968,7 @@ function EmergencyFundTool() {
   const handleSaveGoal = async (months, target) => {
     setSavingGoal(months); setGoalError('');
     try {
-      await addGoal(`Emergency fund (${months} months)`, Math.round(target));
+      await addGoal(`Emergency fund (${months} months)`, Math.round(target), 'emergency');
       await loadGoal();
       // The save buttons disappear once a goal exists, so bring the confirmation
       // into view — otherwise the action reads as "nothing happened".

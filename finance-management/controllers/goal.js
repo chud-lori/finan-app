@@ -20,6 +20,7 @@ const addGoal = async (req, res) => {
             user: req.user.id,
             description: dto.description.trim(),
             price: dto.price,
+            kind: dto.kind,
         });
 
         return res.status(201).json(BaseResponseDTO.success('Goal created successfully', new AddGoalResponseDTO(goal)));

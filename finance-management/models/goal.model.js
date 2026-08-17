@@ -23,8 +23,16 @@ const GoalSchema = new Schema({
         type: Number,
         default: 0,
         min: 0,
+    },
+    // Structured goal purpose — 'emergency' suppresses the emergency-fund nudge
+    // exactly, with no name matching. Set by the Emergency Fund tool's save flow;
+    // legacy emergency-named goals are flagged once by migrateGoalKinds.
+    kind: {
+        type: String,
+        enum: ['general', 'emergency'],
+        default: 'general',
     }
-}, { 
+}, {
     timestamps: { 
         currentTime: () => {
             const now = new Date();

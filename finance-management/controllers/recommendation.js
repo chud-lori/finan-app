@@ -30,7 +30,7 @@ const getSmartRecommendations = async (req, res) => {
             Transaction.findOne({ user: userId }).sort({ time: -1 }).select('time').lean(),
             // All goals — the emergency-fund check must also see achieved ones,
             // otherwise completing the goal makes the nudge reappear.
-            Goal.find({ user: userId }).select('description price savedAmount achieve createdAt').lean(),
+            Goal.find({ user: userId }).select('description price savedAmount achieve createdAt kind').lean(),
             Balance.findOne({ user: userId }).select('amount').lean(),
             MLInsight.findOne({ user: userId }).sort({ createdAt: -1 }).select('anomalyCount').lean(),
             // Monthly history for the Seasonal Radar look-ahead nudge.
@@ -113,18 +113,14 @@ const getSmartRecommendations = async (req, res) => {
         }
 
         // ── 4. Emergency fund nudge ───────────────────────────────────────────
-        // Suppressed by any persistent record of "I have this covered":
-        //   1. a net-worth asset row TYPED emergency_fund — the structured signal,
-        //      exact, no name guessing;
-        //   2. fallback name match (bilingual — "dana darurat" is the standard
-        //      Indonesian term) for goals, which have no type field, and for rows
-        //      labelled before the emergency_fund type existed.
-        // Nagging past either trains users to ignore nudges.
-        const EMERGENCY_RE = /emergency|darurat/i;
-        const nwAssets = netWorthDoc?.assets || [];
-        const hasEmergencyGoal = nwAssets.some(a => a.type === 'emergency_fund')
-            || nwAssets.some(a => EMERGENCY_RE.test(a.label || ''))
-            || goals.some(g => EMERGENCY_RE.test(g.description || ''));
+        // Suppressed by a STRUCTURED record of "I have this covered" only:
+        //   - a net-worth asset row typed emergency_fund, or
+        //   - a goal with kind='emergency' (set by the Emergency Fund tool's save;
+        //     legacy emergency-named goals were flagged once by migrateGoalKinds).
+        // Deliberately no name matching at runtime — users name things anything,
+        // so a label heuristic both misses real funds and can't be reasoned about.
+        const hasEmergencyGoal = (netWorthDoc?.assets || []).some(a => a.type === 'emergency_fund')
+            || goals.some(g => g.kind === 'emergency');
         if (!hasEmergencyGoal) {
             const totalExp3       = last3MonthsTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
             const avgMonthlyExp   = totalExp3 / 3;
