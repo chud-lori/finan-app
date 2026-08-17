@@ -5,6 +5,7 @@ const Balance = require('../models/balance.model');
 const MLInsight = require('../models/mlinsight.model');
 const Snapshot = require('../models/snapshot.model');
 const Allocation = require('../models/allocation.model');
+const NetWorth = require('../models/netWorth.model');
 const { lookAhead } = require('../helpers/seasonalRadar');
 const { detectWindfall } = require('../helpers/windfall');
 
@@ -21,7 +22,7 @@ const getSmartRecommendations = async (req, res) => {
         const threeMonthsAgo = now.clone().subtract(3, 'months').startOf('month').toDate();
         const weekAgo       = now.clone().subtract(7, 'days').toDate();
 
-        const [thisMonthTxns, last3MonthsTxns, recentTxn, goals, balance, mlCache, snapshots] = await Promise.all([
+        const [thisMonthTxns, last3MonthsTxns, recentTxn, goals, balance, mlCache, snapshots, netWorthDoc] = await Promise.all([
             Transaction.find({ user: userId, time: { $gte: monthStart, $lte: monthEnd } })
                 .select('amount type category').lean(),
             Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } })
@@ -34,6 +35,9 @@ const getSmartRecommendations = async (req, res) => {
             MLInsight.findOne({ user: userId }).sort({ createdAt: -1 }).select('anomalyCount').lean(),
             // Monthly history for the Seasonal Radar look-ahead nudge.
             Snapshot.find({ user: userId }).select('yearMonth expense').lean(),
+            // Holdings — an emergency fund declared as a net-worth asset row
+            // suppresses the emergency-fund nudge just like a goal does.
+            NetWorth.findOne({ user: userId }).select('assets').lean(),
         ]);
 
         const recs = [];
@@ -109,11 +113,14 @@ const getSmartRecommendations = async (req, res) => {
         }
 
         // ── 4. Emergency fund nudge ───────────────────────────────────────────
-        // Suppressed once the user has *any* emergency-fund goal (achieved or not) —
-        // the goal is the persistent record, so the nudge must be dismissible by
-        // creating one. The CTA carries the computed monthly figure so the tool can
-        // prefill and offer a one-click "save as goal".
-        const hasEmergencyGoal = goals.some(g => /emergency/i.test(g.description));
+        // Suppressed once the user has *any* emergency-fund goal (achieved or not)
+        // OR a net-worth asset row that reads as an emergency fund — both are
+        // persistent records of "I have this covered", and nagging past either
+        // trains users to ignore nudges. Bilingual match: "dana darurat" is the
+        // standard Indonesian term.
+        const EMERGENCY_RE = /emergency|darurat/i;
+        const hasEmergencyGoal = goals.some(g => EMERGENCY_RE.test(g.description || ''))
+            || (netWorthDoc?.assets || []).some(a => EMERGENCY_RE.test(a.label || ''));
         if (!hasEmergencyGoal) {
             const totalExp3       = last3MonthsTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
             const avgMonthlyExp   = totalExp3 / 3;
