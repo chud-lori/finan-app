@@ -1534,8 +1534,9 @@ function TaxTool({ identity }) {
 // snapshot for the current month, so the trend line gets a point per month
 // rather than a point per edit.
 const ASSET_TYPES = [
-  { val: 'cash',       label: 'Cash & savings' },
-  { val: 'investment', label: 'Investment' },
+  { val: 'cash',           label: 'Cash & savings' },
+  { val: 'emergency_fund', label: 'Emergency fund' },
+  { val: 'investment',     label: 'Investment' },
   { val: 'property',   label: 'Property' },
   { val: 'vehicle',    label: 'Vehicle' },
   { val: 'receivable', label: 'Owed to me' },
@@ -2173,7 +2174,7 @@ const TOOL_INFO = {
     tip:   { title: 'Estimate, then verify', body: 'This is a planning figure, not a ruling. Nisab tracks the gold price and haul depends on when you acquired each asset — confirm with a scholar before you give.' },
     refs:  [
       { label: 'Rate',            value: '2.5% of base' },
-      { label: 'Base',            value: 'Cash + investment + receivable' },
+      { label: 'Base',            value: 'Liquid assets (cash, emergency fund, investments)' },
       { label: 'Less',            value: 'Short-term debts' },
       { label: 'Giving tracked',  value: 'social-group expenses' },
     ],

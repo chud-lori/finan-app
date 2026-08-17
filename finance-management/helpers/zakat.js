@@ -18,7 +18,7 @@
 const ZAKAT_RATE = 0.025;
 
 // NetWorth holding types that count toward the zakatable base.
-const ZAKATABLE_ASSET_TYPES     = ['cash', 'investment', 'receivable'];
+const ZAKATABLE_ASSET_TYPES     = ['cash', 'emergency_fund', 'investment', 'receivable'];
 // Short-term / consumer debts deducted from the base.
 const DEDUCTIBLE_LIABILITY_TYPES = ['credit_card', 'bnpl', 'payable', 'loan'];
 

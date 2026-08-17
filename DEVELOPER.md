@@ -639,7 +639,7 @@ Current holdings — exactly one document per user. User-declared, not derived f
 | Field | Type | Constraints | Notes |
 |-------|------|-------------|-------|
 | `user` | ObjectId | ref: User, required, unique | one doc per user |
-| `assets` | Array | `[{ label, amount, type }]` | `type` ∈ cash, investment, property, vehicle, receivable, other |
+| `assets` | Array | `[{ label, amount, type }]` | `type` ∈ cash, emergency_fund, investment, property, vehicle, receivable, other |
 | `liabilities` | Array | `[{ label, amount, type }]` | `type` ∈ loan, mortgage, credit_card, bnpl, payable, other |
 | `createdAt` / `updatedAt` | Date | auto | |
 
@@ -1360,7 +1360,7 @@ model, so a debt-payoff target is a user-created goal.
 
 **Zakat estimator (`GET /api/recommendations/zakat`).** `helpers/zakat.js`
 `estimateZakat()` returns 2.5% of a zakatable base = liquid assets
-(`cash + investment + receivable` holding types) − short-term debts
+(`cash + emergency_fund + investment + receivable` holding types) − short-term debts
 (`credit_card + bnpl + payable + loan`), with illiquid personal-use assets
 (property, vehicle, mortgage) excluded. Giving YTD sums this year's **expense**
 transactions in categories grouped `social` (zakat / donation / sharing). Nisab is

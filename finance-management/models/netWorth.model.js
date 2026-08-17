@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-const ASSET_TYPES     = ['cash', 'investment', 'property', 'vehicle', 'receivable', 'other'];
+// 'emergency_fund' is a structured signal, not just a label: it suppresses the
+// emergency-fund nudge exactly (no name matching) and counts as liquid for zakat.
+const ASSET_TYPES     = ['cash', 'emergency_fund', 'investment', 'property', 'vehicle', 'receivable', 'other'];
 const LIABILITY_TYPES = ['loan', 'mortgage', 'credit_card', 'bnpl', 'payable', 'other'];
 
 /**

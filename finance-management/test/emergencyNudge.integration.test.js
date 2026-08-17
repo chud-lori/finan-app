@@ -54,6 +54,20 @@ describe('Emergency-fund nudge suppression', () => {
         expect(recs.some(r => r.id === 'emergency_fund')).to.equal(false);
     });
 
+    it('is suppressed by an asset TYPED emergency_fund regardless of its label', async () => {
+        // The structured signal: no name matching involved — a row typed
+        // emergency_fund suppresses even with a label the regex would never hit.
+        const { cookie, userId } = await register('nwtype');
+        await spendLastMonth(cookie);
+        await NetWorth.create({
+            user: userId,
+            assets: [{ label: 'Rainy day pot', amount: 20_000_000, type: 'emergency_fund' }],
+            liabilities: [],
+        });
+        const recs = await getNudges(cookie);
+        expect(recs.some(r => r.id === 'emergency_fund')).to.equal(false);
+    });
+
     it('is suppressed by a net-worth asset row that reads as an emergency fund', async () => {
         const { cookie, userId } = await register('nwrow');
         await spendLastMonth(cookie);

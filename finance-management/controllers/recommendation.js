@@ -113,14 +113,18 @@ const getSmartRecommendations = async (req, res) => {
         }
 
         // ── 4. Emergency fund nudge ───────────────────────────────────────────
-        // Suppressed once the user has *any* emergency-fund goal (achieved or not)
-        // OR a net-worth asset row that reads as an emergency fund — both are
-        // persistent records of "I have this covered", and nagging past either
-        // trains users to ignore nudges. Bilingual match: "dana darurat" is the
-        // standard Indonesian term.
+        // Suppressed by any persistent record of "I have this covered":
+        //   1. a net-worth asset row TYPED emergency_fund — the structured signal,
+        //      exact, no name guessing;
+        //   2. fallback name match (bilingual — "dana darurat" is the standard
+        //      Indonesian term) for goals, which have no type field, and for rows
+        //      labelled before the emergency_fund type existed.
+        // Nagging past either trains users to ignore nudges.
         const EMERGENCY_RE = /emergency|darurat/i;
-        const hasEmergencyGoal = goals.some(g => EMERGENCY_RE.test(g.description || ''))
-            || (netWorthDoc?.assets || []).some(a => EMERGENCY_RE.test(a.label || ''));
+        const nwAssets = netWorthDoc?.assets || [];
+        const hasEmergencyGoal = nwAssets.some(a => a.type === 'emergency_fund')
+            || nwAssets.some(a => EMERGENCY_RE.test(a.label || ''))
+            || goals.some(g => EMERGENCY_RE.test(g.description || ''));
         if (!hasEmergencyGoal) {
             const totalExp3       = last3MonthsTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
             const avgMonthlyExp   = totalExp3 / 3;
