@@ -66,9 +66,11 @@ function AmountInput({ label, value, onChange, placeholder = '0', hint }) {
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium pointer-events-none">{currency}</span>
-        <input type="text" value={value} onChange={(e) => onChange(fmtInput(e.target.value))}
+        {/* text-base on mobile: anything under 16px makes iOS zoom the viewport
+            on focus, and an installed PWA never zooms back out. */}
+        <input type="text" inputMode="numeric" value={value} onChange={(e) => onChange(fmtInput(e.target.value))}
           placeholder={placeholder}
-          className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+          className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-gray-300 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
       </div>
       {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
     </div>
@@ -943,6 +945,10 @@ function EmergencyFundTool() {
   const [savingGoal, setSavingGoal]   = useState(null); // 3 | 6 | null
   const [goalError, setGoalError] = useState('');
 
+  // Where the prefilled figures came from, so the form can say so rather than
+  // silently asserting numbers the user didn't type.
+  const [sources, setSources] = useState(null);
+
   const loadGoal = useCallback(() => {
     return getAllGoals()
       .then(res => {
@@ -963,6 +969,34 @@ function EmergencyFundTool() {
     const saved   = parseNum(searchParams.get('saved') || '');
     if (monthly) setExpenses(fmtInput(String(monthly)));
     if (saved)   setCurrent(fmtInput(String(saved)));
+  }, [searchParams]);
+
+  // Data-connected prefill. The app already knows both figures — emergency-fund
+  // holdings declared in Net Worth, and tracked average monthly spend — so
+  // asking the user to retype them is a dead end. This matters most for people
+  // who HAVE an emergency fund: declaring it suppresses the dashboard nudge,
+  // which was previously the only thing carrying these numbers in via the URL.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getNetWorth().catch(() => null), getProfile().catch(() => null)])
+      .then(([nw, prof]) => {
+        if (cancelled) return;
+        const emergencyHoldings = (nw?.data?.assets ?? [])
+          .filter(a => a.type === 'emergency_fund')
+          .reduce((s, a) => s + (Number(a.amount) || 0), 0);
+        const avgExpense = Math.round(prof?.data?.identity?.avgMonthlyExpense ?? 0);
+        setSources({ emergencyHoldings, avgExpense });
+
+        // Never overwrite what the user typed, and never override the nudge CTA
+        // params — those are a more specific intent than a generic prefill.
+        if (emergencyHoldings > 0 && !parseNum(searchParams.get('saved') || '')) {
+          setCurrent(c => c || fmtInput(String(emergencyHoldings)));
+        }
+        if (avgExpense > 0 && !parseNum(searchParams.get('monthly') || '')) {
+          setExpenses(e => e || fmtInput(String(avgExpense)));
+        }
+      });
+    return () => { cancelled = true; };
   }, [searchParams]);
 
   const handleSaveGoal = async (months, target) => {
@@ -1024,8 +1058,10 @@ function EmergencyFundTool() {
           A 3–6 month emergency fund protects you against job loss, medical bills, or unexpected costs. See where you stand.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <AmountInput label={`Monthly essential expenses (${currency})`} value={expenses} onChange={setExpenses} placeholder="4,000,000" />
-          <AmountInput label={`Current emergency savings (${currency})`} value={current} onChange={setCurrent} placeholder="0" />
+          <AmountInput label={`Monthly essential expenses (${currency})`} value={expenses} onChange={setExpenses} placeholder="4,000,000"
+            hint={sources?.avgExpense > 0 ? 'Filled from your tracked average monthly spending — edit if your essentials are lower.' : undefined} />
+          <AmountInput label={`Current emergency savings (${currency})`} value={current} onChange={setCurrent} placeholder="0"
+            hint={sources?.emergencyHoldings > 0 ? 'Filled from the emergency-fund rows in your Net Worth.' : undefined} />
           <AmountInput label={`Monthly amount you can save (${currency})`} value={saving} onChange={setSaving} placeholder="500,000" />
           <SubmitBtn label="Check My Fund" />
         </form>
