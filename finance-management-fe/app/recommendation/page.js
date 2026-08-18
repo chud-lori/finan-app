@@ -1108,8 +1108,12 @@ function EmergencyFundTool() {
                   </div>
                 )}
 
-                {/* Persist as a real goal so the dashboard nudge clears */}
-                {!goal && (
+                {/* Persist as a real goal so the dashboard nudge clears. Only for a
+                    tier still short of its target — offering to start tracking a
+                    fund that is already fully funded contradicts the "Goal reached"
+                    line right above it, and would file a goal that is complete on
+                    the day it is created. */}
+                {!goal && !reached && (
                   <button
                     type="button"
                     onClick={() => handleSaveGoal(months_n, target)}
