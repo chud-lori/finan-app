@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
+import { invalidateSavingsCategories } from '@/lib/savingsCategories';
 import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup, getGroupBudgets, setGroupBudget, getRangeTransactions } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
@@ -1149,6 +1150,7 @@ export default function InsightsPage() {
     setReclassifying(true);
     try {
       await classifyAllCategories();
+      invalidateSavingsCategories();
       const res = await getGroupSummary();
       setGroups(res.data);
     } catch {
@@ -1162,6 +1164,7 @@ export default function InsightsPage() {
     setMovingCategory(categoryId);
     try {
       await setCategoryGroup(categoryId, newGroup);
+      invalidateSavingsCategories();
       const res = await getGroupSummary();
       setGroups(res.data);
     } catch {
