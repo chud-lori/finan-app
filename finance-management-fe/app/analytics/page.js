@@ -13,6 +13,7 @@ import AnalyticsFilterBar from '@/components/AnalyticsFilterBar';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 import SpendingCalendar from '@/components/SpendingCalendar';
 import MoneyFlow from '@/components/MoneyFlow';
+import TopMerchants from '@/components/TopMerchants';
 import { buildPieData } from '@/lib/pieData';
 import {
   parseView, viewToSearch, hasActiveFilters, applyFilters, buildCategoryRows,
@@ -575,6 +576,24 @@ function AnalyticsPageInner() {
     setLoadingDrilldown(false);
   }, [periodTxns, loadPeriodTxns, filters, groupOf, periodLabel, kind]);
 
+  // Merchant row → that merchant's own transactions. The card hands back the
+  // ids the server grouped, so the drill-down never re-derives a merchant key
+  // the backend owns.
+  const handleMerchantClick = useCallback(async ({ label, txIds }) => {
+    const wanted = new Set(txIds);
+    setDrilldown({ title: `Transactions — ${label}`, subtitle: periodLabel });
+    setDrilldownTxns([]);
+    setLoadingDrilldown(true);
+    const txns = periodTxns ?? await loadPeriodTxns();
+    if (!periodTxns) setPeriodTxns(txns);
+    setDrilldownTxns(
+      txns
+        .filter(t => wanted.has(String(t.id ?? t._id)))
+        .sort((a, b) => new Date(b.time) - new Date(a.time)),
+    );
+    setLoadingDrilldown(false);
+  }, [periodTxns, loadPeriodTxns, periodLabel]);
+
   // Yearly bar click → that month's transactions
   const handleBarClick = async (label) => {
     const mIdx = MONTH_LABELS.indexOf(label);
@@ -828,6 +847,18 @@ function AnalyticsPageInner() {
                     filtersActive={filtersActive}
                     onClearFilters={clearFilters}
                   />
+
+                  {/* Merchants come from the server's own grouping of the whole
+                       period, so the card is hidden while filters are on rather
+                       than shown against numbers it does not match. */}
+                  {!filtersActive && (
+                    <>
+                      <SectionHeading>Merchants — {MONTH_LABELS[month - 1]} {year}</SectionHeading>
+                      <ChartCard title="Top merchants" hint="Tap a merchant to see its transactions">
+                        <TopMerchants year={year} month={month} onMerchantClick={handleMerchantClick} />
+                      </ChartCard>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -937,6 +968,15 @@ function AnalyticsPageInner() {
                     filtersActive={filtersActive}
                     onClearFilters={clearFilters}
                   />
+
+                  {!filtersActive && (
+                    <>
+                      <SectionHeading>Merchants — {year}</SectionHeading>
+                      <ChartCard title="Top merchants" hint="Tap a merchant to see its transactions">
+                        <TopMerchants year={year} month={null} onMerchantClick={handleMerchantClick} />
+                      </ChartCard>
+                    </>
+                  )}
                   </>)}
                 </div>
               )}

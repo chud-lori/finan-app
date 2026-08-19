@@ -23,6 +23,8 @@
 // useful, so they are surfaced separately as `frequent` — never as a
 // subscription, and never with bill alerts attached.
 
+const { merchantKey } = require('../../helpers/merchantKey');
+
 const MIN_OCCURRENCES = 3;      // fewer than 3 dated charges can't establish a rhythm
 const MIN_SUB_WEEKLY_OCCURRENCES = 5; // a few charges in one week isn't a habit yet
 const INTERVAL_REGULARITY = 0.25; // MAD(gaps)/median(gaps) must be under this to count as scheduled
@@ -99,19 +101,6 @@ const cv = (xs) => {
   if (!(mu > 0)) return 1;
   const variance = mean(xs.map((x) => (x - mu) ** 2));
   return Math.sqrt(variance) / mu;
-};
-
-// Collapse a free-text description to a merchant key: lowercase, drop digits and
-// punctuation, keep the first few meaningful tokens. Heuristic by design — good
-// enough to group "Spotify", "SPOTIFY ID", "spotify premium" together.
-const merchantKey = (desc) => {
-  const cleaned = String(desc || '')
-    .toLowerCase()
-    .replace(/[0-9]+/g, ' ')
-    .replace(/[^a-z\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned.split(' ').filter(Boolean).slice(0, 3).join(' ');
 };
 
 const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
