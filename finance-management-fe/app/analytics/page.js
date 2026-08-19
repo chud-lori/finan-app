@@ -11,6 +11,8 @@ import Tooltip from '@/components/Tooltip';
 import RangeReport from '@/components/RangeReport';
 import AnalyticsFilterBar from '@/components/AnalyticsFilterBar';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
+import SpendingCalendar from '@/components/SpendingCalendar';
+import { buildPieData } from '@/lib/pieData';
 import {
   parseView, viewToSearch, hasActiveFilters, applyFilters, buildCategoryRows,
   buildMonthlyTotals, buildPeriodStats, periodBounds, isFilteredEmpty, monthIndex,
@@ -140,7 +142,15 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
   }
 
   const grandTotal  = categories.reduce((s, c) => s + c.total, 0);
-  const pieData     = categories.slice(0, 12).map(c => ({ name: c.category, value: c.total }));
+  const pieData     = buildPieData(categories);
+  const pieColors   = pieData.map((d, i) => (d.other ? '#9ca3af' : PIE_COLORS[i % PIE_COLORS.length]));
+
+  // buildPieData folds the tail into a synthetic "Other (n)" slice whose name is
+  // no category, so it stays inert — clicking it would open an empty drill-down.
+  const onSliceClick = onCategoryClick
+    ? (name) => { if (!pieData.find(d => d.name === name)?.other) onCategoryClick(name); }
+    : undefined;
+
   // Full name only — the chart elides the axis tick. Truncating here too would
   // hand a clipped string to the drill-down, which then matches nothing.
   const barData     = categories.slice(0, 10).map(c => ({
@@ -175,20 +185,39 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title={kind === 'income' ? 'Income breakdown' : 'Spending breakdown'} hint="Click a slice to see transactions">
-          <DonutChart data={pieData} colors={PIE_COLORS} onSliceClick={onCategoryClick} />
-          {/* Legend doubles as the tap target for slices too thin to hit on a phone. */}
+          <DonutChart data={pieData} colors={pieColors} onSliceClick={onSliceClick} />
+          {/* Legend doubles as the tap target for slices too thin to hit on a phone,
+              and carries the share — a 1% slice is unreadable in the donut but
+              still legible here. */}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-            {pieData.map((d, i) => (
-              <button
-                key={d.name}
-                onClick={() => onCategoryClick?.(d.name)}
-                className="flex items-center gap-1.5 text-xs text-gray-600 min-h-[24px] hover:text-teal-700 transition-colors"
-                title="View transactions in this category"
-              >
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                {d.name}
-              </button>
-            ))}
+            {pieData.map((d, i) => {
+              const dot   = <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: pieColors[i] }} />;
+              const share = grandTotal > 0 && (
+                <span className="text-gray-400 tabular-nums flex-shrink-0">{d.pct}%</span>
+              );
+              // The "Other (n)" roll-up is not a category — same row, no dead click.
+              if (d.other) {
+                return (
+                  <div key={d.name} title={d.name} className="flex items-center gap-1.5 text-xs text-gray-600 max-w-full">
+                    {dot}
+                    <span className="truncate min-w-0">{d.name}</span>
+                    {share}
+                  </div>
+                );
+              }
+              return (
+                <button
+                  key={d.name}
+                  onClick={() => onSliceClick?.(d.name)}
+                  title={d.name}
+                  className="flex items-center gap-1.5 text-xs text-gray-600 max-w-full min-h-[24px] hover:text-teal-700 transition-colors"
+                >
+                  {dot}
+                  <span className="truncate min-w-0">{d.name}</span>
+                  {share}
+                </button>
+              );
+            })}
           </div>
         </ChartCard>
 
@@ -358,7 +387,8 @@ function AnalyticsPageInner() {
   const [compData,    setCompData]      = useState(null);
   const [loadingComp, setLoadingComp]   = useState(false);
 
-  // Drill-down modal — one surface for month bars, donut slices and category bars.
+  // Drill-down modal — one surface for month bars, donut slices, category bars
+  // and calendar days.
   const [drilldown,        setDrilldown]        = useState(null); // { title, subtitle, category? }
   const [drilldownTxns,    setDrilldownTxns]    = useState([]);
   const [loadingDrilldown, setLoadingDrilldown] = useState(false);
@@ -566,6 +596,14 @@ function AnalyticsPageInner() {
     }
   };
 
+  // Calendar day tap → the calendar already carries the day's rows, so this
+  // opens the same modal without a fetch.
+  const handleDayClick = ({ label, txns }) => {
+    setDrilldown({ title: `Transactions — ${label}` });
+    setDrilldownTxns(txns ?? []);
+    setLoadingDrilldown(false);
+  };
+
   const clearFilters = useCallback(() => setFilters({ ...EMPTY_FILTERS }), []);
   const noResults    = !!filteredTxns && isFilteredEmpty(filters, filteredTxns);
 
@@ -712,12 +750,19 @@ function AnalyticsPageInner() {
                     <SoWhatInsight categories={viewCategories} onCategoryClick={handleCategoryClick} />
                   )}
 
+                  <ChartCard
+                    title={`Spending calendar — ${MONTH_LABELS[month - 1]} ${year}`}
+                    hint="Tap a day to see its transactions"
+                  >
+                    <SpendingCalendar year={year} month={month} onDayClick={handleDayClick} />
+                  </ChartCard>
+
                   {/* Comparison toolbar — hidden while filtered: the reference
                        payload is unfiltered, so the deltas would not match. */}
                   {viewCategories?.length > 0 && !filtersActive && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-gray-500 mr-1">Compare:</span>
-                      <Tooltip text="Show how each category changed vs a reference period. Positive % = spending more, negative % = spending less." align="left" />
+                      <Tooltip text="Show how each category changed vs a reference period. Positive % = spending more, negative % = spending less." align="left" fixed />
                       {[
                         { value: 'none',       label: 'None',          tip: null },
                         { value: 'last_month', label: 'vs Last Month', tip: 'Show how much each category changed compared to the previous month.' },
@@ -785,15 +830,21 @@ function AnalyticsPageInner() {
 
                   {noResults ? <FilteredEmptyState onClear={clearFilters} /> : (<>
                   <ChartCard title={`Monthly income vs expense — ${year}`} hint="Click a bar to see transactions">
-                    <VBarChart
-                      data={monthlyBars}
-                      bars={[
-                        { key: 'Income',  color: '#10b981' },
-                        { key: 'Expense', color: '#f43f5e' },
-                      ]}
-                      height={300}
-                      onBarClick={handleBarClick}
-                    />
+                    {/* Twelve months in 320px leaves ~20px per month — labels drop out
+                        and the bars are too narrow to tap. Scroll instead. */}
+                    <div className="overflow-x-auto scroll-x-hint -mx-5 px-5 sm:mx-0 sm:px-0">
+                      <div className="min-w-[560px] sm:min-w-0">
+                        <VBarChart
+                          data={monthlyBars}
+                          bars={[
+                            { key: 'Income',  color: '#10b981' },
+                            { key: 'Expense', color: '#f43f5e' },
+                          ]}
+                          height={300}
+                          onBarClick={handleBarClick}
+                        />
+                      </div>
+                    </div>
                   </ChartCard>
 
                   <ChartCard title="Month-by-month breakdown">
@@ -938,7 +989,7 @@ function SummaryCard({ label, value, color, tip }) {
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
       <div className="flex items-center gap-1.5 mb-1">
         <p className="text-xs text-gray-500">{label}</p>
-        {text && <Tooltip text={text} />}
+        {text && <Tooltip text={text} fixed />}
       </div>
       <p className={`text-lg font-bold ${cls}`}>{value}</p>
     </div>

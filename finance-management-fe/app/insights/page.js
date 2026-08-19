@@ -195,7 +195,7 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
       <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-800 flex items-center gap-2">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">What your data is saying</p>
-        <Tooltip text="Auto-generated highlights ranked by urgency. Alert = action needed, Watch = keep an eye on it, Good = positive progress." position="bottom" align="left" />
+        <Tooltip text="Auto-generated highlights ranked by urgency. Alert = action needed, Watch = keep an eye on it, Good = positive progress." position="bottom" align="left" fixed />
       </div>
       <div className="divide-y divide-gray-50 dark:divide-slate-800">
         {top.map((ins, i) => {
@@ -379,14 +379,14 @@ function TimeToZeroCard({ data }) {
           <div>
             <div className="flex items-center gap-1 mb-0.5">
               <p className="text-xs text-gray-400">Current balance</p>
-              <Tooltip text="Net balance: total income minus total expenses across all time." align="left" />
+              <Tooltip text="Net balance: total income minus total expenses across all time." align="left" fixed />
             </div>
             <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.balance)}</p>
           </div>
           <div>
             <div className="flex items-center gap-1 mb-0.5">
               <p className="text-xs text-gray-400">Daily burn</p>
-              <Tooltip text="Average daily spending over the last 30 days." align="right" />
+              <Tooltip text="Average daily spending over the last 30 days." align="right" fixed />
             </div>
             <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.dailyBurnRate)}/day</p>
           </div>
@@ -578,7 +578,7 @@ function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, mov
             <div
               key={g.group}
               className={`${meta.bar} transition-all duration-700 cursor-pointer hover:opacity-80`}
-              style={{ width: `${g.pct}%` }}
+              style={{ width: `${g.pct}%`, minWidth: 3 }}
               title={`${meta.label}: ${g.pct}%`}
               onClick={() => setExpanded(expanded === g.group ? null : g.group)}
             />
@@ -635,7 +635,7 @@ function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, mov
                             disabled={!!movingCategory}
                             onClick={(e) => e.stopPropagation()}
                             title="Move to group"
-                            className="text-[10px] border border-gray-200 dark:border-slate-700 rounded-md px-1 py-0.5 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 cursor-pointer hover:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-40 shrink-0"
+                            className="text-base sm:text-[10px] sm:leading-none max-w-[6.5rem] sm:max-w-none border border-gray-200 dark:border-slate-700 rounded-md px-1 py-0.5 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 cursor-pointer hover:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-40 shrink-0"
                           >
                             {GROUP_OPTIONS.map(opt => (
                               <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
@@ -704,7 +704,7 @@ function SpendingMixBar({ data, onSegmentClick }) {
               disabled={!clickable}
               onClick={() => clickable && onSegmentClick(s)}
               className={`${s.bar} transition-all duration-700 ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
-              style={{ width: `${(s.amount / total) * 100}%` }}
+              style={{ width: `${(s.amount / total) * 100}%`, minWidth: 3 }}
               title={`${s.label}: ${pct(s.amount)}%`}
               aria-label={`${s.label} ${pct(s.amount)} percent`}
             />
@@ -836,7 +836,7 @@ function GroupBudgetCaps({ data, onSave, savingGroup }) {
                       onBlur={() => commit(group)}
                       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                       disabled={busy}
-                      className="w-32 text-xs text-right tabular-nums border border-gray-200 dark:border-slate-700 rounded-lg px-2 py-1 bg-white dark:bg-slate-900 text-gray-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-40"
+                      className="w-32 text-base sm:text-xs text-right tabular-nums border border-gray-200 dark:border-slate-700 rounded-lg px-2 py-1 bg-white dark:bg-slate-900 text-gray-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-40"
                     />
                     {busy && <span className="w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />}
                   </div>

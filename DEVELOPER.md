@@ -149,7 +149,7 @@ finan-app/                          ← monorepo root
     │   ├── layout.js               ← root layout, ErrorBoundary, theme script
     │   ├── page.js                 ← Landing page (always light mode)
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
-    │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown; year nav bounded by availableYears; filter bar + chart drill-down (period and filters live in the URL)
+    │   ├── analytics/page.js       ← Monthly/yearly charts, spending calendar, category breakdown; year nav bounded by availableYears; filter bar + chart drill-down (period and filters live in the URL); every chart click and calendar day opens the shared drill-down modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
     │   ├── recommendation/page.js  ← 11 financial planning tools (incl. Windfall Planner, Zakat Estimator)
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
@@ -158,11 +158,13 @@ finan-app/                          ← monorepo root
     │   ├── GamificationBanner.js   ← streaks, budget wins, goal rings
     │   ├── AnalyticsFilterBar.js   ← category/group/type/amount filters + removable chips
     │   ├── TransactionDrilldownModal.js ← the single drill-down surface for every chart click
+    │   ├── SpendingCalendar.js     ← day-level spend heatmap for the selected month
     │   ├── Tooltip.js              ← fixed prop for portal rendering on mobile
     │   └── ...
     ├── lib/
     │   ├── api.js                  ← typed fetch wrappers for all backend endpoints
     │   ├── analyticsFilters.js     ← pure filter predicate, URL encode/decode, client-side chart re-aggregation
+    │   ├── spendingCalendar.js     ← pure day bucketing / grid / intensity math for SpendingCalendar
     │   └── format.js               ← formatCurrency(), date helpers
     └── e2e/
         ├── public-pages.spec.js
@@ -361,6 +363,7 @@ Transaction `type` is only `income | expense` — there is no `transfer`. Invest
 | Explainability spend | `controllers/transaction.js#getExplainability` | savings-group txns dropped from `totalOutcome`, top categories and the MoM baseline. |
 | Anomaly baseline (rule) | `controllers/transaction.js#getAnomalies` | savings-group txns removed from the current set, historical baseline and the "first-time category" signal. |
 | Anomaly baseline (ML) | `services/ml/anomaly.js#detectAnomalies` | skips any tx flagged `is_savings`; the flag is set in `_runMLPipeline` and savings-group outflow is also excluded from the forecast's `daily_totals`. |
+| Spending calendar | `finance-management-fe/lib/spendingCalendar.js#buildDailySpend` | savings-group categories (from `GET /api/category/group-summary`) are dropped before the per-day totals, so a payday investment transfer never colours the day as heavy spending. |
 | 50/30/20 | `finance-management-fe/lib/ruleSplit.js#buildRuleSplit` | savings bucket = `savingsGroup + max(income − nonSavingsExpense − savingsGroup, 0)`. |
 | Profile financial identity | `controllers/profile.js#getProfile` | `avgMonthlyExpense`, `avgSavingsRate`, `topCategory` and `spendingStyle` all computed on non-savings expense — see below. |
 
@@ -1240,6 +1243,7 @@ PLAYWRIGHT_BASE_URL=https://your-domain.com npm run test:e2e
 
 | File | What it covers |
 |------|---------------|
+| `lib/spendingCalendar.test.js` | Spending-calendar day bucketing (per-transaction timezone), month-boundary fetch window across east/west zones, weekday alignment for both `weekStartsOn` values, savings-group exclusion and its failure path, intensity scaling |
 | `public-pages.spec.js` | Landing, auth pages, legal pages, auth guard redirects — 30 tests desktop + mobile |
 | `auth-flow.spec.js` | Login, dashboard, add transaction, analytics, logout-all (skipped without credentials) |
 
@@ -1291,7 +1295,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/category/suggestions` | — | ✓ | Smart category suggestions based on time of day and past habits |
 | POST | `/api/transaction/category` | — | ✓ | Seed default categories (idempotent) |
 | GET | `/api/transaction/date/:date` | — | ✓ | Transactions on a specific date; `YYYY-MM-DD` |
-| GET | `/api/transaction/range/:start/:end` | — | ✓ | Transactions in date range with income/expense summary |
+| GET | `/api/transaction/range/:start/:end` | 60/min | ✓ | Transactions in date range (`YYYY-MM-DD`) with income/expense summary. Unpaginated — the whole range comes back, which is what the spending calendar needs. Query: `?tz=IANA` bounds the range in the user's zone (defaults to UTC) |
 | GET | `/api/transaction/recommendation/:monthly/:spend` | — | ✓ | Budget affordability check (legacy calculator) |
 
 **CSV import column mapping (case-insensitive):**
@@ -1455,9 +1459,36 @@ Theme preference is stored in `localStorage`. The root layout injects a blocking
 
 `Tooltip.js` supports a `fixed` prop that renders the bubble via `createPortal` at `position: fixed`, escaping any `overflow: hidden` / `overflow: auto` container. Always use `<Tooltip text="..." fixed />` in dashboards and tight layouts to prevent viewport clipping on mobile.
 
+### Charts on mobile
+
+The app is used mostly on a phone, installed as a PWA. Every chart is designed at **390px first**. Checklist for a new chart or any chart-adjacent control:
+
+- **No fixed pixel width.** Wrap the chart in `ResponsiveContainer` (or `max-w-[Npx] mx-auto` around one) — a hardcoded `<PieChart width={260}>` overflows its card on a 320-360px phone and gives the whole page a horizontal scrollbar.
+- **~40px per category, or scroll.** A 12-category axis in 320px is unreadable and untappable. Put the chart in `overflow-x-auto scroll-x-hint -mx-5 px-5 sm:mx-0 sm:px-0` with an inner `min-w-[Npx] sm:min-w-0`. Contained scroll is fine; page-level horizontal scroll is not.
+- **Axis labels ellipsis, never overlap.** Truncate long category ticks with a `tickFormatter` and keep the *full* name in the chart tooltip (pass the untruncated value in the data). Use `minTickGap` on a dense time axis.
+- **Legends wrap, entries truncate.** `flex flex-wrap` on the legend, `truncate` + `title` on each label. Carry the share (%) in the legend so a 1% slice stays readable when the slice itself is a hairline.
+- **Segments are not the only affordance.** A thin slice/segment is not a tap target, and `title=` does nothing on touch. Every segmented chart needs the same data as a list below it (that list is the fallback), and segments get `minWidth: 3` so they stay visible.
+- **Tooltips inside cards and scroll containers pass `fixed`.** Cards use `overflow-hidden` and mobile grids are 2 columns wide — an absolutely positioned `w-56` bubble gets clipped or pushes the page sideways.
+- **Chart-adjacent inputs are `text-base sm:text-*`.** Anything under 16px (`text-sm` = 14px) makes iOS Safari zoom the viewport on focus, and an installed PWA never zooms back out. Applies to `<select>` too.
+- Money in and around charts: `tabular-nums`, `whitespace-nowrap`, and the existing money-table rules (`min-w-[…]` inside `overflow-x-auto`, `sticky left-0` first column). Under `sm`, a table with 3+ money columns renders as a stacked list instead.
+
 ### Currency
 
 The app is multi-currency. Never hardcode `Rp`, `IDR`, or `jt` in UI text. Use `formatAmount()` / `useCurrency()` from `CurrencyContext` for all amounts.
+
+### Spending calendar is derived client-side
+
+The Analytics spending heatmap adds **no backend endpoint**. `SpendingCalendar` fetches the selected month once through the existing `GET /api/transaction/range/:start/:end` (unpaginated — the paginated list endpoint caps at 100 rows and would silently truncate a busy month's day totals) plus `GET /api/category/group-summary` for the savings-group names, then derives everything locally in `lib/spendingCalendar.js`:
+
+- **Day bucketing** uses each transaction's own `transaction_timezone` via a cached `Intl.DateTimeFormat` — a 23:40 charge must not slide into the next day. Same rule the backend analytics aggregation follows; zero new dependencies.
+- **The fetch window is padded two days on each side** (`monthFetchRange`). The server bounds `/range` in the *browser's* zone while rows bucket in their own zone, so an unpadded window can miss a boundary row and it disappears from both months. Two days covers the full 26h zone spread; `buildDailySpend` still drops any key outside `yearMonth`, so the padding never leaks into the grid or the busiest-day figure.
+- **Both requests must succeed** (`resolveCalendarState` over `Promise.allSettled`). If `group-summary` fails — a 500, a blip, or a 429 from its 30/min limiter — the calendar shows an error with Retry instead of silently treating savings transfers as spend. A confidently wrong number is worse than an error.
+- **Intensity** is relative to the month's own maximum (4 quartile levels), never an absolute currency band — the scale has to work for any currency and any income level. A zero-spend day is level 0 and renders empty, not pale-but-coloured.
+- **Savings-group outflow is excluded** from the day totals (see *Savings & investment visibility*) but the drill-down still lists every transaction of the day, income included.
+- **Week alignment** honours `Preference.weekStartsOn`. That preference reaches the component through `CurrencyContext`, which already loads `GET /api/profile` once per session — no extra request and no new settings surface.
+- The day drill-down reuses the same modal component as the yearly-bar → month drill-down (`TxnListModal` in `app/analytics/page.js`); the calendar already holds the day's rows so it opens without a fetch.
+
+Covered by `lib/spendingCalendar.test.js`.
 
 ### Per-month budget resolution
 

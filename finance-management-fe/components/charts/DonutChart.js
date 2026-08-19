@@ -7,33 +7,37 @@ const PieTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const d = payload[0];
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-sm">
-      <p className="font-semibold text-gray-700">{d.name}</p>
+    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-sm max-w-[180px]">
+      <p className="font-semibold text-gray-700 break-words">{d.name}</p>
       <p style={{ color: d.payload.fill }}>{formatAmount(d.value)}</p>
     </div>
   );
 };
 
+// Radii are percentages, not pixels — a fixed 260px chart overflows its card on a
+// 320-360px phone and gives the whole page a horizontal scrollbar.
 export default function DonutChart({ data, colors, onSliceClick }) {
   const handleClick = onSliceClick
     ? (d) => { const name = d?.name ?? d?.payload?.name; if (name) onSliceClick(name); }
     : undefined;
 
   return (
-    <div className="flex justify-center">
-      <PieChart width={260} height={260}>
-        <Pie
-          data={data} cx={130} cy={120} innerRadius={68} outerRadius={116} paddingAngle={2}
-          dataKey="value" stroke="none"
-          onClick={handleClick}
-          style={onSliceClick ? { cursor: 'pointer' } : undefined}
-        >
-          {data.map((_, i) => (
-            <Cell key={i} fill={colors[i % colors.length]} />
-          ))}
-        </Pie>
-        <Tooltip content={<PieTooltip />} />
-      </PieChart>
+    <div className="w-full max-w-[260px] mx-auto">
+      <ResponsiveContainer width="100%" height={260}>
+        <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          <Pie
+            data={data} cx="50%" cy="50%" innerRadius="52%" outerRadius="89%" paddingAngle={2}
+            dataKey="value" stroke="none"
+            onClick={handleClick}
+            style={onSliceClick ? { cursor: 'pointer' } : undefined}
+          >
+            {data.map((_, i) => (
+              <Cell key={i} fill={colors[i % colors.length]} />
+            ))}
+          </Pie>
+          <Tooltip content={<PieTooltip />} />
+        </PieChart>
+      </ResponsiveContainer>
     </div>
   );
 }
