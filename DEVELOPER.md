@@ -153,7 +153,7 @@ finan-app/                          ← monorepo root
     │   ├── layout.js               ← root layout, ErrorBoundary, theme script
     │   ├── page.js                 ← Landing page (always light mode)
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
-    │   ├── analytics/page.js       ← Monthly/yearly charts, spending calendar, category breakdown; year nav bounded by availableYears; filter bar + chart drill-down (period and filters live in the URL); every chart click and calendar day opens the shared drill-down modal
+    │   ├── analytics/page.js       ← Monthly/yearly charts, money flow, spending calendar, category breakdown; year nav bounded by availableYears; filter bar + chart drill-down (period and filters live in the URL); every chart click and calendar day opens the shared drill-down modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
     │   ├── recommendation/page.js  ← 11 financial planning tools (incl. Windfall Planner, Zakat Estimator)
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
@@ -163,12 +163,14 @@ finan-app/                          ← monorepo root
     │   ├── AnalyticsFilterBar.js   ← category/group/type/amount filters + removable chips
     │   ├── TransactionDrilldownModal.js ← the single drill-down surface for every chart click
     │   ├── SpendingCalendar.js     ← day-level spend heatmap for the selected month
+    │   ├── MoneyFlow.js            ← income → group → category flow (hand-rolled SVG on lg+, composition bar below)
     │   ├── Tooltip.js              ← fixed prop for portal rendering on mobile
     │   └── ...
     ├── lib/
     │   ├── api.js                  ← typed fetch wrappers for all backend endpoints
     │   ├── analyticsFilters.js     ← pure filter predicate, URL encode/decode, client-side chart re-aggregation
     │   ├── spendingCalendar.js     ← pure day bucketing / grid / intensity math for SpendingCalendar
+    │   ├── moneyFlow.js            ← pure money-flow aggregation + SVG geometry for MoneyFlow
     │   └── format.js               ← formatCurrency(), date helpers
     └── e2e/
         ├── public-pages.spec.js
@@ -1302,7 +1304,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | PATCH | `/api/transaction/:id` | 30/min | ✓ | Update `description`, `category`, `amount` and/or `time` (at least one required; optional `transaction_timezone` alongside `time`). An `amount` change adjusts Balance by the signed difference inside the same atomic transaction; a `time` change can move the row to another month, so both the old and new month's snapshot and ML-insight cache are refreshed. `type` and `currency` are immutable — delete and re-add instead |
 | DELETE | `/api/transaction/:id` | — | ✓ | Delete transaction; balance updated atomically |
 | GET | `/api/transaction/expense` | 60/min | ✓ | Total expense summary (all time) |
-| GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M` |
+| GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M`. Each category row carries its `group` |
 | GET | `/api/transaction/merchants` | 60/min | ✓ | Top merchants for a period; query: `?year=YYYY&month=M&limit=N&tz=` (`month` omitted = whole year, `limit` defaults to 12 and is clamped to 50). Returns `{ merchants[], oneOff, total, merchantCount, year, month, limit }`. Merchants are grouped on read by the shared `merchantKey()`, savings-group outflow is excluded, and single-transaction merchants are collapsed into `oneOff` — see Merchant analytics |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
 | GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category, plus `volatilityBreakdown.categories` (names per class) — see Category volatility section |
@@ -1513,6 +1515,20 @@ The Analytics spending heatmap adds **no backend endpoint**. `SpendingCalendar` 
 - The day drill-down reuses the same modal component as the yearly-bar → month drill-down (`TxnListModal` in `app/analytics/page.js`); the calendar already holds the day's rows so it opens without a fetch.
 
 Covered by `lib/spendingCalendar.test.js`.
+
+### Money flow is derived client-side
+
+The Analytics *Money flow* card adds **no backend endpoint**. It reuses the payload the page already fetched (`GET /api/transaction/analytics`) and derives the whole diagram locally in `lib/moneyFlow.js`:
+
+- **The one thing that has to be true is conservation.** Every unit of money entering the diagram terminates in exactly one leaf: `totalIn = income + drawdown` and `totalOut = outflow + surplus`, and the two are equal by construction. `lib/moneyFlow.test.js` asserts it on every scenario — normal month, income with no expense, expense exceeding income, savings larger than income, unknown groups, an empty breakdown, and 200 randomised months.
+- **A deficit month gets a second source node**, `From balance`, sized `outflow − income`. Clamping the surplus at zero would leave the diagram unbalanced and quietly wrong; a deficit is a real thing to show, so it is shown.
+- **Savings-group outflow is its own branch, flagged `retained`** — money that left the wallet but was kept — and so is the surplus. Same rule the savings rate and the 50/30/20 split follow (see *Savings & investment visibility*).
+- **The middle layer comes from the analytics payload, not a second request.** `getAnalytics` now tags each category row with its `group` (one indexed `Category.find` inside the same `Promise.all`, and the response is already per-user cached). An unknown, missing or `income` group buckets to `other`; an expense logged under an income-grouped category is still outflow, and an `income → income` branch reads as a bug.
+- **An incomplete breakdown shows as an unlabelled branch, never as a wrong one.** When the period's expense total exceeds the categories it decomposes into, the remainder becomes one `Uncategorised` leaf (it carries no category names, so it opens nothing). A gap under 0.1% is rounding and is ignored.
+- **The leaf count is capped at 8.** The tail collapses into a per-group `Other (n)` — per group, so folding can never move money between branches. The roll-up keeps the names it folded in and drills into all of them, exactly like the donut's `Other` slice.
+- **Two renderings over one model.** A three-lane flow cannot carry readable labels in the ~318px a phone card has, and scrolling one sideways defeats the point of seeing the whole path — so the hand-rolled SVG renders on `lg+` only, and below that the same split renders as a composition bar. The group/category list is present at every width and is both the drill-down surface and the accessible one (the SVG is `aria-hidden`).
+- **Whole-period only** — the card is hidden while filters are active, for the same reason the savings rate is suppressed: over a subset, "what you kept" is just what the filter left behind.
+- No new dependency. The SVG is ~120 lines of geometry in `layoutMoneyFlow` / `ribbonPath`: a two-stage stacked flow, not an arbitrary DAG. Source nodes sit flush so a ribbon never has to straddle a gap, and leaf labels are pushed down when two thin neighbours would print on top of each other.
 
 ### Per-month budget resolution
 

@@ -376,4 +376,32 @@ describe('Transaction Integration Tests', () => {
             expect(res).to.have.status(401);
         });
     });
+
+    describe('GET /api/transaction/analytics', () => {
+        beforeEach(async () => {
+            await Category.updateOne({ user: userId, name: 'Food & Dining' }, { group: 'essential' });
+            await Transaction.create([
+                { user: userId, description: 'Groceries', amount: 300000, category: 'Food & Dining', type: 'expense', currency: 'IDR', time: new Date('2025-03-10T03:00:00Z'), transaction_timezone: 'Asia/Jakarta' },
+                { user: userId, description: 'Odd one',   amount: 100000, category: 'Untracked',     type: 'expense', currency: 'IDR', time: new Date('2025-03-11T03:00:00Z'), transaction_timezone: 'Asia/Jakarta' },
+            ]);
+        });
+
+        // The Money Flow view takes its middle layer from this payload rather
+        // than a second request, so every category row has to carry its group.
+        it('should tag each category with its group, defaulting to other', async () => {
+            const res = await chai.request(server)
+                .get('/api/transaction/analytics?year=2025&month=3&tz=Asia/Jakarta')
+                .set('Cookie', authCookie);
+
+            expect(res).to.have.status(200);
+            const byName = Object.fromEntries(res.body.data.categories.map(c => [c.category, c]));
+            expect(byName['Food & Dining'].group).to.equal('essential');
+            expect(byName['Untracked'].group).to.equal('other');
+        });
+
+        it('should return 401 for unauthorized access', async () => {
+            const res = await chai.request(server).get('/api/transaction/analytics');
+            expect(res).to.have.status(401);
+        });
+    });
 });
