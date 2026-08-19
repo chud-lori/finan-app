@@ -149,17 +149,19 @@ finan-app/                          ← monorepo root
     │   ├── layout.js               ← root layout, ErrorBoundary, theme script
     │   ├── page.js                 ← Landing page (always light mode)
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
-    │   ├── analytics/page.js       ← Monthly/yearly charts, category breakdown; year nav bounded by availableYears; clicking a bar in yearly view opens month transaction modal
+    │   ├── analytics/page.js       ← Monthly/yearly charts, spending calendar, category breakdown; year nav bounded by availableYears; clicking a yearly bar or a calendar day opens the shared transaction modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
     │   ├── recommendation/page.js  ← 11 financial planning tools (incl. Windfall Planner, Zakat Estimator)
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
     │   └── settings/page.js        ← Theme, password change, sessions, delete account
     ├── components/
     │   ├── GamificationBanner.js   ← streaks, budget wins, goal rings
+    │   ├── SpendingCalendar.js     ← day-level spend heatmap for the selected month
     │   ├── Tooltip.js              ← fixed prop for portal rendering on mobile
     │   └── ...
     ├── lib/
     │   ├── api.js                  ← typed fetch wrappers for all backend endpoints
+    │   ├── spendingCalendar.js     ← pure day bucketing / grid / intensity math for SpendingCalendar
     │   └── format.js               ← formatCurrency(), date helpers
     └── e2e/
         ├── public-pages.spec.js
@@ -358,6 +360,7 @@ Transaction `type` is only `income | expense` — there is no `transfer`. Invest
 | Explainability spend | `controllers/transaction.js#getExplainability` | savings-group txns dropped from `totalOutcome`, top categories and the MoM baseline. |
 | Anomaly baseline (rule) | `controllers/transaction.js#getAnomalies` | savings-group txns removed from the current set, historical baseline and the "first-time category" signal. |
 | Anomaly baseline (ML) | `services/ml/anomaly.js#detectAnomalies` | skips any tx flagged `is_savings`; the flag is set in `_runMLPipeline` and savings-group outflow is also excluded from the forecast's `daily_totals`. |
+| Spending calendar | `finance-management-fe/lib/spendingCalendar.js#buildDailySpend` | savings-group categories (from `GET /api/category/group-summary`) are dropped before the per-day totals, so a payday investment transfer never colours the day as heavy spending. |
 | 50/30/20 | `finance-management-fe/lib/ruleSplit.js#buildRuleSplit` | savings bucket = `savingsGroup + max(income − nonSavingsExpense − savingsGroup, 0)`. |
 | Profile financial identity | `controllers/profile.js#getProfile` | `avgMonthlyExpense`, `avgSavingsRate`, `topCategory` and `spendingStyle` all computed on non-savings expense — see below. |
 
@@ -1235,6 +1238,7 @@ PLAYWRIGHT_BASE_URL=https://your-domain.com npm run test:e2e
 
 | File | What it covers |
 |------|---------------|
+| `lib/spendingCalendar.test.js` | Spending-calendar day bucketing (per-transaction timezone), month-boundary fetch window across east/west zones, weekday alignment for both `weekStartsOn` values, savings-group exclusion and its failure path, intensity scaling |
 | `public-pages.spec.js` | Landing, auth pages, legal pages, auth guard redirects — 30 tests desktop + mobile |
 | `auth-flow.spec.js` | Login, dashboard, add transaction, analytics, logout-all (skipped without credentials) |
 
@@ -1286,7 +1290,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/category/suggestions` | — | ✓ | Smart category suggestions based on time of day and past habits |
 | POST | `/api/transaction/category` | — | ✓ | Seed default categories (idempotent) |
 | GET | `/api/transaction/date/:date` | — | ✓ | Transactions on a specific date; `YYYY-MM-DD` |
-| GET | `/api/transaction/range/:start/:end` | — | ✓ | Transactions in date range with income/expense summary |
+| GET | `/api/transaction/range/:start/:end` | 60/min | ✓ | Transactions in date range (`YYYY-MM-DD`) with income/expense summary. Unpaginated — the whole range comes back, which is what the spending calendar needs. Query: `?tz=IANA` bounds the range in the user's zone (defaults to UTC) |
 | GET | `/api/transaction/recommendation/:monthly/:spend` | — | ✓ | Budget affordability check (legacy calculator) |
 
 **CSV import column mapping (case-insensitive):**
@@ -1466,6 +1470,20 @@ The app is used mostly on a phone, installed as a PWA. Every chart is designed a
 ### Currency
 
 The app is multi-currency. Never hardcode `Rp`, `IDR`, or `jt` in UI text. Use `formatAmount()` / `useCurrency()` from `CurrencyContext` for all amounts.
+
+### Spending calendar is derived client-side
+
+The Analytics spending heatmap adds **no backend endpoint**. `SpendingCalendar` fetches the selected month once through the existing `GET /api/transaction/range/:start/:end` (unpaginated — the paginated list endpoint caps at 100 rows and would silently truncate a busy month's day totals) plus `GET /api/category/group-summary` for the savings-group names, then derives everything locally in `lib/spendingCalendar.js`:
+
+- **Day bucketing** uses each transaction's own `transaction_timezone` via a cached `Intl.DateTimeFormat` — a 23:40 charge must not slide into the next day. Same rule the backend analytics aggregation follows; zero new dependencies.
+- **The fetch window is padded two days on each side** (`monthFetchRange`). The server bounds `/range` in the *browser's* zone while rows bucket in their own zone, so an unpadded window can miss a boundary row and it disappears from both months. Two days covers the full 26h zone spread; `buildDailySpend` still drops any key outside `yearMonth`, so the padding never leaks into the grid or the busiest-day figure.
+- **Both requests must succeed** (`resolveCalendarState` over `Promise.allSettled`). If `group-summary` fails — a 500, a blip, or a 429 from its 30/min limiter — the calendar shows an error with Retry instead of silently treating savings transfers as spend. A confidently wrong number is worse than an error.
+- **Intensity** is relative to the month's own maximum (4 quartile levels), never an absolute currency band — the scale has to work for any currency and any income level. A zero-spend day is level 0 and renders empty, not pale-but-coloured.
+- **Savings-group outflow is excluded** from the day totals (see *Savings & investment visibility*) but the drill-down still lists every transaction of the day, income included.
+- **Week alignment** honours `Preference.weekStartsOn`. That preference reaches the component through `CurrencyContext`, which already loads `GET /api/profile` once per session — no extra request and no new settings surface.
+- The day drill-down reuses the same modal component as the yearly-bar → month drill-down (`TxnListModal` in `app/analytics/page.js`); the calendar already holds the day's rows so it opens without a fetch.
+
+Covered by `lib/spendingCalendar.test.js`.
 
 ### Per-month budget resolution
 
