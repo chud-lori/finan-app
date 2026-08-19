@@ -17,7 +17,7 @@ const TrendTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-sm min-w-[180px]">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-sm min-w-[180px] max-w-[220px]">
       <p className="font-semibold text-gray-700 mb-1">{label}</p>
       <p className="text-teal-600">Net worth: {formatAmount(point.netWorth)}</p>
       <p className="text-xs text-emerald-600 mt-1">Assets: {formatAmount(point.assets)}</p>
@@ -31,7 +31,7 @@ export default function NetWorthTrendChart({ data, height = 240 }) {
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+        <XAxis dataKey="name" minTickGap={24} tick={{ fontSize: 11 }} />
         <YAxis tickFormatter={formatK} tick={{ fontSize: 11 }} width={58} />
         <Tooltip content={<TrendTooltip />} />
         {/* Zero line matters here — crossing it is the whole story of the chart. */}

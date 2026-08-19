@@ -1450,6 +1450,19 @@ Theme preference is stored in `localStorage`. The root layout injects a blocking
 
 `Tooltip.js` supports a `fixed` prop that renders the bubble via `createPortal` at `position: fixed`, escaping any `overflow: hidden` / `overflow: auto` container. Always use `<Tooltip text="..." fixed />` in dashboards and tight layouts to prevent viewport clipping on mobile.
 
+### Charts on mobile
+
+The app is used mostly on a phone, installed as a PWA. Every chart is designed at **390px first**. Checklist for a new chart or any chart-adjacent control:
+
+- **No fixed pixel width.** Wrap the chart in `ResponsiveContainer` (or `max-w-[Npx] mx-auto` around one) — a hardcoded `<PieChart width={260}>` overflows its card on a 320-360px phone and gives the whole page a horizontal scrollbar.
+- **~40px per category, or scroll.** A 12-category axis in 320px is unreadable and untappable. Put the chart in `overflow-x-auto scroll-x-hint -mx-5 px-5 sm:mx-0 sm:px-0` with an inner `min-w-[Npx] sm:min-w-0`. Contained scroll is fine; page-level horizontal scroll is not.
+- **Axis labels ellipsis, never overlap.** Truncate long category ticks with a `tickFormatter` and keep the *full* name in the chart tooltip (pass the untruncated value in the data). Use `minTickGap` on a dense time axis.
+- **Legends wrap, entries truncate.** `flex flex-wrap` on the legend, `truncate` + `title` on each label. Carry the share (%) in the legend so a 1% slice stays readable when the slice itself is a hairline.
+- **Segments are not the only affordance.** A thin slice/segment is not a tap target, and `title=` does nothing on touch. Every segmented chart needs the same data as a list below it (that list is the fallback), and segments get `minWidth: 3` so they stay visible.
+- **Tooltips inside cards and scroll containers pass `fixed`.** Cards use `overflow-hidden` and mobile grids are 2 columns wide — an absolutely positioned `w-56` bubble gets clipped or pushes the page sideways.
+- **Chart-adjacent inputs are `text-base sm:text-*`.** Anything under 16px (`text-sm` = 14px) makes iOS Safari zoom the viewport on focus, and an installed PWA never zooms back out. Applies to `<select>` too.
+- Money in and around charts: `tabular-nums`, `whitespace-nowrap`, and the existing money-table rules (`min-w-[…]` inside `overflow-x-auto`, `sticky left-0` first column). Under `sm`, a table with 3+ money columns renders as a stacked list instead.
+
 ### Currency
 
 The app is multi-currency. Never hardcode `Rp`, `IDR`, or `jt` in UI text. Use `formatAmount()` / `useCurrency()` from `CurrencyContext` for all amounts.
