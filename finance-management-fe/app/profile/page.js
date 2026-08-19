@@ -715,7 +715,7 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-gray-50">
         <Navbar />
 
-        <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-6">
 
           {/* ── Header ── */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-4">
@@ -867,7 +867,7 @@ export default function ProfilePage() {
                           return (
                             <div key={label} className={`rounded-xl p-3 ${colors[accent]}`}>
                               <p className="text-xs font-medium opacity-70 leading-tight mb-1">{label}</p>
-                              <p className="text-base font-black tabular-nums break-words">{value}</p>
+                              <p className="text-sm sm:text-base font-black tabular-nums">{value}</p>
                             </div>
                           );
                         })}
