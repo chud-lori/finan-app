@@ -1232,6 +1232,9 @@ const getExplainability = async (req, res) => {
 
         // Every current category's total bucketed by volatility class (not just topCategories).
         const volatilityBreakdown = { fixed: 0, semi: 0, flexible: 0, unknown: 0, total: 0 };
+        // Category names per class so the Spending Mix bar can drill into the
+        // transactions behind a segment without a second round trip.
+        const volatilityCategories = { fixed: [], semi: [], flexible: [], unknown: [] };
         Object.entries(catMap).forEach(([cat, v]) => {
             const hist          = histByCat[cat];
             const monthlyTotals = hist ? Object.values(hist.months) : [];
@@ -1239,9 +1242,11 @@ const getExplainability = async (req, res) => {
             const txPerMonth    = activeMonths > 0 ? hist.count / activeMonths : null;
             const { volatility } = classifyVolatility(monthlyTotals, txPerMonth);
             volatilityBreakdown[volatility] += v.total;
+            volatilityCategories[volatility].push(cat);
         });
         volatilityBreakdown.total = volatilityBreakdown.fixed + volatilityBreakdown.semi + volatilityBreakdown.flexible + volatilityBreakdown.unknown;
         Object.keys(volatilityBreakdown).forEach(k => { volatilityBreakdown[k] = Math.round(volatilityBreakdown[k]); });
+        volatilityBreakdown.categories = volatilityCategories;
 
         const top3Names = topCategories.slice(0, 3).map(c => c.category).join(', ');
         const summary = topCategories.length > 0

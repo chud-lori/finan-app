@@ -1,16 +1,23 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnalytics, getTransactions } from '@/lib/api';
+import { getAnalytics, getRangeTransactions, listAllCategories } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 import RangeReport from '@/components/RangeReport';
+import AnalyticsFilterBar from '@/components/AnalyticsFilterBar';
+import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 import SpendingCalendar from '@/components/SpendingCalendar';
 import { buildPieData } from '@/lib/pieData';
+import {
+  parseView, viewToSearch, hasActiveFilters, applyFilters, buildCategoryRows,
+  buildMonthlyTotals, buildPeriodStats, periodBounds, isFilteredEmpty, monthIndex,
+  savingsRateOf, EMPTY_FILTERS,
+} from '@/lib/analyticsFilters';
 
 const DonutChart = dynamic(() => import('@/components/charts/DonutChart'), { ssr: false });
 const HBarChart  = dynamic(() => import('@/components/charts/HBarChart'),  { ssr: false });
@@ -104,13 +111,32 @@ function DeltaBadge({ delta }) {
   );
 }
 
+// ─── Filtered-empty state ─────────────────────────────────────────────────────
+function FilteredEmptyState({ onClear }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm text-center py-12 px-4">
+      <div className="text-4xl mb-3">🔍</div>
+      <p className="text-sm font-semibold text-gray-700 mb-1">No transactions match these filters</p>
+      <p className="text-xs text-gray-400 mb-4">Nothing in this period fits the current combination.</p>
+      <button
+        onClick={onClear}
+        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+      >
+        Clear all filters
+      </button>
+    </div>
+  );
+}
+
 // ─── Category section ─────────────────────────────────────────────────────────
-function CategorySection({ categories, showAvg, compareMode, compCategories, onCategoryClick }) {
+function CategorySection({ categories, showAvg, compareMode, compCategories, onCategoryClick, kind = 'expense', filtersActive, onClearFilters }) {
   const formatAmount = useFormatAmount();
   if (!categories?.length) {
+    // A filter combination that matches nothing gets an explicit way out, not a blank chart.
+    if (filtersActive) return <FilteredEmptyState onClear={onClearFilters} />;
     return (
       <div className="text-center py-10 text-gray-400 text-sm">
-        No expense transactions in this period.
+        No {kind} transactions in this period.
       </div>
     );
   }
@@ -118,9 +144,18 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
   const grandTotal  = categories.reduce((s, c) => s + c.total, 0);
   const pieData     = buildPieData(categories);
   const pieColors   = pieData.map((d, i) => (d.other ? '#9ca3af' : PIE_COLORS[i % PIE_COLORS.length]));
-  // Full name here — HBarChart ellipsises the axis tick and the tooltip shows the rest.
+
+  // buildPieData folds the tail into a synthetic "Other (n)" slice whose name is
+  // no category, so it stays inert — clicking it would open an empty drill-down.
+  const onSliceClick = onCategoryClick
+    ? (name) => { if (!pieData.find(d => d.name === name)?.other) onCategoryClick(name); }
+    : undefined;
+
+  // Full name only — the chart elides the axis tick. Truncating here too would
+  // hand a clipped string to the drill-down, which then matches nothing.
   const barData     = categories.slice(0, 10).map(c => ({
     name:  c.category,
+    full:  c.category,
     Value: showAvg ? c.avgMonthly : c.total,
   }));
 
@@ -149,25 +184,50 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Spending breakdown">
-          <DonutChart data={pieData} colors={pieColors} />
-          {/* Legend wraps and carries the share — a 1% slice is unreadable in the
-              donut but still legible here. */}
+        <ChartCard title={kind === 'income' ? 'Income breakdown' : 'Spending breakdown'} hint="Click a slice to see transactions">
+          <DonutChart data={pieData} colors={pieColors} onSliceClick={onSliceClick} />
+          {/* Legend doubles as the tap target for slices too thin to hit on a phone,
+              and carries the share — a 1% slice is unreadable in the donut but
+              still legible here. */}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-            {pieData.map((d, i) => (
-              <div key={d.name} title={d.name} className="flex items-center gap-1.5 text-xs text-gray-600 max-w-full">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: pieColors[i] }} />
-                <span className="truncate min-w-0">{d.name}</span>
-                {grandTotal > 0 && (
-                  <span className="text-gray-400 tabular-nums flex-shrink-0">{d.pct}%</span>
-                )}
-              </div>
-            ))}
+            {pieData.map((d, i) => {
+              const dot   = <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: pieColors[i] }} />;
+              const share = grandTotal > 0 && (
+                <span className="text-gray-400 tabular-nums flex-shrink-0">{d.pct}%</span>
+              );
+              // The "Other (n)" roll-up is not a category — same row, no dead click.
+              if (d.other) {
+                return (
+                  <div key={d.name} title={d.name} className="flex items-center gap-1.5 text-xs text-gray-600 max-w-full">
+                    {dot}
+                    <span className="truncate min-w-0">{d.name}</span>
+                    {share}
+                  </div>
+                );
+              }
+              return (
+                <button
+                  key={d.name}
+                  onClick={() => onSliceClick?.(d.name)}
+                  title={d.name}
+                  className="flex items-center gap-1.5 text-xs text-gray-600 max-w-full min-h-[24px] hover:text-teal-700 transition-colors"
+                >
+                  {dot}
+                  <span className="truncate min-w-0">{d.name}</span>
+                  {share}
+                </button>
+              );
+            })}
           </div>
         </ChartCard>
 
-        <ChartCard title={showAvg ? 'Avg monthly spend per category' : 'Spend per category'}>
-          <HBarChart data={barData} color="#6366f1" />
+        <ChartCard
+          title={showAvg
+            ? `Avg monthly ${kind === 'income' ? 'income' : 'spend'} per category`
+            : `${kind === 'income' ? 'Income' : 'Spend'} per category`}
+          hint="Click a bar to see transactions"
+        >
+          <HBarChart data={barData} color="#6366f1" onBarClick={onCategoryClick} />
         </ChartCard>
       </div>
 
@@ -190,7 +250,7 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                     <span className="font-medium text-gray-700 capitalize truncate">{c.category}</span>
                   </button>
-                  <span className="text-sm font-semibold text-rose-600 tabular-nums shrink-0">{formatAmount(c.total)}</span>
+                  <span className={`text-sm font-semibold tabular-nums shrink-0 ${kind === 'income' ? 'text-emerald-700' : 'text-rose-600'}`}>{formatAmount(c.total)}</span>
                 </div>
                 <div className="flex items-center gap-2 mt-1 pl-4">
                   <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
@@ -274,7 +334,7 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
                         </button>
                       </div>
                     </td>
-                    <td className="py-2 px-3 text-right text-rose-600 tabular-nums whitespace-nowrap">{formatAmount(c.total)}</td>
+                    <td className={`py-2 px-3 text-right tabular-nums whitespace-nowrap ${kind === 'income' ? 'text-emerald-700' : 'text-rose-600'}`}>{formatAmount(c.total)}</td>
                     {showAvg  && <td className="py-2 px-3 text-right text-gray-600 tabular-nums whitespace-nowrap">{formatAmount(c.avgMonthly)}</td>}
                     {showAvg  && <td className="py-2 px-3 text-right text-gray-500 tabular-nums hidden sm:table-cell">{c.activeMonths}</td>}
                     {!showAvg && <td className="py-2 px-3 text-right text-gray-500 tabular-nums">{c.count}</td>}
@@ -301,13 +361,21 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-export default function AnalyticsPage() {
+function AnalyticsPageInner() {
   const formatAmount = useFormatAmount();
-  const router = useRouter();
+  const router       = useRouter();
+  const pathname     = usePathname();
+  const searchParams = useSearchParams();
   const now = new Date();
-  const [tab,   setTab]   = useState('Monthly');
-  const [year,  setYear]  = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+
+  // The URL is the restore point for the whole view — period + filters.
+  const initial = parseView(searchParams, {
+    tab: 'Monthly', year: now.getFullYear(), month: now.getMonth() + 1,
+  });
+  const [tab,   setTab]   = useState(initial.tab);
+  const [year,  setYear]  = useState(initial.year);
+  const [month, setMonth] = useState(initial.month);
+  const [filters, setFilters] = useState(initial.filters);
   const [data,  setData]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -319,8 +387,72 @@ export default function AnalyticsPage() {
   const [compData,    setCompData]      = useState(null);
   const [loadingComp, setLoadingComp]   = useState(false);
 
-  // One drill-down modal, shared by the yearly bar click and the calendar day tap.
-  const [txnModal, setTxnModal] = useState(null); // { title, txns, loading }
+  // Drill-down modal — one surface for month bars, donut slices, category bars
+  // and calendar days.
+  const [drilldown,        setDrilldown]        = useState(null); // { title, subtitle, category? }
+  const [drilldownTxns,    setDrilldownTxns]    = useState([]);
+  const [loadingDrilldown, setLoadingDrilldown] = useState(false);
+
+  // Client-side filtering works off the period's own transactions, fetched
+  // lazily — an unfiltered visit costs exactly what it always did.
+  const [periodTxns,  setPeriodTxns]  = useState(null);
+  const [txnsLoading, setTxnsLoading] = useState(false);
+  const [groupOf,     setGroupOf]     = useState(null); // lowercased category name → group; null = not loaded
+
+  const filtersActive = hasActiveFilters(filters);
+  const periodKey     = `${tab}:${year}:${tab === 'Monthly' ? month : 'all'}`;
+  const txnsCache     = useRef({ key: null, promise: null });
+
+  const loadPeriodTxns = useCallback(() => {
+    if (txnsCache.current.key !== periodKey) {
+      const [start, end] = periodBounds(tab, year, month);
+      txnsCache.current = {
+        key: periodKey,
+        promise: getRangeTransactions(start, end)
+          .then(res => res.data?.transactions ?? [])
+          .catch(() => []),
+      };
+    }
+    return txnsCache.current.promise;
+  }, [periodKey, tab, year, month]);
+
+  // Keep the URL in sync so a filtered view survives a refresh and can be shared.
+  useEffect(() => {
+    const qs = viewToSearch({ tab, year, month, filters });
+    router.replace(`${pathname}?${qs}`, { scroll: false });
+  }, [tab, year, month, filters, router, pathname]);
+
+  useEffect(() => { setPeriodTxns(null); }, [periodKey]);
+
+  useEffect(() => {
+    // Clearing a filter mid-fetch must land the spinner — the in-flight `.then`
+    // is cancelled and will never turn it off itself.
+    if (tab === 'Range' || !filtersActive) { setTxnsLoading(false); return; }
+    let cancelled = false;
+    setTxnsLoading(true);
+    loadPeriodTxns().then(txns => {
+      if (cancelled) return;
+      setPeriodTxns(txns);
+      setTxnsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [tab, filtersActive, loadPeriodTxns]);
+
+  // Group lookup is only needed once a group filter is in play.
+  useEffect(() => {
+    if (!filters.group || groupOf) return;
+    listAllCategories()
+      .then(res => {
+        const map = {};
+        (res.data?.categories ?? []).forEach(c => { map[String(c.name).toLowerCase()] = c.group || 'other'; });
+        setGroupOf(map);
+      })
+      .catch(() => setGroupOf({}));
+  }, [filters.group, groupOf]);
+
+  // Filtering by group before the lookup lands would bucket everything as
+  // "other" and flash a false empty state.
+  const groupPending = !!filters.group && !groupOf;
 
   const load = useCallback(async () => {
     // Range mode does its own fetching inside <RangeReport/>.
@@ -368,48 +500,119 @@ export default function AnalyticsPage() {
   // Reset comparison when switching tab
   useEffect(() => { setCompareMode('none'); }, [tab]);
 
-  const monthlyBars = data?.monthly?.map(m => ({
+  // Filters recompute the charts from the raw period transactions; without them
+  // the server payload is used untouched.
+  const filteredTxns = useMemo(
+    () => (filtersActive && periodTxns && !groupPending ? applyFilters(periodTxns, filters, groupOf ?? {}) : null),
+    [filtersActive, periodTxns, filters, groupOf, groupPending],
+  );
+
+  // Filtered numbers are only ready once `filteredTxns` exists; until then the
+  // page must show the skeleton, not the unfiltered server payload under chips.
+  const filteredView   = !!filteredTxns;
+  const filterPending  = filtersActive && !filteredView;
+
+  // A group/category/amount filter can leave income only — deriving the chart
+  // kind from `filters.type` alone would render an empty expense breakdown.
+  const kind = useMemo(() => {
+    if (filters.type) return filters.type;
+    if (filteredTxns?.length && !filteredTxns.some(t => t.type === 'expense')) return 'income';
+    return 'expense';
+  }, [filters.type, filteredTxns]);
+
+  const viewCategories = filteredTxns ? buildCategoryRows(filteredTxns, kind) : data?.categories;
+  const viewMonthly    = filteredTxns ? buildMonthlyTotals(filteredTxns)      : data?.monthly;
+  const viewStats      = filteredTxns ? buildPeriodStats(filteredTxns)        : data?.monthStats;
+
+  // Filtered figures keep their own label so a subset is never read as the period.
+  const flabel = (base) => (filteredView ? `${base} (filtered)` : base);
+
+  const monthlyBars = viewMonthly?.map(m => ({
     name:    MONTH_LABELS[m.month - 1],
     Income:  m.income,
     Expense: m.expense,
   })) ?? [];
 
-  const ms          = data?.monthStats;
-  const savingsRate = ms && ms.income > 0 ? Math.round(((ms.income - ms.expense) / ms.income) * 100) : 0;
+  const ms          = viewStats;
+  const savingsRate = savingsRateOf(ms, filters);
   const yearTotals  = {
-    income:  data?.monthly?.reduce((s, m) => s + m.income,  0) ?? 0,
-    expense: data?.monthly?.reduce((s, m) => s + m.expense, 0) ?? 0,
+    income:  viewMonthly?.reduce((s, m) => s + m.income,  0) ?? 0,
+    expense: viewMonthly?.reduce((s, m) => s + m.expense, 0) ?? 0,
   };
 
   // For 'average' mode, compCategories come from the yearly fetch
   const compCategories = compareMode === 'none' ? null : compData?.categories ?? null;
 
-  // Navigate to dashboard filtered by category + current month
-  const handleCategoryClick = (cat) => {
-    const monthParam = tab === 'Monthly'
-      ? `${year}-${String(month).padStart(2, '0')}`
-      : `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    router.push(`/dashboard?category=${encodeURIComponent(cat)}&month=${monthParam}`);
-  };
+  const periodLabel = tab === 'Monthly' ? `${MONTH_LABELS[month - 1]} ${year}` : String(year);
 
-  // Yearly bar click → fetch transactions for that month
+  // Options stay stable while filtering: the server list (expense) plus anything
+  // the raw period payload turned up (income categories, once loaded).
+  const filterCategoryOptions = useMemo(() => {
+    const seen = new Set();
+    (data?.categories ?? []).forEach(c => seen.add(c.category));
+    (periodTxns ?? []).forEach(t => { if (t.category) seen.add(t.category); });
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [data, periodTxns]);
+
+  // Donut slice / category bar / list row → that category's transactions for the period.
+  const handleCategoryClick = useCallback(async (rawCat) => {
+    const cat = String(rawCat ?? '').trim();
+    if (!cat) return;
+    setDrilldown({ title: `Transactions — ${cat}`, subtitle: periodLabel, category: cat });
+    setDrilldownTxns([]);
+    setLoadingDrilldown(true);
+    const txns = periodTxns ?? await loadPeriodTxns();
+    if (!periodTxns) setPeriodTxns(txns);
+    const lower = cat.toLowerCase();
+    setDrilldownTxns(
+      applyFilters(txns, filters, groupOf ?? {})
+        .filter(t => t.type === kind && String(t.category ?? '').toLowerCase() === lower)
+        .sort((a, b) => new Date(b.time) - new Date(a.time)),
+    );
+    setLoadingDrilldown(false);
+  }, [periodTxns, loadPeriodTxns, filters, groupOf, periodLabel, kind]);
+
+  // Yearly bar click → that month's transactions
   const handleBarClick = async (label) => {
     const mIdx = MONTH_LABELS.indexOf(label);
     if (mIdx === -1) return;
     const monthStr = `${year}-${String(mIdx + 1).padStart(2, '0')}`;
-    const title    = `Transactions — ${label} ${year}`;
-    setTxnModal({ title, txns: [], loading: true });
+    setDrilldown({ title: `Transactions — ${label} ${year}`, monthStr });
+    setDrilldownTxns([]);
+    setLoadingDrilldown(true);
     try {
-      const res = await getTransactions({ month: monthStr, limit: 100 });
-      setTxnModal({ title, txns: res.data?.transactions ?? [], loading: false });
+      // Both paths read the same uncapped period set, so the count in the modal
+      // does not change just because a filter is on.
+      const txns = periodTxns ?? await loadPeriodTxns();
+      if (!periodTxns) setPeriodTxns(txns);
+      const inMonth = (filtersActive ? applyFilters(txns, filters, groupOf ?? {}) : txns)
+        .filter(t => monthIndex(t) === mIdx)
+        .sort((a, b) => new Date(b.time) - new Date(a.time));
+      setDrilldownTxns(inMonth);
     } catch {
-      setTxnModal({ title, txns: [], loading: false });
+      setDrilldownTxns([]);
+    } finally {
+      setLoadingDrilldown(false);
     }
   };
 
-  // Calendar day tap → the day's transactions are already loaded by the calendar
-  const handleDayClick = ({ label, txns }) =>
-    setTxnModal({ title: `Transactions — ${label}`, txns, loading: false });
+  // Calendar day tap → the calendar already carries the day's rows, so this
+  // opens the same modal without a fetch.
+  const handleDayClick = ({ label, txns }) => {
+    setDrilldown({ title: `Transactions — ${label}` });
+    setDrilldownTxns(txns ?? []);
+    setLoadingDrilldown(false);
+  };
+
+  const clearFilters = useCallback(() => setFilters({ ...EMPTY_FILTERS }), []);
+  const noResults    = !!filteredTxns && isFilteredEmpty(filters, filteredTxns);
+
+  const drilldownDashboardHref = drilldown?.category
+    ? `/dashboard?category=${encodeURIComponent(drilldown.category)}&month=${
+        tab === 'Monthly'
+          ? `${year}-${String(month).padStart(2, '0')}`
+          : `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`}`
+    : null;
 
   return (
     <AuthGuard>
@@ -477,13 +680,24 @@ export default function AnalyticsPage() {
           </div>
           )}
 
+          {tab !== 'Range' && (
+            <div className="mb-5">
+              <AnalyticsFilterBar
+                filters={filters}
+                categories={filterCategoryOptions}
+                onChange={setFilters}
+                loading={txnsLoading || groupPending}
+              />
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
           )}
 
           {tab === 'Range' ? (
             <RangeReport />
-          ) : loading ? (
+          ) : loading || filterPending ? (
             <div className="space-y-5">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[0,1,2,3].map(i => (
@@ -516,23 +730,24 @@ export default function AnalyticsPage() {
                 <div className="space-y-5">
                   {/* Summary cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <SummaryCard label="Income"  value={formatAmount(ms?.income  ?? 0)} color="emerald" />
-                    <SummaryCard label="Expense" value={formatAmount(ms?.expense ?? 0)} color="rose" />
+                    <SummaryCard label={flabel('Income')}  value={formatAmount(ms?.income  ?? 0)} color="emerald" />
+                    <SummaryCard label={flabel('Expense')} value={formatAmount(ms?.expense ?? 0)} color="rose" />
                     <SummaryCard
-                      label="Net"
+                      label={flabel('Net')}
                       value={formatAmount((ms?.income ?? 0) - (ms?.expense ?? 0))}
                       color={(ms?.income ?? 0) >= (ms?.expense ?? 0) ? 'emerald' : 'rose'}
                     />
                     <SummaryCard
                       label="Savings rate"
-                      value={ms?.income ? `${savingsRate}%` : '—'}
-                      color={savingsRate >= 0 ? 'teal' : 'rose'}
+                      value={savingsRate == null ? '—' : `${savingsRate}%`}
+                      color={savingsRate == null || savingsRate >= 0 ? 'teal' : 'rose'}
+                      tip={filteredView ? SUPPRESSED_RATE_TIP : undefined}
                     />
                   </div>
 
                   {/* "So What?" insight — only when there's expense data */}
-                  {data?.categories?.length > 0 && (
-                    <SoWhatInsight categories={data.categories} onCategoryClick={handleCategoryClick} />
+                  {viewCategories?.length > 0 && kind === 'expense' && (
+                    <SoWhatInsight categories={viewCategories} onCategoryClick={handleCategoryClick} />
                   )}
 
                   <ChartCard
@@ -542,8 +757,9 @@ export default function AnalyticsPage() {
                     <SpendingCalendar year={year} month={month} onDayClick={handleDayClick} />
                   </ChartCard>
 
-                  {/* Comparison toolbar */}
-                  {data?.categories?.length > 0 && (
+                  {/* Comparison toolbar — hidden while filtered: the reference
+                       payload is unfiltered, so the deltas would not match. */}
+                  {viewCategories?.length > 0 && !filtersActive && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-gray-500 mr-1">Compare:</span>
                       <Tooltip text="Show how each category changed vs a reference period. Positive % = spending more, negative % = spending less." align="left" fixed />
@@ -582,11 +798,14 @@ export default function AnalyticsPage() {
 
                   <SectionHeading>Category breakdown — {MONTH_LABELS[month - 1]} {year}</SectionHeading>
                   <CategorySection
-                    categories={data?.categories}
+                    categories={viewCategories}
                     showAvg={false}
-                    compareMode={compareMode}
+                    compareMode={filtersActive ? 'none' : compareMode}
                     compCategories={compCategories}
                     onCategoryClick={handleCategoryClick}
+                    kind={kind}
+                    filtersActive={filtersActive}
+                    onClearFilters={clearFilters}
                   />
                 </div>
               )}
@@ -595,20 +814,21 @@ export default function AnalyticsPage() {
               {tab === 'Yearly' && (
                 <div className="space-y-5">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <SummaryCard label="Total Income"  value={formatAmount(yearTotals.income)}  color="emerald" />
-                    <SummaryCard label="Total Expense" value={formatAmount(yearTotals.expense)} color="rose" />
+                    <SummaryCard label={flabel('Total Income')}  value={formatAmount(yearTotals.income)}  color="emerald" />
+                    <SummaryCard label={flabel('Total Expense')} value={formatAmount(yearTotals.expense)} color="rose" />
                     <SummaryCard
-                      label="Net"
+                      label={flabel('Net')}
                       value={formatAmount(yearTotals.income - yearTotals.expense)}
                       color={yearTotals.income >= yearTotals.expense ? 'emerald' : 'rose'}
                     />
                     <SummaryCard
-                      label="Avg monthly expense"
+                      label={flabel('Avg monthly expense')}
                       value={formatAmount(Math.round(yearTotals.expense / 12))}
                       color="teal"
                     />
                   </div>
 
+                  {noResults ? <FilteredEmptyState onClear={clearFilters} /> : (<>
                   <ChartCard title={`Monthly income vs expense — ${year}`} hint="Click a bar to see transactions">
                     {/* Twelve months in 320px leaves ~20px per month — labels drop out
                         and the bars are too narrow to tap. Scroll instead. */}
@@ -687,12 +907,16 @@ export default function AnalyticsPage() {
 
                   <SectionHeading>Category breakdown — {year}</SectionHeading>
                   <CategorySection
-                    categories={data?.categories}
+                    categories={viewCategories}
                     showAvg={true}
                     compareMode="none"
                     compCategories={null}
                     onCategoryClick={handleCategoryClick}
+                    kind={kind}
+                    filtersActive={filtersActive}
+                    onClearFilters={clearFilters}
                   />
+                  </>)}
                 </div>
               )}
             </>
@@ -700,78 +924,42 @@ export default function AnalyticsPage() {
         </main>
       </div>
 
-      {/* Drill-down transaction modal — shared by the yearly bars and the calendar */}
-      {txnModal && (
-        <TxnListModal modal={txnModal} onClose={() => setTxnModal(null)} formatAmount={formatAmount} />
+      {drilldown && (
+        <TransactionDrilldownModal
+          title={drilldown.title}
+          subtitle={drilldown.subtitle}
+          transactions={drilldownTxns}
+          loading={loadingDrilldown}
+          emptyText={filtersActive ? 'No transactions match these filters.' : 'No transactions here.'}
+          onClose={() => setDrilldown(null)}
+          footer={drilldownDashboardHref && (
+            <button
+              onClick={() => router.push(drilldownDashboardHref)}
+              className="text-xs font-semibold text-teal-600 hover:text-teal-700"
+            >
+              Open in dashboard →
+            </button>
+          )}
+        />
       )}
     </AuthGuard>
   );
 }
 
-// ─── Reusable UI pieces ───────────────────────────────────────────────────────
-function TxnListModal({ modal, onClose, formatAmount }) {
-  const { title, txns, loading } = modal;
+// useSearchParams needs a Suspense boundary in the App Router.
+export default function AnalyticsPage() {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div>
-            <h3 className="font-semibold text-gray-900">{title}</h3>
-            {!loading && (
-              <p className="text-xs text-gray-400 mt-0.5">{txns.length} transaction{txns.length !== 1 ? 's' : ''}</p>
-            )}
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg" aria-label="Close">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="overflow-y-auto flex-1 px-5 py-2">
-          {loading ? (
-            <div className="space-y-3 py-3">
-              {[0,1,2,3,4].map(i => (
-                <div key={i} className="flex gap-3 items-center">
-                  <SkeletonLine className="h-4 flex-1" />
-                  <SkeletonLine className="h-4 w-20 flex-shrink-0" />
-                </div>
-              ))}
-            </div>
-          ) : txns.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-10">No transactions in this period.</p>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {txns.map(tx => (
-                <div key={tx.id ?? tx._id} className="py-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{tx.description || tx.category}</p>
-                    <p className="text-xs text-gray-500 capitalize">
-                      {tx.category} · {new Date(tx.time).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                    </p>
-                  </div>
-                  <span className={`text-sm font-semibold shrink-0 tabular-nums ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {tx.type === 'income' ? '+' : '−'}{formatAmount(tx.amount)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <Suspense>
+      <AnalyticsPageInner />
+    </Suspense>
   );
 }
 
+// ─── Reusable UI pieces ───────────────────────────────────────────────────────
 function ChartCard({ title, hint, children }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-4">
         <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
         {hint && <span className="text-xs text-gray-400 italic">{hint}</span>}
       </div>
@@ -790,14 +978,18 @@ const SUMMARY_TIPS = {
   'Avg monthly expense': 'Your total expenses divided by 12 — a rough benchmark for how much you spend each month.',
 };
 
-function SummaryCard({ label, value, color }) {
+const FILTERED_NOTE = ' Counts only the transactions matching the active filters, not the whole period.';
+const SUPPRESSED_RATE_TIP = 'Hidden while filters are active. A savings rate over a filtered slice is not your savings rate — filter out expenses and it would always read 100%.';
+
+function SummaryCard({ label, value, color, tip }) {
   const cls = { emerald: 'text-emerald-700', rose: 'text-rose-600', teal: 'text-teal-700' }[color] ?? 'text-gray-800';
-  const tip = SUMMARY_TIPS[label];
+  const base = label.replace(/ \(filtered\)$/, '');
+  const text = tip ?? (SUMMARY_TIPS[base] ? SUMMARY_TIPS[base] + (base === label ? '' : FILTERED_NOTE) : null);
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
       <div className="flex items-center gap-1.5 mb-1">
         <p className="text-xs text-gray-500">{label}</p>
-        {tip && <Tooltip text={tip} fixed />}
+        {text && <Tooltip text={text} fixed />}
       </div>
       <p className={`text-lg font-bold ${cls}`}>{value}</p>
     </div>

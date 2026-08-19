@@ -2,12 +2,13 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup, getGroupBudgets, setGroupBudget } from '@/lib/api';
+import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup, getGroupBudgets, setGroupBudget, getRangeTransactions } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 import MoneyRecap from '@/components/MoneyRecap';
 import PaydayRunway from '@/components/PaydayRunway';
+import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -670,7 +671,7 @@ function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, mov
 
 // ── Spending Mix (committed vs flexible) ──────────────────────────────────────
 
-function SpendingMixBar({ data }) {
+function SpendingMixBar({ data, onSegmentClick }) {
   const formatAmount = useFormatAmount();
   if (!data || !(data.total > 0)) return null;
 
@@ -678,11 +679,13 @@ function SpendingMixBar({ data }) {
   const flexible  = (data.flexible || 0) + (data.unknown || 0);
   const total     = data.total;
   const pct = (n) => Math.round((n / total) * 100);
+  const cats = data.categories || {};
 
   const segments = [
-    { key: 'committed', label: 'Committed', amount: committed, bar: 'bg-teal-500',  dot: 'bg-teal-500',  desc: 'Fixed costs — rent, bills, subscriptions' },
-    { key: 'flexible',  label: 'Flexible',  amount: flexible,  bar: 'bg-amber-400', dot: 'bg-amber-400', desc: 'Discretionary — the spending you can steer' },
+    { key: 'committed', label: 'Committed', amount: committed, bar: 'bg-teal-500',  dot: 'bg-teal-500',  desc: 'Fixed costs — rent, bills, subscriptions',      categories: [...(cats.fixed || []), ...(cats.semi || [])] },
+    { key: 'flexible',  label: 'Flexible',  amount: flexible,  bar: 'bg-amber-400', dot: 'bg-amber-400', desc: 'Discretionary — the spending you can steer', categories: [...(cats.flexible || []), ...(cats.unknown || [])] },
   ];
+  const clickable = typeof onSegmentClick === 'function' && !!data.categories;
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
@@ -691,19 +694,31 @@ function SpendingMixBar({ data }) {
         <Tooltip text="How much of this month's spending is committed (fixed costs you can't easily move) vs flexible (discretionary spending you can steer)." align="left" fixed />
       </div>
       <div className="p-5">
+        {/* The bar itself is a tap target; a thin segment is unhittable on a
+            phone, so each legend row below repeats the same drill-down. */}
         <div className="flex h-4 rounded-full overflow-hidden gap-0.5 mb-4">
           {segments.map(s => s.amount > 0 && (
-            <div
+            <button
               key={s.key}
-              className={`${s.bar} transition-all duration-700`}
+              type="button"
+              disabled={!clickable}
+              onClick={() => clickable && onSegmentClick(s)}
+              className={`${s.bar} transition-all duration-700 ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
               style={{ width: `${(s.amount / total) * 100}%`, minWidth: 3 }}
               title={`${s.label}: ${pct(s.amount)}%`}
+              aria-label={`${s.label} ${pct(s.amount)} percent`}
             />
           ))}
         </div>
         <div className="space-y-2.5">
           {segments.map(s => (
-            <div key={s.key} className="flex items-center gap-3">
+            <button
+              key={s.key}
+              type="button"
+              disabled={!clickable}
+              onClick={() => clickable && onSegmentClick(s)}
+              className={`w-full text-left flex items-center gap-3 rounded-lg -mx-1 px-1 py-1 ${clickable ? 'hover:bg-gray-50 dark:hover:bg-slate-800/40' : ''}`}
+            >
               <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${s.dot}`} />
               <div className="min-w-0 flex-1">
                 <span className="text-sm font-semibold text-gray-800 dark:text-slate-200">{s.label}</span>
@@ -713,7 +728,7 @@ function SpendingMixBar({ data }) {
                 <p className="text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{formatAmount(s.amount)}</p>
                 <p className="text-xs text-gray-400">{pct(s.amount)}%</p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -1085,6 +1100,33 @@ export default function InsightsPage() {
   const [loading,      setLoading]      = useState({ ttz: true, explain: true, recurring: true, anomaly: true, ml: true });
   const [refreshing,   setRefreshing]   = useState(false);
   const [errors,       setErrors]       = useState({});
+  const [mixDrill,     setMixDrill]     = useState(null);   // { label, categories }
+  const [mixTxns,      setMixTxns]      = useState([]);
+  const [mixLoading,   setMixLoading]   = useState(false);
+
+  // Spending Mix segment → the transactions behind it, this month.
+  const openMixDrilldown = async (segment) => {
+    setMixDrill(segment);
+    setMixTxns([]);
+    setMixLoading(true);
+    const now   = new Date();
+    const pad   = (n) => String(n).padStart(2, '0');
+    const start = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+    const end   = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate())}`;
+    const wanted = new Set((segment.categories || []).map(c => String(c).toLowerCase()));
+    try {
+      const res = await getRangeTransactions(start, end);
+      setMixTxns(
+        (res.data?.transactions ?? [])
+          .filter(t => t.type === 'expense' && wanted.has(String(t.category ?? '').toLowerCase()))
+          .sort((a, b) => new Date(b.time) - new Date(a.time)),
+      );
+    } catch {
+      setMixTxns([]);
+    } finally {
+      setMixLoading(false);
+    }
+  };
 
   const applyMlResult = (data) => {
     setMl(data);
@@ -1225,7 +1267,7 @@ export default function InsightsPage() {
             loading={feedLoading}
           />
 
-          {explain?.volatilityBreakdown && <SpendingMixBar data={explain.volatilityBreakdown} />}
+          {explain?.volatilityBreakdown && <SpendingMixBar data={explain.volatilityBreakdown} onSegmentClick={openMixDrilldown} />}
 
           {groupBudgets && <GroupBudgetCaps data={groupBudgets} onSave={handleSaveGroupBudget} savingGroup={savingGroupBudget} />}
 
@@ -1315,6 +1357,17 @@ export default function InsightsPage() {
           </div>
         </main>
       </div>
+
+      {mixDrill && (
+        <TransactionDrilldownModal
+          title={`${mixDrill.label} spending`}
+          subtitle="This month"
+          transactions={mixTxns}
+          loading={mixLoading}
+          emptyText="No transactions in this part of the mix."
+          onClose={() => setMixDrill(null)}
+        />
+      )}
     </AuthGuard>
   );
 }

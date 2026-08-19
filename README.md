@@ -28,7 +28,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Full timezone support** — records each transaction in the timezone it was made
 
 ### Understand
-- **Analytics** — monthly and yearly charts, category breakdown, savings rate, and "So What?" plain-language insight; year selector bounded to years with actual transactions; click any bar in yearly view to see that month's transactions
+- **Analytics** — monthly and yearly charts, category breakdown, savings rate, and "So What?" plain-language insight; year selector bounded to years with actual transactions; filter the charts by category / group / type / amount range (filters and period live in the URL, so a view can be bookmarked); click any chart element — month bar, donut slice, category bar, calendar day — to see the transactions behind it
 - **Spending calendar** — a day-by-day heatmap of the selected month: shade is relative to your own busiest day, savings transfers are not counted as spend, tap a day to see its transactions
 - **Period comparison** — this month vs last month or vs your average, with per-category deltas and spike warnings
 - **Anomaly detection** — flags unusually large transactions compared to your spending baseline
@@ -71,7 +71,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 |------|-------------|
 | Dashboard | Running balance, monthly income/expense, searchable + sortable transaction list with inline editing and filters by type (income/expense) and category |
 | Add transaction | Income or expense with smart category suggestions, plus a savings/investment nudge — log money moved to savings under a savings category so it counts as saved, not spent |
-| Analytics | Monthly/yearly charts, spending calendar heatmap (day-level density for the month), category breakdown, period comparison |
+| Analytics | Monthly/yearly charts, spending calendar heatmap (day-level density for the month), category breakdown, period comparison, chart drill-down + shareable filter bar |
 | Insights | Money Recap (monthly wrap-up), Payday Runway (safe-to-spend before next income), anomaly detection (seasonal- and lumpy-category aware — an expected Ramadan/Lebaran or social-spending spike isn't flagged), spending explainability, time-to-zero runway, smart category classification, category management (rename / delete), optional envelope-lite group budgets (soft caps per essential / discretionary / savings / social). Savings & investment visibility: investing logged as a savings-group expense is treated as saved (not spent) across savings rate, 50/30/20 and anomaly baselines |
 | Recommendation | 11 planning tools — data-connected 50/30/20, net-worth tracking, tax estimator, windfall planner, zakat estimator, and more — plus a Seasonal Radar heads-up that pre-warns before your own seasonal spikes with a suggested set-aside |
 | Analytics → Custom range | Any custom date range (income/expense summary + breakdown) — folded into Analytics as a tab (no separate Reports page) |

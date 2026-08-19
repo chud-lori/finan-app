@@ -149,18 +149,21 @@ finan-app/                          ← monorepo root
     │   ├── layout.js               ← root layout, ErrorBoundary, theme script
     │   ├── page.js                 ← Landing page (always light mode)
     │   ├── dashboard/page.js       ← Balance, transactions, month picker
-    │   ├── analytics/page.js       ← Monthly/yearly charts, spending calendar, category breakdown; year nav bounded by availableYears; clicking a yearly bar or a calendar day opens the shared transaction modal
+    │   ├── analytics/page.js       ← Monthly/yearly charts, spending calendar, category breakdown; year nav bounded by availableYears; filter bar + chart drill-down (period and filters live in the URL); every chart click and calendar day opens the shared drill-down modal
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
     │   ├── recommendation/page.js  ← 11 financial planning tools (incl. Windfall Planner, Zakat Estimator)
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
     │   └── settings/page.js        ← Theme, password change, sessions, delete account
     ├── components/
     │   ├── GamificationBanner.js   ← streaks, budget wins, goal rings
+    │   ├── AnalyticsFilterBar.js   ← category/group/type/amount filters + removable chips
+    │   ├── TransactionDrilldownModal.js ← the single drill-down surface for every chart click
     │   ├── SpendingCalendar.js     ← day-level spend heatmap for the selected month
     │   ├── Tooltip.js              ← fixed prop for portal rendering on mobile
     │   └── ...
     ├── lib/
     │   ├── api.js                  ← typed fetch wrappers for all backend endpoints
+    │   ├── analyticsFilters.js     ← pure filter predicate, URL encode/decode, client-side chart re-aggregation
     │   ├── spendingCalendar.js     ← pure day bucketing / grid / intensity math for SpendingCalendar
     │   └── format.js               ← formatCurrency(), date helpers
     └── e2e/
@@ -851,6 +854,8 @@ Thresholds are tunable defaults, **not** tuned on production data. Unit-tested i
 
 Each `topCategories` entry carries `volatility` and `cv`. The frontend `buildInsights` branches on `volatility`: it suppresses the "high dependency" warning for fixed costs (stating them neutrally), treats a fixed-cost change as an informational "new baseline?" at a low threshold, and reserves the actionable "you can trim this" / "great progress" framing for flexible categories at higher thresholds. The field is additive, so cached pre-upgrade payloads degrade to the prior behaviour. Covered by `test/explain.integration.test.js`.
 
+`volatilityBreakdown` also carries `categories: { fixed, semi, flexible, unknown }` — the category names in each class. The Spending Mix bar uses it to drill from a segment into the transactions behind it without a second aggregation endpoint. Also additive; a cached pre-upgrade payload just renders the bar as non-clickable.
+
 Returns top 10 results sorted by anomaly score, each with `severity` (high/medium/low), `multiple` (Nx vs category average), and a plain-English `label`.
 
 **Severity thresholds:** `multiple ≥ 3` or `score ≥ 0.7` → high; `multiple ≥ 1.8` → medium; else low.
@@ -1276,7 +1281,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/expense` | 60/min | ✓ | Total expense summary (all time) |
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M` |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
-| GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category — see Category volatility section |
+| GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category, plus `volatilityBreakdown.categories` (names per class) — see Category volatility section |
 | GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12, or ≤ 0.35 for flagged utility categories) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
 | GET | `/api/transaction/recap` | 30/min | ✓ | Money Recap — rule-based, fully in-process monthly "wrapped". Query: `?month=YYYY-MM` (defaults to the most recent complete month). Returns `{ available, month, monthLabel, narrative[], tiles[] }` stitched from the monthly Snapshot (this month vs prior), Financial Health score, streak, net-worth delta, ML anomaly count and top category mover. `available:false` with a `reason` until there is ≥1 full prior month. Narrative lines are currency-free; raw amounts ride only on `tiles` for the FE to format |
 | GET | `/api/transaction/runway` | 30/min | ✓ | Payday Runway — forward "safe to spend before next income". Infers income cadence from income history, projects the balance to the next expected payday using upcoming recurring bills + a discretionary run-rate, and returns `{ mode:'payday'\|'rolling', nextIncomeDate, daysUntilIncome, expectedIncome, safeToSpend, safeToSpendPerDay, billsBeforeIncome[], billsTotal, runwayDays, runwayDate, status, note }`. Degrades to a rolling-30-day runway when income cadence is unclear. A guide, not a guarantee |
@@ -1503,6 +1508,22 @@ All category mutation routes (`PATCH /:id/group`, `PATCH /:id/rename`, `DELETE /
 `getGroupSummary` includes `_id` in each category entry so the frontend can address categories by id after a single data fetch. `listCategories` (`GET /api/category`) also returns `_id` for use by the ManageCategories UI.
 
 Regex escaping is still applied internally in `deleteCategory` and `renameCategory` when updating `Transaction` documents by category name (transactions store the name as a string, not an `_id` reference).
+
+### Analytics drill-down & filters (client-side)
+
+The Analytics filter bar (category / group / type / amount range) recomputes the charts, not a table below them. It does that **client-side**, with no new endpoint:
+
+- The period's raw transactions are fetched **lazily** through the existing `GET /api/transaction/range/:start/:end`, only once a filter is active or a drill-down is opened. An unfiltered visit costs exactly what it did before.
+- `lib/analyticsFilters.js` holds the pure parts — the predicate, the URL encode/decode, and re-aggregation helpers that emit the *same row shape* the analytics endpoint returns, so the charts never learn where the numbers came from. Unit-tested in `lib/analyticsFilters.test.js`.
+- Months are bucketed by `monthKey()`, which reads each row's own `transaction_timezone` through a cached `Intl.DateTimeFormat` (browser zone as fallback, `RangeError` on an unknown zone caught). It has to match how `getAnalytics` buckets — `new Date(t.time).getMonth()` moves a late-night charge into the next month and halves `avgMonthly`.
+- The group filter needs a category → group map, fetched from `GET /api/category` only when a group filter is actually chosen. Bucketing everything as `other` would flash a false empty state.
+- Period **and** filters live in the URL (`tab`, `y`, `m`, `cat`, `grp`, `type`, `min`, `max`), so a view survives a refresh and can be bookmarked. `useSearchParams` requires the page to sit inside a `<Suspense>` boundary. `min=0` is not a filter — it excludes nothing, so it must not flip the page onto the client path.
+- **While the filtered set is in flight the page renders the loading skeleton**, not the unfiltered server payload. Chips over whole-period numbers is a lie the user cannot see.
+- **A filtered figure never keeps a whole-period label.** Summary cards gain a `(filtered)` suffix; the savings rate is suppressed entirely, because a rate over a subset is arithmetically true and semantically false (`type = income` would always read 100%). Period comparison (`vs Last Month` / `vs My Average`) is hidden for the same reason — the reference payload is server-aggregated and unfiltered.
+- The chart `kind` (income vs expense breakdown) falls back to income when the filtered set has no expenses at all, so a `group = income` filter does not render an empty expense chart under a non-zero income card.
+- Both month drill-down paths — filtered and not — read the same uncapped period set, so the count in the modal does not change with filter state.
+
+Every chart click lands in one modal, `components/TransactionDrilldownModal.js` — month bars, donut slices, category bars, category rows and Spending Mix segments all use it. Thin segments (a 3% slice, a narrow mix band) are not the only affordance: the donut legend, the category list rows and the mix legend rows are buttons that open the same drill-down.
 
 ---
 
