@@ -1,13 +1,8 @@
 const Sentry = require('@sentry/node');
 
-// Sentry must be initialised before any other imports.
-// @sentry/node v8+ uses OpenTelemetry internally — Sentry.init() sets up the
-// OTel SDK and registers Sentry as the exporter automatically.
+// Sentry must be initialised before any other import.
 if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
-    // Strip credentials and PII from request bodies before they leave the process.
-    // Sentry's default scrubber covers obvious keys like "password" but not "email"
-    // or "identifier", both of which the login/register/forgot-password handlers
-    // accept and which we don't want sitting in error reports.
+    // Sentry's own scrubber misses "email"/"identifier" — add any new auth-style body field here.
     const SCRUB_KEYS = new Set([
         'password', 'newpassword', 'currentpassword',
         'token', 'tokenhash', 'secret',
@@ -23,12 +18,9 @@ if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
     };
     Sentry.init({
         dsn: process.env.SENTRY_DSN,
-        // Sample 20% of transactions for performance/tracing data
         tracesSampleRate: 0.2,
         integrations: [
-            // Instruments Express routes → spans show named routes (e.g. GET /api/transaction/:id)
             Sentry.expressIntegration(),
-            // Instruments Mongoose queries → spans show collection + operation
             Sentry.mongooseIntegration(),
         ],
         beforeSend(event) {
@@ -68,9 +60,7 @@ const mongoose = require('mongoose');
 
 const app = express();
 
-// Trust the first reverse-proxy hop (nginx in prod). Without this, req.ip is
-// the proxy address and the per-IP rate limiter buckets every request under a
-// single key, defeating brute-force protection. Single hop = "1".
+// Without this req.ip is nginx's address and the per-IP rate limiter buckets everyone under one key.
 app.set('trust proxy', 1);
 
 logger.stream = {
@@ -91,7 +81,6 @@ const morganJSONFormat = () => JSON.stringify({
     user_agent: ':user-agent',
 });
 
-// middleware — lock CORS to the frontend origin only
 app.use(cors({
     origin:      FE_URL,
     credentials: true,   // required for HttpOnly cookie to be sent cross-origin
@@ -101,27 +90,20 @@ app.use(cors({
 app.use(cookieParser());
 app.use(csrfGuard);
 app.use(helmet({
-  // API-only server — no HTML is rendered, so CSP is not useful here.
-  // HSTS is handled by the nginx reverse proxy in front of this service.
+  // API-only, no HTML rendered; HSTS is handled by the nginx proxy in front.
   contentSecurityPolicy: false,
-  // Allow cross-origin fetch from the frontend domain (set by CORS above)
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 app.use(morgan(morganJSONFormat(), {
     stream: logger.stream
 }));
-// JSON-only body parser. We intentionally do NOT mount express.urlencoded():
-// cross-site <form> POSTs (the only kind of CSRF that bypasses CORS preflight)
-// would be parsed if urlencoded were enabled. With JSON-only, any CSRF attempt
-// triggers a CORS preflight that gets rejected by the origin allow-list above.
+// Do NOT mount express.urlencoded() — JSON-only is what forces cross-site form POSTs into a rejected preflight.
 app.use(express.json({ limit: '100kb' }));
 
-// swagger docs (only available if NODE_ENV is not 'production')
 if (process.env.NODE_ENV !== 'production') {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
 app.use(logMiddleware);
-// initiate router
 const authRoutes = require('./routers/auth');
 const transactionRoutes = require('./routers/transaction');
 const goalRoutes = require('./routers/goal');
@@ -155,12 +137,8 @@ app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/category', categoryRoutes);
 app.use('/api/networth', netWorthRoutes);
 app.use('/api/group-budget', groupBudgetRoutes);
-// views
-// app.get('/', (req, res, next) => {
-//     res.render('./public/index');
-// });
 
-// Sentry error handler — must come after all routes
+// Must come after all routes.
 Sentry.setupExpressErrorHandler(app);
 
 process.on('uncaughtException', (e) => {

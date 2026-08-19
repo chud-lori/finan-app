@@ -7,8 +7,7 @@ const {
     isHijriSeasonMonth,
 } = require('../helpers/seasonalRadar');
 
-// Build monthly snapshots for a span of years. `spikeMonth` (1–12) is set to
-// `spikeExpense`, every other month to `baseExpense`.
+// `spikeMonth` gets `spikeExpense`, every other month `baseExpense`.
 const buildSnapshots = (years, baseExpense, spikeMonth, spikeExpense) => {
     const out = [];
     for (const y of years) {

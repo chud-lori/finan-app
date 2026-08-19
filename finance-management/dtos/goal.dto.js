@@ -7,8 +7,7 @@ class AddGoalRequestDTO extends BaseRequestDTO {
         super(data);
         this.description = data.description;
         this.price = data.price;
-        // Optional structured purpose; anything outside the allowlist falls back
-        // to 'general' rather than erroring — the field is a hint, not user text.
+        // Outside the allowlist falls back to 'general' rather than erroring — it's a hint, not user text.
         this.kind = GOAL_KINDS.includes(data.kind) ? data.kind : 'general';
     }
 

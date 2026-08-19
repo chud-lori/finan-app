@@ -1,8 +1,7 @@
 const { expect } = require('chai');
 const { detectRecurring, merchantKey, isBlockedCategory } = require('../services/ml/recurring');
 
-// Build dated charges for one merchant: `count` charges spaced `gapDays` apart,
-// ending `endDate`, each `amount` (number or per-index array).
+// `amount` may be a number or a per-index array.
 const series = (description, category, count, gapDays, endDate, amount) => {
     const out = [];
     for (let i = count - 1; i >= 0; i--) {
@@ -123,9 +122,7 @@ describe('services/ml/recurring — detectRecurring', () => {
         });
 
         it('keeps a variable-amount monthly utility bill when its category is flagged', () => {
-            // Electricity posts monthly on a tight schedule but the amount swings
-            // with usage — CV here is ~0.20, past the 0.12 default gate yet under
-            // the looser utility ceiling. Only fires because the caller flags it.
+            // CV ~0.20 is past the 0.12 default gate but under the utility ceiling — only fires when flagged.
             const txs = series('PLN Postpaid', 'electricity', 5, 30, '2026-08-05',
                 [250000, 340000, 210000, 380000, 300000]);
             const opts = { asOf: '2026-08-10', utilityCategories: new Set(['electricity']) };
@@ -143,8 +140,7 @@ describe('services/ml/recurring — detectRecurring', () => {
         });
 
         it('does not extend the utility leeway to unflagged categories in the same run', () => {
-            // A flagged utility and an unflagged category, same ~0.20 amount swing:
-            // only the flagged one survives.
+            // Same ~0.20 swing on both: only the flagged utility survives.
             const util = series('PLN Postpaid', 'electricity', 5, 30, '2026-08-05',
                 [250000, 340000, 210000, 380000, 300000]);
             const other = series('Cleaning service', 'household', 5, 30, '2026-08-06',

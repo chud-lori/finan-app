@@ -12,47 +12,23 @@ const { BaseResponseDTO } = require('../dtos/base.dto');
 
 const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
-// ── Savings-aware snapshot maths ─────────────────────────────────────────────
-//
-// Snapshot docs store RAW monthly rollups: `expense` is every outflow, and
-// `byCategory` breaks that same expense total down per category (see
-// helpers/snapshot.js — byCategory is populated from expense txns only, so the
-// per-category totals sum exactly to `expense`).
-//
-// Since Savings & Investment Visibility, money logged in a `group === 'savings'`
-// category is a transfer to yourself, not consumption — `computeHealth` in
-// controllers/gamification.js already excludes it from its savings rate. The
-// Profile identity has to agree, or the same screen shows two different savings
-// rates for the same user.
-//
-// We subtract the savings share out of `byCategory` rather than re-reading the
-// ledger like computeHealth does: this endpoint runs on every profile load on a
-// small VPS, the 12 snapshot docs are already in hand, and the only extra cost
-// is one indexed `Category.find({user, group:'savings'})` — versus scanning up
-// to a year of raw transactions. The result is identical because byCategory is
-// an exact decomposition of `expense`.
+// Savings-group outflow is retained, not spent: subtract it out of `byCategory` so this agrees with computeHealth.
 const savingsOutflowOf = (snapshot, savingsNames) =>
     (snapshot.byCategory || []).reduce(
         (s, c) => s + (savingsNames.has((c.category || '').toLowerCase()) ? (c.total || 0) : 0),
         0,
     );
 
-// Non-savings expense for one month, i.e. what the user actually spent.
-// Clamped at 0: snapshots are advisory, so a drifted rollup must never produce
-// a negative "spend".
+// Clamped at 0: snapshots are advisory, so a drifted rollup must never show negative spend.
 const spendOf = (snapshot, savingsNames) =>
     Math.max(0, (snapshot.expense || 0) - savingsOutflowOf(snapshot, savingsNames));
 
 function deriveSpendingStyle(snapshots, savingsNames) {
     if (!snapshots.length) return 'New Saver';
 
-    // Spending style describes consumption habits — an investment transfer is
-    // not a habit to name the user after, so savings categories are dropped
-    // from both the total and the per-category ranking.
     const totalExpense = snapshots.reduce((s, sn) => s + spendOf(sn, savingsNames), 0);
     const avgMonthly   = snapshots.length ? totalExpense / snapshots.length : 0;
 
-    // Aggregate categories across all snapshot months
     const catMap = {};
     snapshots.forEach(sn => {
         (sn.byCategory || []).forEach(c => {
@@ -76,7 +52,6 @@ function deriveSpendingStyle(snapshots, savingsNames) {
     return `Balanced ${topName || 'Spender'}`;
 }
 
-// ── GET /api/profile ──────────────────────────────────────────────────────────
 
 const getProfile = async (req, res) => {
     try {
@@ -91,28 +66,15 @@ const getProfile = async (req, res) => {
 
         if (!user) return res.status(404).json(BaseResponseDTO.error('User not found'));
 
-        // Financial identity.
-        //
-        // "Expense" here means SPENDING — savings-group outflow is excluded (see
-        // spendOf above), so the identity agrees with the Financial Health score
-        // rendered on the same screen. Formula:
-        //     spend_m       = snapshot.expense − Σ byCategory[savings].total
-        //     avgSavingsRate = (Σ income − Σ spend) / Σ income
-        // Money moved into an investment category therefore raises the savings
-        // rate instead of dragging it down.
         const totalExpense = snapshots.reduce((s, sn) => s + spendOf(sn, savingsNames), 0);
         const totalIncome  = snapshots.reduce((s, sn) => s + sn.income,  0);
         const incomeMonths  = snapshots.filter(sn => sn.income > 0).length || 1;
-        // Average over months that had real spending — a month of pure investing
-        // is not a zero-spend month for averaging purposes either way, but a
-        // month with only savings outflow must not dilute the average.
+        // Average over months with real spending, so a savings-only month doesn't dilute it.
         const expenseMonths = snapshots.filter(sn => spendOf(sn, savingsNames) > 0).length || 1;
         const avgMonthlyExpense = Math.round(totalExpense / expenseMonths);
         const avgMonthlyIncome  = Math.round(totalIncome  / incomeMonths);
         const avgSavingsRate    = totalIncome > 0 ? Math.round(((totalIncome - totalExpense) / totalIncome) * 100) : 0;
 
-        // Top category is a *spending* headline — a savings category winning it
-        // would tell the user their biggest "expense" is their investing.
         const catMap = {};
         snapshots.forEach(sn => {
             (sn.byCategory || []).forEach(c => {
@@ -147,9 +109,7 @@ const getProfile = async (req, res) => {
         };
 
         res.status(200).json(BaseResponseDTO.success('Profile retrieved', {
-            // `emailVerified` defaults to true on the model for backward compat;
-            // only password accounts created after the verification flow landed
-            // can be false. Coerced so the FE badge never sees undefined.
+            // Defaults true on the model for legacy accounts; coerced so the FE never sees undefined.
             user:        { name: user.name, username: user.username, email: user.email, verified: user.emailVerified !== false },
             account: {
                 memberSince:      user.createdAt,
@@ -168,7 +128,6 @@ const getProfile = async (req, res) => {
     }
 };
 
-// ── PATCH /api/profile/identity ──────────────────────────────────────────────
 
 const updateIdentity = async (req, res) => {
     try {
@@ -208,7 +167,6 @@ const updateIdentity = async (req, res) => {
     }
 };
 
-// ── PATCH /api/profile/preferences ───────────────────────────────────────────
 
 const updatePreferences = async (req, res) => {
     try {
@@ -244,7 +202,6 @@ const updatePreferences = async (req, res) => {
     }
 };
 
-// ── GET /api/profile/export ───────────────────────────────────────────────────
 
 const exportTransactions = async (req, res) => {
     try {
@@ -272,7 +229,6 @@ const exportTransactions = async (req, res) => {
                 $lte: moment.tz(to,   'YYYY-MM', userTz).endOf('month').toDate(),
             };
         }
-        // period === 'all' → no time filter
 
         const txns = await Transaction.find(filter).sort({ time: -1 }).lean();
 
@@ -293,10 +249,7 @@ const exportTransactions = async (req, res) => {
         ];
 
         const header = ['Description', 'Amount', 'Type', 'Category', 'Date & Time', 'Timezone', 'Currency'];
-        // Neutralise CSV/spreadsheet formula injection: a cell whose text starts
-        // with = + - @ (or a control char) is executed as a formula by Excel/Sheets
-        // on open. Prefix such user-supplied cells with a single quote, then quote
-        // and escape as normal.
+        // CSV formula injection: Excel/Sheets executes a cell starting = + - @, so prefix it with a quote.
         const csvCell = (v) => {
             let s = String(v ?? '');
             if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
@@ -323,14 +276,6 @@ const exportTransactions = async (req, res) => {
     }
 };
 
-// ── POST /api/profile/reconcile-balance ───────────────────────────────────────
-//
-// Safety net: recomputes the balance from the raw transaction ledger and writes
-// it back. Use this if the stored balance ever drifts from reality (e.g. a crash
-// between a Transaction save and a Balance update in an older deploy).
-//
-// DDIA Ch.3/12 principle: transactions are the source of truth; balance is a
-// derived value that can always be recomputed from them.
 
 const reconcileBalance = async (req, res) => {
     try {

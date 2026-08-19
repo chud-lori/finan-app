@@ -27,7 +27,6 @@ describe('Goal Integration Tests', () => {
             price: 15000000
         };
 
-        // Register and login user
         await chai.request(server)
             .post('/api/auth/register')
             .send(testUser);
@@ -85,7 +84,6 @@ describe('Goal Integration Tests', () => {
 
     describe('GET /api/goal/goals', () => {
         beforeEach(async () => {
-            // Create test goals
             await Goal.create([
                 {
                     user: userId,
@@ -114,7 +112,6 @@ describe('Goal Integration Tests', () => {
         });
 
         it('should return empty array when no goals exist', async () => {
-            // Clear goals
             await Goal.deleteMany({ user: userId });
 
             const res = await chai.request(server)
@@ -138,7 +135,6 @@ describe('Goal Integration Tests', () => {
         let goalId;
 
         beforeEach(async () => {
-            // Create a test goal
             const goal = await Goal.create({
                 user: userId,
                 description: 'Buy a new laptop',
@@ -186,7 +182,6 @@ describe('Goal Integration Tests', () => {
 
     describe('Goal Business Logic Tests', () => {
         it('should calculate progress correctly with different saved amounts', async () => {
-            // Create goal
             const goal = await Goal.create({
                 user: userId,
                 description: 'Test goal',
@@ -214,7 +209,6 @@ describe('Goal Integration Tests', () => {
         });
 
         it('should handle multiple goals for same user', async () => {
-            // Create multiple goals
             const goals = await Goal.create([
                 {
                     user: userId,
@@ -228,7 +222,6 @@ describe('Goal Integration Tests', () => {
                 }
             ]);
 
-            // Test each goal
             for (const goal of goals) {
                 const res = await chai.request(server)
                     .get(`/api/goal/goal/${goal._id}`)

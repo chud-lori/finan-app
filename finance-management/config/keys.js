@@ -1,7 +1,6 @@
 require("dotenv").config();
 
-// Crash loudly at startup if any secret required for security is missing.
-// Better to fail fast here than to start with a broken/insecure configuration.
+// Crash at startup rather than run with a missing security secret.
 const REQUIRED_IN_PRODUCTION = ['SECRET_TOKEN', 'DB_URI'];
 if (process.env.NODE_ENV === 'production') {
   for (const key of REQUIRED_IN_PRODUCTION) {
@@ -25,5 +24,4 @@ module.exports = {
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   FROM_EMAIL:     process.env.FROM_EMAIL || 'noreply@lori.my.id',
 
-  // ML runs in-process via services/ml.
 };

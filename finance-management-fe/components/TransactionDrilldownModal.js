@@ -2,8 +2,7 @@
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine } from '@/components/Skeleton';
 
-// Single drill-down surface for every chart click (month bar, donut slice,
-// category bar, spending-mix segment). One modal pattern, not several.
+// One drill-down surface for every chart click — do not add a second modal pattern.
 export default function TransactionDrilldownModal({ title, subtitle, transactions, loading, emptyText, footer, onClose }) {
   const formatAmount = useFormatAmount();
   const txns = transactions ?? [];

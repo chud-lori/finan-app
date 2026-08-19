@@ -4,8 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// value: 'YYYY-MM' string or ''
-// onChange: (val: 'YYYY-MM') => void
 export default function MonthCalendarPicker({ value, onChange, placeholder = 'Select month' }) {
   const now = new Date();
   const currentYear  = now.getFullYear();
@@ -20,11 +18,9 @@ export default function MonthCalendarPicker({ value, onChange, placeholder = 'Se
   const ref     = useRef(null);
   const btnRef  = useRef(null);
 
-  // Parse selected value
   const selYear  = value ? parseInt(value.split('-')[0], 10) : null;
   const selMonth = value ? parseInt(value.split('-')[1], 10) - 1 : null; // 0-indexed
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {

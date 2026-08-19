@@ -23,7 +23,6 @@ const transportInfoRotate = new winston.transports.DailyRotateFile({
   });
 
 transportInfoRotate.on('rotate', function(oldFilename, newFilename) {
-    // do something fun
 });
 
 const logger = winston.createLogger({

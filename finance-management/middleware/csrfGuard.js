@@ -33,8 +33,7 @@ const csrfGuard = (req, res, next) => {
         return res.status(403).json({ status: 0, message: 'Invalid fetch metadata' });
     }
 
-    // Browser cookie-auth mutations in production must present either Origin or
-    // Fetch Metadata. Non-browser clients and tests often omit both.
+    // Browsers always send one of these on a cookie-auth mutation; non-browser clients often send neither.
     if (process.env.NODE_ENV === 'production' && hasSessionCookie && !origin && !fetchSite) {
         return res.status(403).json({ status: 0, message: 'Missing CSRF request metadata' });
     }

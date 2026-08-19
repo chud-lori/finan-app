@@ -1,7 +1,3 @@
-// Regressions for three data-integrity defects found in the July 2026 audit:
-//   - CSV import moved the balance for rows that failed to save
-//   - renameCategory stored a mixed-case name, breaking the lowercase invariant
-//   - deleteAccount reported "all data deleted" while leaving 7 collections behind
 const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
@@ -45,11 +41,7 @@ const balanceOf = async (email) => {
 describe('Data integrity regressions', () => {
 
     describe('CSV import — balance must only count rows that saved', () => {
-        // Rows rejected by the controller's own validation (bad amount, bad date)
-        // never reach the accumulator, so they cannot exercise this bug. The
-        // defect was specifically that `balanceDelta` was incremented *before*
-        // `save()`, so it needs a row that passes validation and then fails to
-        // persist — forced here by making save() reject for one description.
+        // Needs a row that passes validation and then fails to persist, so save() is forced to reject.
         let originalSave;
         beforeEach(() => { originalSave = Transaction.prototype.save; });
         afterEach(() => { Transaction.prototype.save = originalSave; });
@@ -82,10 +74,8 @@ describe('Data integrity regressions', () => {
             const saved  = await Transaction.find({ user: userId }).lean();
             const ledger = saved.reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0);
 
-            // The failed row must not exist...
             expect(saved.some(t => t.description === 'Broken row')).to.equal(false);
-            // ...and must not have moved the balance. Before the fix this was
-            // -927,000 against a -150,000 ledger.
+            // The failed row must not have moved the balance.
             expect(amount).to.equal(ledger);
             expect(amount).to.equal(-150000);
         });
@@ -112,8 +102,7 @@ describe('Data integrity regressions', () => {
             const stored = await Category.findById(food._id).lean();
             expect(stored.name).to.equal('food & drink');
 
-            // Posting a transaction with the same name in any case must reuse the
-            // existing category rather than upserting a second one.
+            // The same name in any case must reuse the category, not upsert a second one.
             await chai.request(server).post('/api/transaction').set('Cookie', cookie).send({
                 description: 'Dinner', amount: 40000, category: 'Food & Drink', type: 'expense',
                 time: '2026-08-02 10:00:00', currency: 'idr', transaction_timezone: 'Asia/Jakarta',
@@ -133,7 +122,6 @@ describe('Data integrity regressions', () => {
             const user = await User.findOne({ email: creds.email });
             const userId = user._id;
 
-            // Produce a document in each collection the account touches.
             await chai.request(server).post('/api/transaction').set('Cookie', cookie).send({
                 description: 'Lunch', amount: 25000, category: 'food', type: 'expense',
                 time: '2026-08-01 10:00:00', currency: 'idr', transaction_timezone: 'Asia/Jakarta',
@@ -143,14 +131,11 @@ describe('Data integrity regressions', () => {
             await Budget.create({ user: userId, yearMonth: '2026-08', amount: 5000000 });
             await GroupBudget.create({ user: userId, group: 'discretionary', amount: 2000000 });
             await Preference.create({ user: userId, currency: 'idr' });
-            // The transaction above already wrote a snapshot via applySnapshotDelta,
-            // so upsert rather than insert.
+            // The transaction above already wrote a snapshot, so upsert rather than insert.
             await Snapshot.updateOne({ user: userId, yearMonth: '2026-08' },
                 { $set: { income: 0, expense: 25000, txCount: 1, byCategory: [] } }, { upsert: true });
             await MLInsight.updateOne({ user: userId, yearMonth: '2026-08' },
                 { $set: { generatedAt: new Date(), txCountSnapshot: 1 } }, { upsert: true });
-            // Net worth holdings + trend history — a declared house and mortgage
-            // is exactly the kind of data a deletion request is about.
             await chai.request(server).put('/api/networth').set('Cookie', cookie).send({
                 assets:      [{ label: 'House', amount: 900000000, type: 'property' }],
                 liabilities: [{ label: 'Mortgage', amount: 400000000, type: 'mortgage' }],

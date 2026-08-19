@@ -4,18 +4,14 @@ const axios = require('axios');
 const moment = require('moment-timezone');
 
 const formatAmount = (amountStr) => {
-  // Remove "Rp", commas, whitespaces and convert to number
   return Number(amountStr.replace(/[Rp,\s]/g, ''));
 };
 
 const convertUtcIsoToTimezoneWithOffset = (isoUtcStr, timezoneStr) => {
-  // Parse ISO8601 string as moment in UTC
   const utcMoment = moment.tz(isoUtcStr, 'UTC');
 
-  // Convert to target timezone
   const convertedMoment = utcMoment.clone().tz(timezoneStr);
 
-  // Get offset in minutes, convert to ±HH:mm format
   const offsetMinutes = convertedMoment.utcOffset();
   const sign = offsetMinutes >= 0 ? '+' : '-';
   const absOffset = Math.abs(offsetMinutes);
@@ -48,11 +44,6 @@ const migrate = () => {
       const time = row['Timestamp'];
       const timezone = 'Asia/Jakarta';
 
-      // If converting datetime string to ISO in timezone is needed:
-      // const { datetime, offset } = convertUtcIsoToTimezoneWithOffset(
-      //   time,
-      //   timezone
-      // );
 
       const payload = {
         description: row['Title'],
@@ -60,7 +51,7 @@ const migrate = () => {
         amount,
         currency: 'idr',
         type,
-        time, // Use original or converted datetime string
+        time,
         transaction_timezone: timezone,
       };
 
@@ -85,12 +76,10 @@ const migrate = () => {
     });
 };
 
-// Example use of convertUtcIsoToTimezoneWithOffset
 const exampleUtc = '2025-09-27T11:49:49.000+00:00';
 const { datetime: jakartaTime, offset: jakartaOffset } =
   convertUtcIsoToTimezoneWithOffset(exampleUtc, 'Asia/Jakarta');
 console.log('Jakarta time:', jakartaTime);
 console.log('UTC offset:', jakartaOffset);
 
-// Uncomment below to start migration
-// migrate();
+// migrate();  // uncomment to run

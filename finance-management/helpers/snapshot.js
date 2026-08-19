@@ -1,24 +1,8 @@
-/**
- * Snapshot refresh helper.
- *
- * Recomputes the monthly aggregate for a user+month from raw transactions
- * and upserts the result into the Snapshot collection.
- *
- * Design: always recompute from source rather than incrementing, so
- * snapshots are always accurate even after bulk operations (CSV import,
- * multi-delete in future). The compute is cheap: it only reads one month
- * worth of transactions for one user.
- */
 const moment     = require('moment-timezone');
 const Transaction = require('../models/transaction.model');
 const Snapshot    = require('../models/snapshot.model');
 const logger      = require('./logger');
 
-/**
- * @param {string} userId    - User._id as string
- * @param {string} yearMonth - 'YYYY-MM'
- * @param {string} [tz]      - IANA timezone used to determine month boundaries
- */
 async function refreshSnapshot(userId, yearMonth, tz = 'UTC') {
     try {
         const start = moment.tz(yearMonth, 'YYYY-MM', tz).startOf('month').toDate();
@@ -59,58 +43,28 @@ async function refreshSnapshot(userId, yearMonth, tz = 'UTC') {
     }
 }
 
-/**
- * Incremental snapshot update for a single transaction addition.
- *
- * Faster than a full recompute — updates counters and byCategory in-place
- * using atomic $inc + arrayFilters instead of scanning all transactions.
- *
- * Only handles additions (countDelta >= 1). For deletions or bulk ops,
- * fall back to refreshSnapshot which is always correct.
- *
- * @param {string} userId
- * @param {string} yearMonth - 'YYYY-MM'
- * @param {object} opts
- * @param {number} opts.incomeDelta  - income amount to add (0 for expense)
- * @param {number} opts.expenseDelta - expense amount to add (0 for income)
- * @param {string} [opts.category]  - expense category name (required when expenseDelta > 0)
- * @param {string} [opts.tz]        - IANA timezone (fallback for refreshSnapshot)
- */
+// Additions only (countDelta >= 1); deletes and bulk ops must use refreshSnapshot.
 async function applySnapshotDelta(userId, yearMonth, { incomeDelta = 0, expenseDelta = 0, category = null, tz = 'UTC' }) {
     try {
-        // Step 1: update top-level counters atomically
         await Snapshot.findOneAndUpdate(
             { user: userId, yearMonth },
             { $inc: { income: incomeDelta, expense: expenseDelta, txCount: 1 } },
             { upsert: true }
         );
 
-        // Step 2: update byCategory array for expense additions.
-        //
-        // Presence of the category is decided by the QUERY FILTER + `matchedCount`,
-        // never by `modifiedCount`. The schema has `timestamps: true`, so Mongoose
-        // appends `$set: { updatedAt }` to every update — the document therefore
-        // always counts as modified and `modifiedCount` is 1 even when the
-        // arrayFilters identifier matched no element. Keying the fallback off
-        // `modifiedCount === 0` meant the `$push` never ran and `byCategory` stayed
-        // empty forever on the single-add path (only refreshSnapshot repopulated
-        // it), which silently emptied the profile's top-category and spending-style
-        // maths.
+        // Decide presence from the filter + `matchedCount`: `timestamps: true` makes `modifiedCount` always 1.
         if (category && expenseDelta > 0) {
             const catResult = await Snapshot.updateOne(
                 { user: userId, yearMonth, 'byCategory.category': category },
                 { $inc: { 'byCategory.$.total': expenseDelta, 'byCategory.$.count': 1 } }
             );
-            // Category not yet in array for this month — push a new entry. The
-            // `$ne` guard makes the push idempotent if a concurrent add inserted
-            // the same category between the two statements.
+            // `$ne` guard keeps the push idempotent against a concurrent add of the same category.
             if (catResult.matchedCount === 0) {
                 const pushResult = await Snapshot.updateOne(
                     { user: userId, yearMonth, 'byCategory.category': { $ne: category } },
                     { $push: { byCategory: { category, total: expenseDelta, count: 1 } } }
                 );
-                // Guard rejected the push → someone else pushed the category first;
-                // apply this delta on top of theirs so it is not silently dropped.
+                // Guard rejected the push — apply this delta on top of the winner's.
                 if (pushResult.matchedCount === 0) {
                     await Snapshot.updateOne(
                         { user: userId, yearMonth, 'byCategory.category': category },
@@ -121,7 +75,6 @@ async function applySnapshotDelta(userId, yearMonth, { incomeDelta = 0, expenseD
         }
     } catch (err) {
         logger.error(`Snapshot delta failed user=${userId} month=${yearMonth}: ${err.message}`);
-        // Fall back to full recompute so the snapshot stays accurate
         refreshSnapshot(userId, yearMonth, tz);
     }
 }

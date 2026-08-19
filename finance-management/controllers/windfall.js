@@ -10,15 +10,6 @@ const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 const LOOKBACK_DAYS = 45;  // a windfall must have landed inside this recent window
 const BASELINE_DAYS = 365; // income history used to learn what "usual" looks like
 
-/**
- * GET /api/recommendations/windfall
- *
- * Detects a recent unusually large income (THR / bonus) and returns it alongside
- * the user's active goals so the FE can offer a one-tap split. Also reports any
- * allocations already made against this windfall, so a partially-planned windfall
- * shows its remaining balance rather than re-prompting from scratch. Read-only —
- * the actual allocation happens via POST /api/recommendations/allocate.
- */
 const getWindfall = async (req, res) => {
     const userId = req.user.id;
     const tz     = validTz(req.query.tz);

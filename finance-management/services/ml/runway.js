@@ -1,18 +1,4 @@
-// Payday Runway — forward-looking "safe to spend before your next income".
-//
-// Pure math. No model, nothing leaves the box. Given the current balance, the
-// user's income history, the upcoming recurring bills (from services/ml/
-// recurring.js — nextDue + typical amount) and a discretionary daily run-rate,
-// it projects the balance forward and answers two questions:
-//
-//   1. How much is safe to spend before the next expected income lands?
-//   2. On which day would the balance go negative at this pace (the "runway")?
-//
-// It is framed as a guide, not a guarantee: income timing is inferred, bills are
-// projected, and the run-rate is a rolling average.
-//
-// Degradation: when income cadence can't be read (variable / gig income), it
-// falls back to a plain rolling-30-day runway with no payday horizon.
+// Unreadable income cadence (variable / gig) degrades to a rolling-30-day runway with no payday horizon.
 
 const DAY_MS = 86400000;
 const DEFAULT_HORIZON = 120; // days to simulate forward
@@ -33,8 +19,6 @@ const addDays = (iso, n) => {
   return d.toISOString().slice(0, 10);
 };
 
-// Map a median gap (in days) to an income cadence label. Income posts weekly,
-// biweekly, semi-monthly or monthly for most salaried users.
 const cadenceLabel = (gap) => {
   if (gap >= 6 && gap <= 8) return 'weekly';
   if (gap >= 12 && gap <= 16) return 'biweekly';
@@ -42,8 +26,6 @@ const cadenceLabel = (gap) => {
   return 'irregular';
 };
 
-// Infer the income rhythm from dated income events. Returns a cadence read plus
-// the projected next pay date, or { regular:false } when it can't be trusted.
 const detectIncomeCadence = (incomeEvents, asOf) => {
   const evs = (incomeEvents || [])
     .filter((e) => e && e.date && Number(e.amount) > 0)
@@ -57,12 +39,10 @@ const detectIncomeCadence = (incomeEvents, asOf) => {
 
   const label = cadenceLabel(medGap);
   const jitter = mad(gaps, medGap) / medGap; // schedule tightness
-  // Amounts don't have to be identical (overtime, bonuses) but must be positive.
   const amounts = evs.map((e) => Number(e.amount));
   const typicalIncome = Math.round(median(amounts));
 
   const last = evs[evs.length - 1];
-  // Roll the next-pay estimate forward until it lands strictly after `asOf`.
   let next = addDays(last.date, Math.round(medGap));
   let guard = 0;
   while (daysBetween(asOf, next) <= 0 && guard < 24) { next = addDays(next, Math.round(medGap)); guard++; }
@@ -79,23 +59,12 @@ const detectIncomeCadence = (incomeEvents, asOf) => {
   };
 };
 
-/**
- * @param {{
- *   asOf: string,                 // 'YYYY-MM-DD'
- *   balance: number,
- *   incomeEvents?: Array<{date:string, amount:number}>,
- *   bills?: Array<{merchant:string, dueDate:string, amount:number}>,  // upcoming recurring charges
- *   discretionaryDaily?: number,  // rolling everyday run-rate, recurring already netted out
- *   horizonDays?: number,
- * }} input
- */
 const computeRunway = (input = {}) => {
   const asOf = input.asOf || new Date().toISOString().slice(0, 10);
   const balance = Number(input.balance) || 0;
   const discretionaryDaily = Math.max(0, Math.round(Number(input.discretionaryDaily) || 0));
   const horizon = input.horizonDays || DEFAULT_HORIZON;
 
-  // Only bills strictly ahead of us matter for a forward projection.
   const upcomingBills = (input.bills || [])
     .filter((b) => b && b.dueDate && daysBetween(asOf, b.dueDate) >= 0 && Number(b.amount) > 0)
     .map((b) => ({ merchant: b.merchant, dueDate: b.dueDate, amount: Math.round(Number(b.amount)) }))
@@ -104,7 +73,6 @@ const computeRunway = (input = {}) => {
   const cad = detectIncomeCadence(input.incomeEvents, asOf);
   const mode = cad.regular ? 'payday' : 'rolling';
 
-  // Projected pay dates within the horizon (payday mode only).
   const payDates = [];
   if (cad.regular && cad.nextIncomeDate) {
     let d = cad.nextIncomeDate;
@@ -119,10 +87,6 @@ const computeRunway = (input = {}) => {
   const billByDate = new Map();
   for (const b of upcomingBills) billByDate.set(b.dueDate, (billByDate.get(b.dueDate) || 0) + b.amount);
 
-  // ── Forward simulation ──────────────────────────────────────────────────────
-  // Walk day by day: subtract the discretionary run-rate every day, subtract a
-  // bill on its due date, add projected income on a pay date. The first day the
-  // balance dips below zero is the runway.
   let running = balance;
   let runwayDays = null;
   let runwayDate = null;
@@ -138,7 +102,6 @@ const computeRunway = (input = {}) => {
     }
   }
 
-  // ── Safe-to-spend before next income (payday mode) ──────────────────────────
   let daysUntilIncome = null;
   let nextIncomeDate = null;
   let expectedIncome = null;
@@ -153,19 +116,16 @@ const computeRunway = (input = {}) => {
     expectedIncome = cad.typicalIncome;
     billsBeforeIncome = upcomingBills.filter((b) => daysBetween(asOf, b.dueDate) <= daysUntilIncome);
     billsTotal = billsBeforeIncome.reduce((s, b) => s + b.amount, 0);
-    // What you could spend today and still reach payday non-negative, after the
-    // bills that fall due before then and the everyday run-rate until then.
+    // Spendable today while still reaching payday non-negative after bills and run-rate.
     safeToSpend = Math.round(balance - billsTotal - discretionaryDaily * daysUntilIncome);
     safeToSpendPerDay = daysUntilIncome > 0 ? Math.round(safeToSpend / daysUntilIncome) : safeToSpend;
   } else {
-    // Rolling fallback: no payday horizon. Everything ahead in the window is
-    // "before income", and safe-to-spend is simply the runway cushion.
+    // No payday horizon: safe-to-spend is just the runway cushion.
     billsBeforeIncome = upcomingBills.slice(0, 8);
     billsTotal = billsBeforeIncome.reduce((s, b) => s + b.amount, 0);
     safeToSpend = Math.round(balance - billsTotal);
   }
 
-  // ── Status ──────────────────────────────────────────────────────────────────
   let status;
   if (mode === 'payday') {
     if (safeToSpend < 0) status = 'negative';          // won't reach payday without going under

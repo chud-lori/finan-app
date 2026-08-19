@@ -24,9 +24,7 @@ const {
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-// SHA-256 a reset/verify token before DB lookup or storage so a DB leak does
-// not yield replay-ready tokens. Pair every emit-site with a hash() at the
-// consume-site — the raw token only lives in the user's inbox.
+// Tokens are stored hashed — the raw token only ever lives in the user's inbox.
 const hashToken = (raw) => crypto.createHash('sha256').update(raw).digest('hex');
 
 const COOKIE_OPTS = {
@@ -36,8 +34,7 @@ const COOKIE_OPTS = {
     maxAge:   SESSION_TTL_MS,
 };
 
-// clearCookie must NOT include maxAge — Express merges options into a cookie() call
-// and maxAge overrides the expires:epoch that clearCookie sets, so the cookie never expires.
+// clearCookie must NOT carry maxAge — it overrides the expires:epoch and the cookie is never cleared.
 const CLEAR_COOKIE_OPTS = {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
@@ -45,7 +42,6 @@ const CLEAR_COOKIE_OPTS = {
     path:     '/',
 };
 
-/** Create a session doc + set HttpOnly cookie. Call after signing a JWT. */
 const createSession = async (userId, token, req, res) => {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
@@ -71,20 +67,17 @@ const createSession = async (userId, token, req, res) => {
 
 const registerUser = async (req, res, next) => {
   try {
-    // Validate request data
     const registerDTO = new RegisterRequestDTO(req.body);
     const validationErrors = registerDTO.validate();
     if (validationErrors.length > 0) {
       return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
     }
 
-    // Check if username exists
     const existingUserByUsername = await User.findOne({ username: registerDTO.username });
     if (existingUserByUsername) {
       return res.status(409).json(BaseResponseDTO.error("Username already exists"));
     }
 
-    // Check if email exists
     const existingUserByEmail = await User.findOne({ email: registerDTO.email });
     if (existingUserByEmail) {
       if (existingUserByEmail.googleId) {
@@ -103,14 +96,12 @@ const registerUser = async (req, res, next) => {
       emailVerified: isTest, // auto-verified in test env so login works immediately
     });
 
-    // Hash password and save user
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(newUser.password, salt);
     newUser.password = hash;
 
     const savedUser = await newUser.save();
 
-    // Create balance for new user
     const newBalance = new Balance({
       user: savedUser._id,
       amount: 0
@@ -118,13 +109,11 @@ const registerUser = async (req, res, next) => {
 
     const savedBalance = await newBalance.save();
 
-    // Seed default categories for new user (fire-and-forget)
     track(seedDefaultCategories(savedUser._id).catch(err =>
         logger.error(`Failed to seed categories for new user ${savedUser._id}: ${err.message}`)
     ));
 
-    // Send verification email (non-blocking — don't fail registration if email fails)
-    // Skipped in test environment
+    // Non-blocking: a mail failure must not fail registration.
     if (!isTest) {
       try {
         const verifyToken = crypto.randomBytes(32).toString('hex');
@@ -140,7 +129,6 @@ const registerUser = async (req, res, next) => {
       }
     }
 
-    // Return DTO response
     const responseDTO = new RegisterResponseDTO(savedUser, savedBalance);
     const message = isTest
       ? 'User created successfully'
@@ -156,21 +144,13 @@ const registerUser = async (req, res, next) => {
 const loginUser = async (req, res, next) => {
   try {
     const loginDTO = new LoginRequestDTO(req.body);
-    // Never log the raw identifier — failed-login attempts would otherwise
-    // dump attacker-supplied PII (or guessed customer emails) into rotating
-    // logs on disk. A successful login is logged with the resolved user id
-    // below where we know it's an actual account.
-
-    // Validate request data
+    // Never log the raw identifier — failed logins would funnel guessed PII into the log files.
     const validationErrors = loginDTO.validate();
     if (validationErrors.length > 0) {
       return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
     }
 
-    // Find user by email or username (auto-detect by presence of @).
-    // Anti-enumeration: a generic "Invalid credentials" is returned for both
-    // "no such user" and "wrong password" cases so callers can't distinguish
-    // them via timing or error text.
+    // Anti-enumeration: "no such user" and "wrong password" must return the same generic 401.
     const isEmail = loginDTO.identifier.includes('@');
     const user = isEmail
       ? await User.findOne({ email: loginDTO.identifier.toLowerCase() })
@@ -183,34 +163,25 @@ const loginUser = async (req, res, next) => {
 
     if (!user) return invalid();
 
-    // OAuth-only accounts: surfacing this is a deliberate UX exception — without
-    // it the user has no signal to try the Google button instead of fighting
-    // their password manager. The enumeration cost is small and only applies
-    // to users who chose to sign up via Google.
+    // Deliberate enumeration exception: without it the user has no signal to use the Google button.
     if (!user.password) {
       return res.status(400).json(BaseResponseDTO.error('This account was created with Google. Please sign in with Google.'));
     }
 
-    // Email-not-verified must remain distinguishable so the frontend can show
-    // a "resend verification" CTA. The `EMAIL_NOT_VERIFIED` code is what the
-    // frontend's apiFetch checks (see finance-management-fe/lib/api.js).
+    // Must stay distinguishable — apiFetch keys the resend-verification CTA off EMAIL_NOT_VERIFIED.
     if (user.emailVerified === false) {
       return res.status(403).json({ ...BaseResponseDTO.error('Please verify your email before signing in.'), code: 'EMAIL_NOT_VERIFIED' });
     }
 
-    // Password check — wrong password falls into the same generic bucket as
-    // "no such user" above.
     const isMatch = await bcrypt.compare(loginDTO.password, user.password);
     if (!isMatch) return invalid();
 
-    // Create JWT Payload
     const payload = {
       id: user._id,
       name: user.name,
       tv: user.tokenVersion || 0,
     };
 
-    // Sign token and create session (sets HttpOnly cookie)
     const token = jwt.sign(payload, SECRET_TOKEN, { expiresIn: '7d' });
     await createSession(user._id, token, req, res);
 
@@ -227,7 +198,6 @@ const loginUser = async (req, res, next) => {
   }
 }
 
-// checkAuth is called after authenticateJWT middleware, so req.user is already verified
 const checkAuth = (req, res) => {
     const responseDTO = new AuthCheckResponseDTO(true);
     res.status(200).json(BaseResponseDTO.success('Authorized', {
@@ -239,11 +209,9 @@ const checkAuth = (req, res) => {
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 const findOrCreateGoogleUser = async (googleId, email, name) => {
-  // 1. Existing user with this Google ID
   let user = await User.findOne({ googleId });
   if (user) return user;
 
-  // 2. Existing email → link Google ID
   user = await User.findOne({ email });
   if (user) {
     user.googleId = googleId;
@@ -251,13 +219,11 @@ const findOrCreateGoogleUser = async (googleId, email, name) => {
     return user;
   }
 
-  // 3. New user — create account + balance
   const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20);
   const username = `${baseUsername}_${Math.random().toString(36).slice(2, 6)}`;
   user = new User({ name, username, email, googleId });
   const saved = await user.save();
   await new Balance({ user: saved._id, amount: 0 }).save();
-  // Seed default categories for new Google user (fire-and-forget)
   track(seedDefaultCategories(saved._id).catch(err =>
       logger.error(`Failed to seed categories for new Google user ${saved._id}: ${err.message}`)
   ));
@@ -298,10 +264,7 @@ const deleteAccount = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Every user-scoped collection must be listed here. The response promises
-        // "all data deleted", so anything omitted is a false deletion claim —
-        // Snapshot in particular retains full monthly totals and per-category
-        // spend, which is exactly the data a deletion request is about.
+        // Every user-scoped collection must be listed here, or the "all data deleted" promise is false.
         const userScopedModels = [
             require('../models/transaction.model'),
             require('../models/category.model'),
@@ -321,9 +284,7 @@ const deleteAccount = async (req, res) => {
         await Promise.all([
             ...userScopedModels.map(Model => Model.deleteMany({ user: userId })),
             Balance.deleteOne({ user: userId }),
-            // Kill every active session — without this, the JWT cookie remains
-            // valid for up to 7 days and continues to authenticate against a
-            // ghost user record, letting controllers create orphan documents.
+            // Without this the JWT cookie stays valid for 7 days against a ghost user record.
             Session.deleteMany({ user: userId }),
         ]);
         await User.deleteOne({ _id: userId });
@@ -419,7 +380,6 @@ const getSessions = async (req, res) => {
 const revokeSession = async (req, res) => {
     try {
         const { id } = req.params;
-        // Prevent revoking your own current session via this endpoint (use logout for that)
         if (String(id) === String(req.sessionId)) {
             return res.status(400).json(BaseResponseDTO.error('Use /logout to end your current session'));
         }
@@ -441,18 +401,13 @@ const forgotPassword = async (req, res) => {
     const rawEmail = (req.body.email || '').trim().toLowerCase();
     if (!rawEmail) return res.status(400).json(BaseResponseDTO.error('Email is required'));
 
-    // Per-email throttle (1 reset email per 10 minutes per address). Layered on
-    // top of the per-IP limit at the route; without this, one IP can spray 5
-    // distinct victims' inboxes per minute. The bucket is hit regardless of
-    // whether the email exists, so this also doesn't leak account presence.
+    // Per-email throttle, checked before the existence lookup so it can't leak account presence.
     const allowed = limiter.check(`forgot-pw:${rawEmail}`, 1, 10 * 60 * 1000);
     if (!allowed) return OK();
 
     const user = await User.findOne({ email: rawEmail });
-    // Only send email for password-based accounts (not Google-only accounts)
     if (!user || !user.password) return OK();
 
-    // Invalidate previous reset tokens for this user
     await PasswordReset.deleteMany({ user: user._id });
 
     const token     = crypto.randomBytes(32).toString('hex');
@@ -491,7 +446,6 @@ const resetPassword = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(newPassword, salt);
 
-    // Update password, invalidate all sessions
     await User.findByIdAndUpdate(record.user, {
         password: hash,
         $inc: { tokenVersion: 1 },
@@ -539,7 +493,6 @@ const resendVerification = async (req, res) => {
     const user = await User.findOne({ email: rawEmail });
     if (!user || user.emailVerified !== false) return OK();
 
-    // Delete any existing token for this user and create a new one
     await EmailVerification.deleteMany({ user: user._id });
 
     const verifyToken = crypto.randomBytes(32).toString('hex');

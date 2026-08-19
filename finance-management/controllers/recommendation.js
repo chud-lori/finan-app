@@ -28,21 +28,16 @@ const getSmartRecommendations = async (req, res) => {
             Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } })
                 .select('amount type category').lean(),
             Transaction.findOne({ user: userId }).sort({ time: -1 }).select('time').lean(),
-            // All goals — the emergency-fund check must also see achieved ones,
-            // otherwise completing the goal makes the nudge reappear.
+            // Must include achieved goals, or completing the emergency fund resurrects the nudge.
             Goal.find({ user: userId }).select('description price savedAmount achieve createdAt kind').lean(),
             Balance.findOne({ user: userId }).select('amount').lean(),
             MLInsight.findOne({ user: userId }).sort({ createdAt: -1 }).select('anomalyCount').lean(),
-            // Monthly history for the Seasonal Radar look-ahead nudge.
             Snapshot.find({ user: userId }).select('yearMonth expense').lean(),
-            // Holdings — an emergency fund declared as a net-worth asset row
-            // suppresses the emergency-fund nudge just like a goal does.
             NetWorth.findOne({ user: userId }).select('assets').lean(),
         ]);
 
         const recs = [];
 
-        // ── 1. No transactions this week ──────────────────────────────────────
         if (!recentTxn || new Date(recentTxn.time) < weekAgo) {
             recs.push({
                 id:   'no_activity',
@@ -54,7 +49,6 @@ const getSmartRecommendations = async (req, res) => {
             });
         }
 
-        // ── 2. Savings rate this month ────────────────────────────────────────
         const income  = thisMonthTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
         const expense = thisMonthTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
         const savingsRate = income > 0 ? ((income - expense) / income) * 100 : null;
@@ -80,7 +74,6 @@ const getSmartRecommendations = async (req, res) => {
             });
         }
 
-        // ── 3. Category overspend vs 3-month average ─────────────────────────
         const catAvg  = {};
         const catThis = {};
         for (const t of last3MonthsTxns) {
@@ -112,13 +105,7 @@ const getSmartRecommendations = async (req, res) => {
             });
         }
 
-        // ── 4. Emergency fund nudge ───────────────────────────────────────────
-        // Suppressed by a STRUCTURED record of "I have this covered" only:
-        //   - a net-worth asset row typed emergency_fund, or
-        //   - a goal with kind='emergency' (set by the Emergency Fund tool's save;
-        //     legacy emergency-named goals were flagged once by migrateGoalKinds).
-        // Deliberately no name matching at runtime — users name things anything,
-        // so a label heuristic both misses real funds and can't be reasoned about.
+        // Suppressed only by structured state (emergency_fund asset row or kind='emergency' goal) — never match on name here.
         const hasEmergencyGoal = (netWorthDoc?.assets || []).some(a => a.type === 'emergency_fund')
             || goals.some(g => g.kind === 'emergency');
         if (!hasEmergencyGoal) {
@@ -143,10 +130,8 @@ const getSmartRecommendations = async (req, res) => {
             }
         }
 
-        // ── 5. Goal behind schedule ───────────────────────────────────────────
         for (const goal of goals.filter(g => g.achieve !== 1)) {
             const daysSince   = moment().diff(moment(goal.createdAt), 'days');
-            // Assume 90-day default window; clamp at 1.0
             const expected    = goal.price * Math.min(daysSince / 90, 1);
             const actual      = goal.savedAmount || 0;
             if (expected > 0 && actual < expected * 0.7) {
@@ -163,7 +148,6 @@ const getSmartRecommendations = async (req, res) => {
             }
         }
 
-        // ── 6. ML anomaly alert ───────────────────────────────────────────────
         if (mlCache?.anomalyCount > 0) {
             recs.push({
                 id:   'ml_anomaly',
@@ -175,12 +159,7 @@ const getSmartRecommendations = async (req, res) => {
             });
         }
 
-        // ── 7. Seasonal Radar look-ahead ──────────────────────────────────────
-        // Pre-warn before a personal seasonal spike (Ramadan/Lebaran/holidays,
-        // learned from the user's own snapshot history with an in-process Hijri
-        // prior) with a suggested set-aside. Suppressed once the user has a Goal
-        // whose description reads as a seasonal fund — the CTA creates exactly that
-        // state, so the nudge is dismissible instead of nagging forever.
+        // The CTA creates the seasonal-fund Goal that suppresses this nudge.
         const hasSeasonalGoal = goals.some(g => /ramadan|lebaran|thr|hari raya|seasonal|holiday|festive/i.test(g.description || ''));
         if (!hasSeasonalGoal) {
             const ahead = lookAhead(snapshots, { year: now.year(), month: now.month() + 1 }, 2);
@@ -189,7 +168,6 @@ const getSmartRecommendations = async (req, res) => {
                 const params = new URLSearchParams({ tool: 'goal' });
                 let body;
                 if (ahead.coldStart || ahead.suggestedSetAside == null) {
-                    // <1yr history (or Hijri-only signal): generic heads-up, no number.
                     body = `${ahead.monthName} tends to be a higher-spending stretch${ahead.label ? ` (${ahead.label})` : ''}. Setting a little aside now softens the hit.`;
                 } else {
                     params.set('desc', `${ahead.monthName} set-aside`);
@@ -207,13 +185,7 @@ const getSmartRecommendations = async (req, res) => {
             }
         }
 
-        // ── 8. Surplus sweep — earmark last month's leftover to a goal ───────
-        // If the last completed month ran a surplus (income > expense) and the
-        // user has an unachieved goal to feed, nudge them to sweep part of it in
-        // before it blends into this month's spend. Suppressed once an Allocation
-        // exists for that month — the CTA lands on the Savings Goal tool, whose
-        // one-tap "sweep here" button writes exactly that Allocation. No money was
-        // auto-moved: this is cash-flow surplus, a suggestion.
+        // The CTA's one-tap sweep writes the Allocation that suppresses this nudge; nothing is auto-moved.
         const activeGoals = goals.filter(g => g.achieve !== 1);
         if (activeGoals.length > 0) {
             const lastMonthYM = now.clone().subtract(1, 'month').format('YYYY-MM');
@@ -223,8 +195,7 @@ const getSmartRecommendations = async (req, res) => {
             ]);
             const surplus = lastSnap ? Math.round((lastSnap.income || 0) - (lastSnap.expense || 0)) : 0;
             if (lastSnap && lastSnap.income > 0 && surplus > 0 && !alreadySwept) {
-                // Amount stays in the CTA params only — the FE formats it in the
-                // user's currency; the server never embeds a currency figure.
+                // Amount stays in the CTA params — the server never embeds a formatted currency figure.
                 const params = new URLSearchParams({
                     tool:   'goal',
                     sweep:  lastMonthYM,
@@ -240,10 +211,7 @@ const getSmartRecommendations = async (req, res) => {
                 });
             }
 
-            // ── 8. Windfall (THR / bonus) not yet allocated ──────────────────
-            // A recent income far above the user's usual gets a nudge to plan a
-            // split into goals. Suppressed once any Allocation exists for that
-            // transaction — the Windfall Planner tool writes it via /allocate.
+            // Suppressed once an Allocation exists for that income — the Windfall Planner writes it.
             const windowStart   = now.clone().subtract(45, 'days').toDate();
             const baselineStart = now.clone().subtract(365, 'days').toDate();
             const [recentIncome, baselineIncome] = await Promise.all([
@@ -268,7 +236,6 @@ const getSmartRecommendations = async (req, res) => {
             }
         }
 
-        // Prioritise: warning → info → success → tip; cap at 5
         const sorted = [
             ...recs.filter(r => r.type === 'warning'),
             ...recs.filter(r => r.type === 'info'),

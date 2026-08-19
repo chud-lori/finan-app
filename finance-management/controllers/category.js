@@ -7,15 +7,9 @@ const { classifyCategories } = require('../helpers/categoryClassifier');
 const validTz   = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-/**
- * POST /api/category/classify-all
- * Classifies all unclassified (group === 'other') categories for the user.
- * Safe to call multiple times — only updates categories still marked 'other'.
- */
 const classifyAll = async (req, res) => {
     const userId = req.user.id;
     try {
-        // Skip categories the user has manually overridden
         const unclassified = await Category.find({ user: userId, group: 'other', groupOverridden: { $ne: true } })
             .select('name').lean();
 
@@ -43,11 +37,7 @@ const classifyAll = async (req, res) => {
     }
 };
 
-/**
- * GET /api/category/group-summary?tz=...&month=YYYY-MM
- * Returns spending totals grouped by semantic category group for the given month.
- * Each category entry includes _id so the frontend can address mutations by id.
- */
+// Each category entry carries _id so the FE can address mutations by id, never by name.
 const getGroupSummary = async (req, res) => {
     const userId = req.user.id;
     const tz     = validTz(req.query.tz);
@@ -70,10 +60,8 @@ const getGroupSummary = async (req, res) => {
             Category.find({ user: userId }).select('name group').lean(),
         ]);
 
-        // Map name → { group, _id } so we can include _id in the response
         const catMeta = Object.fromEntries(cats.map(c => [c.name, { group: c.group || 'other', _id: c._id }]));
 
-        // Aggregate by category name first, then by group
         const catTotals = {};
         for (const t of txns) {
             catTotals[t.category] = (catTotals[t.category] || 0) + t.amount;
@@ -108,7 +96,6 @@ const getGroupSummary = async (req, res) => {
                 month: monthParam || moment.tz(tz).format('YYYY-MM'),
                 total: Math.round(total),
                 groups,
-                // flat totals per group for quick lookup
                 ...Object.fromEntries(GROUP_KEYS.map(g => [g, Math.round(groupTotals[g])])),
             },
         });
@@ -119,11 +106,7 @@ const getGroupSummary = async (req, res) => {
 
 const VALID_GROUPS = ['essential', 'discretionary', 'savings', 'social', 'income', 'other'];
 
-/**
- * PATCH /api/category/:id/group
- * Lets the user manually override which spending group a category belongs to.
- * Sets groupOverridden = true so classifyAll will not reset it.
- */
+// groupOverridden = true is what stops classifyAll resetting the user's choice.
 const setCategoryGroup = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params;
@@ -149,10 +132,6 @@ const setCategoryGroup = async (req, res) => {
     }
 };
 
-/**
- * GET /api/category
- * List all categories for the user with full metadata.
- */
 const listCategories = async (req, res) => {
     const userId = req.user.id;
     try {
@@ -166,10 +145,6 @@ const listCategories = async (req, res) => {
     }
 };
 
-/**
- * DELETE /api/category/:id
- * Deletes a category only if no transactions reference it.
- */
 const deleteCategory = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params;
@@ -196,18 +171,10 @@ const deleteCategory = async (req, res) => {
     }
 };
 
-/**
- * PATCH /api/category/:id/rename
- * Renames a category and updates all transactions that reference the old name.
- */
 const renameCategory = async (req, res) => {
     const userId  = req.user.id;
     const { id }  = req.params;
-    // Category names are stored lowercase everywhere else (addTransaction,
-    // patchTransaction, importCsv all lowercase before writing, and the
-    // (user, name) unique index is case-sensitive). Storing a mixed-case name
-    // here would let the next transaction upsert a second, duplicate category
-    // and split the totals between them.
+    // Names are stored lowercase everywhere; a mixed-case one here upserts a duplicate and splits the totals.
     const newName = (req.body.name || '').trim().toLowerCase();
 
     if (!isValidId(id))    return res.status(400).json({ status: 0, message: 'Invalid category id' });
@@ -228,7 +195,6 @@ const renameCategory = async (req, res) => {
 
         await Category.updateOne({ _id: id }, { $set: { name: newName } });
 
-        // Keep transaction references in sync
         const oldEscaped = cat.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         await Transaction.updateMany(
             { user: userId, category: { $regex: new RegExp(`^${oldEscaped}$`, 'i') } },
@@ -241,22 +207,14 @@ const renameCategory = async (req, res) => {
     }
 };
 
-/**
- * POST /api/category/repair-types
- * Re-derives each category's type from transaction usage.
- * Useful for correcting categories that were created before the type-on-insert fix.
- * Safe to call repeatedly — only updates rows that are actually wrong.
- */
 const repairTypes = async (req, res) => {
     const userId = req.user.id;
     try {
-        // Aggregate: for each category name, count income vs expense transactions
         const usage = await Transaction.aggregate([
             { $match: { user: mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null } },
             { $group: { _id: { name: '$category', type: '$type' }, count: { $sum: 1 } } },
         ]);
 
-        // Build map: categoryName → dominant type (income wins if income count > 0)
         const typeMap = {};
         for (const row of usage) {
             const name = row._id.name?.toLowerCase();
@@ -268,7 +226,7 @@ const repairTypes = async (req, res) => {
 
         const bulkOps = [];
         for (const [name, counts] of Object.entries(typeMap)) {
-            // A category is treated as income only if ALL its transactions are income
+            // Income only if ALL its transactions are income.
             const dominant = counts.income > 0 && counts.expense === 0 ? 'income' : 'expense';
             bulkOps.push({
                 updateOne: {

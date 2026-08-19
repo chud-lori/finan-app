@@ -22,7 +22,6 @@ const sessionSchema = new mongoose.Schema({
     },
     createdAt: { type: Date, default: Date.now },
     lastSeen:  { type: Date, default: Date.now },
-    // MongoDB TTL index auto-deletes expired sessions — no cron needed
     expiresAt: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
 });
 

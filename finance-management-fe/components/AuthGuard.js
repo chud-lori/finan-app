@@ -47,7 +47,6 @@ export default function AuthGuard({ children }) {
   useEffect(() => {
     checkAuth()
       .then((data) => {
-        // Persist username for display (non-sensitive)
         if (data?.data?.user?.name) {
           try { localStorage.setItem('username', data.data.user.name); } catch {}
         }

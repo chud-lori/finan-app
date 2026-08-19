@@ -38,7 +38,6 @@ export default function HeroParticles() {
     import('three').then((THREE) => {
       const w = el.clientWidth, h = el.clientHeight;
 
-      // ── Scene setup ──────────────────────────────────────
       scene    = new THREE.Scene();
       camera   = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000);
       camera.position.z = 220;
@@ -49,7 +48,6 @@ export default function HeroParticles() {
       renderer.setClearColor(0x000000, 0);
       el.appendChild(renderer.domElement);
 
-      // ── Particles ─────────────────────────────────────────
       const positions  = new Float32Array(PARTICLE_COUNT * 3);
       const velocities = [];
 
@@ -77,7 +75,6 @@ export default function HeroParticles() {
       const points = new THREE.Points(pgeo, pmat);
       scene.add(points);
 
-      // ── Connection lines (dynamic) ─────────────────────────
       const maxPairs    = (PARTICLE_COUNT * (PARTICLE_COUNT - 1)) / 2;
       const linePositions = new Float32Array(maxPairs * 6);
 
@@ -93,12 +90,10 @@ export default function HeroParticles() {
       const lines = new THREE.LineSegments(lgeo, lmat);
       scene.add(lines);
 
-      // ── Animate ───────────────────────────────────────────
       const animate = () => {
         animId = requestAnimationFrame(animate);
         if (hidden) return;
 
-        // Move particles, bounce at world edges
         for (let i = 0; i < PARTICLE_COUNT; i++) {
           positions[i * 3]     += velocities[i].x;
           positions[i * 3 + 1] += velocities[i].y;
@@ -107,7 +102,6 @@ export default function HeroParticles() {
         }
         pgeo.attributes.position.needsUpdate = true;
 
-        // Rebuild connection segments
         let lineIdx = 0;
         for (let i = 0; i < PARTICLE_COUNT; i++) {
           for (let j = i + 1; j < PARTICLE_COUNT; j++) {
@@ -128,7 +122,6 @@ export default function HeroParticles() {
         lgeo.setDrawRange(0, lineIdx * 2);
         lgeo.attributes.position.needsUpdate = true;
 
-        // Gentle mouse parallax
         camera.position.x += (mouse.x * 18 - camera.position.x) * 0.04;
         camera.position.y += (mouse.y * 12 - camera.position.y) * 0.04;
         camera.lookAt(0, 0, 0);

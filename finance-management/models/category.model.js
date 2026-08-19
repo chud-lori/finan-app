@@ -17,7 +17,6 @@ const CategorySchema = new Schema({
         enum: ['income', 'expense'],
         default: 'expense'
     },
-    // Semantic group assigned by the AI classifier (or overridden by the user)
     group: {
         type: String,
         enum: ['essential', 'discretionary', 'savings', 'social', 'income', 'other'],
@@ -29,15 +28,12 @@ const CategorySchema = new Schema({
         min: 0,
         max: 1,
     },
-    // When true, the user has manually set this group — classifyAll will not overwrite it
+    // True = user set this group by hand; classifyAll must not overwrite it
     groupOverridden: {
         type: Boolean,
         default: false,
     },
-    // Utility bills (electricity/internet/the catch-all "bill") post monthly on a
-    // tight schedule but the amount swings with usage. The recurring detector uses
-    // this to loosen only its amount-stability gate for these categories — a
-    // structured signal, set from the seed defaults, not a guess from the name.
+    // Structured signal from the seed defaults, not a name guess: the recurring detector loosens its amount gate for these
     isUtility: {
         type: Boolean,
         default: false,
@@ -46,13 +42,11 @@ const CategorySchema = new Schema({
     timestamps: true
 });
 
-// Unique per user — different users can have categories with the same name
 CategorySchema.index({ user: 1, name: 1 }, { unique: true });
 
 const Category = mongoose.model("Category", CategorySchema);
 
-// Drop the old global unique index on name (existed before user-scoped index was added).
-// Silent no-op if the index no longer exists.
+// Drops the legacy global unique index on name; silent no-op once it is gone.
 mongoose.connection.on('connected', () => {
     Category.collection.dropIndex('name_1').catch(() => {});
 });

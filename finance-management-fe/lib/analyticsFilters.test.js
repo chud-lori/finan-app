@@ -144,8 +144,7 @@ describe('analyticsFilters — empty state and chips', () => {
   });
 });
 
-// The server buckets every row by its own `transaction_timezone`; the client
-// re-aggregation has to agree or the same month reads two different totals.
+// Client re-aggregation must bucket by `transaction_timezone` like the server, or a month reads two totals.
 describe('analyticsFilters — timezone bucketing', () => {
   // 2024-04-01T02:00Z is 2024-03-31 22:00 in New York → March.
   const inNewYork = { category: 'food', type: 'expense', amount: 150_000, time: '2024-04-01T02:00:00Z', transaction_timezone: 'America/New_York' };

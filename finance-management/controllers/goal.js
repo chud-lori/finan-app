@@ -62,9 +62,7 @@ const updateGoal = async (req, res) => {
         if (dto.description !== undefined) patch.description = dto.description.trim();
         if (dto.price !== undefined)       patch.price = dto.price;
 
-        // Auto-mark achieved when savedAmount reaches price
         if (patch.savedAmount !== undefined && patch.achieve === undefined) {
-            // We need the current price to check — fetch it
             const existing = await Goal.findOne({ _id: req.params.id, user: req.user.id }).select('price');
             if (!existing) return res.status(404).json(BaseResponseDTO.error('Goal not found'));
             const targetPrice = patch.price ?? existing.price;

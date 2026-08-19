@@ -11,8 +11,7 @@ const { BaseResponseDTO } = require('../dtos/transaction.dto');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 
-// Gather the four financial-health pillars for a user and score them.
-// Each input is null when it can't be measured, so the score renormalizes.
+// Each pillar is null when it can't be measured, so the score renormalizes.
 const computeHealth = async (userId, tz) => {
     const now = moment.tz(tz);
     const monthStart = now.clone().startOf('month').toDate();
@@ -21,7 +20,6 @@ const computeHealth = async (userId, tz) => {
     const yearMonth = now.format('YYYY-MM');
 
     const [trailingTxns, sixMoExpenseTxns, monthExpenseTxns, balanceDoc, budgetDoc, goals, savingsNames] = await Promise.all([
-        // Trailing 3 complete months → a stable savings rate.
         Transaction.find({ user: userId, time: { $gte: threeMonthsAgo, $lt: monthStart } }).select('amount type category').lean(),
         Transaction.find({ user: userId, type: 'expense', time: { $gte: sixMonthsAgo, $lt: monthStart } }).select('amount time category').lean(),
         Transaction.find({ user: userId, type: 'expense', time: { $gte: monthStart } }).select('amount category').lean(),
@@ -31,22 +29,17 @@ const computeHealth = async (userId, tz) => {
         getSavingsCategoryNames(userId),
     ]);
 
-    // Money moved into a savings-group category is a transfer to yourself, not
-    // consumption — exclude it from every "expense" figure below so the score
-    // treats investing as saved, not spent.
+    // Savings-group outflow is retained, not spent — exclude it from every expense figure below.
     const isSavings = (t) => savingsNames.has((t.category || '').toLowerCase());
 
-    // Savings rate over the trailing window. Savings-group outflow is added back
-    // as "saved": savingsRate = (income − nonSavingsExpense) / income.
+    // savingsRate = (income − nonSavingsExpense) / income.
     const trailIncome  = trailingTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
     const trailExpense = trailingTxns
         .filter(t => t.type === 'expense' && !isSavings(t))
         .reduce((s, t) => s + t.amount, 0);
     const savingsRate = trailIncome > 0 ? (trailIncome - trailExpense) / trailIncome : null;
 
-    // Emergency fund = balance ÷ average monthly (non-savings) expense over 6
-    // complete months. Investing is not a recurring cost you must cover in an
-    // emergency, so it does not shrink the runway.
+    // Investing is not a cost you must cover in an emergency, so it doesn't shrink the runway.
     const nonSavingsSixMo = sixMoExpenseTxns.filter(t => !isSavings(t));
     const monthsWithExpense = new Set(nonSavingsSixMo.map(t => moment(t.time).tz(tz).format('YYYY-MM'))).size;
     const avgMonthlyExpense = monthsWithExpense > 0
@@ -55,7 +48,6 @@ const computeHealth = async (userId, tz) => {
     const balanceAmt = balanceDoc?.amount ?? 0;
     const emergencyMonths = avgMonthlyExpense && avgMonthlyExpense > 0 ? Math.max(balanceAmt, 0) / avgMonthlyExpense : null;
 
-    // Budget pace = (non-savings) spent so far this month ÷ expected by now.
     let budgetPaceRatio = null;
     if (budgetDoc && budgetDoc.amount > 0) {
         const spentSoFar = monthExpenseTxns.filter(t => !isSavings(t)).reduce((s, t) => s + t.amount, 0);
@@ -63,7 +55,6 @@ const computeHealth = async (userId, tz) => {
         budgetPaceRatio = expectedByNow > 0 ? spentSoFar / expectedByNow : (spentSoFar > 0 ? 2 : 0);
     }
 
-    // Average progress across active goals.
     const progresses = goals.filter(g => g.price > 0).map(g => (g.savedAmount ?? 0) / g.price);
     const avgGoalProgress = progresses.length ? progresses.reduce((s, p) => s + p, 0) / progresses.length : null;
 
@@ -75,12 +66,11 @@ const getGamificationSummary = async (req, res) => {
         const userId = req.user.id;
         const tz = validTz(req.query.tz);
 
-        // ── Streak ──────────────────────────────────────────────────────────
         const user = await User.findById(userId).select('streakDays streakLastDate longestStreak');
         const today = moment.tz(tz).format('YYYY-MM-DD');
         const todayLogged = user?.streakLastDate === today;
 
-        // If last activity was not yesterday or today, streak is broken — report 0
+        // Not yesterday or today = broken streak, report 0
         const yesterday = moment.tz(today, 'YYYY-MM-DD', tz).subtract(1, 'day').format('YYYY-MM-DD');
         const streakActive = user?.streakLastDate === today || user?.streakLastDate === yesterday;
         const currentStreak = streakActive ? (user?.streakDays || 0) : 0;
@@ -91,7 +81,6 @@ const getGamificationSummary = async (req, res) => {
             todayLogged,
         };
 
-        // ── Budget Win (previous month) ──────────────────────────────────────
         const prevMonth = moment.tz(tz).subtract(1, 'month').format('YYYY-MM');
         const prevStart = moment.tz(prevMonth, 'YYYY-MM', tz).startOf('month').toDate();
         const prevEnd   = moment.tz(prevMonth, 'YYYY-MM', tz).endOf('month').toDate();
@@ -119,7 +108,6 @@ const getGamificationSummary = async (req, res) => {
             }
         }
 
-        // ── Goal Milestones ─────────────────────────────────────────────────
         const goals = await Goal.find({ user: userId }).sort({ achieve: 1, createdAt: -1 });
 
         const MILESTONES = [25, 50, 75, 100];
@@ -139,7 +127,6 @@ const getGamificationSummary = async (req, res) => {
             };
         });
 
-        // ── Financial Health Score ───────────────────────────────────────────
         const health = await computeHealth(userId, tz);
 
         return res.json(BaseResponseDTO.success('Gamification summary retrieved', {

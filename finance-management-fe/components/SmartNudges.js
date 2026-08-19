@@ -76,7 +76,7 @@ export default function SmartNudges() {
     }, 200);
     resetTimer();
   };
-  // Keep ref current so the interval always calls the latest navigate (with up-to-date recs/leaving)
+  // Keep the ref current so the interval always calls the latest navigate.
   navigateRef.current = navigate;
 
   const goTo = (i) => {

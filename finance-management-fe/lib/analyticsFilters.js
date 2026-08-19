@@ -1,5 +1,3 @@
-// Analytics filter/aggregation logic. Pure + framework-free so the URL
-// round-trip and the predicate can be unit-tested without React.
 
 export const FILTER_GROUPS = ['essential', 'discretionary', 'savings', 'social', 'income', 'other'];
 export const FILTER_TYPES  = ['income', 'expense'];
@@ -111,8 +109,7 @@ const monthFormatter = (tz) => {
   return f;
 };
 
-// 'YYYY-MM' in the transaction's own recorded zone, matching how the analytics
-// endpoint buckets. The browser zone would move a late-night charge a month.
+// Bucket in the transaction's own recorded zone — the browser's would move a late-night charge a month.
 export const monthKey = (t) => {
   const d = new Date(t?.time);
   if (Number.isNaN(d.getTime())) return '';
@@ -122,14 +119,12 @@ export const monthKey = (t) => {
   return p.year && p.month ? `${p.year}-${p.month}` : '';
 };
 
-// 0-indexed month, or -1 when the time is unusable.
 export const monthIndex = (t) => {
   const mk = monthKey(t);
   return mk ? Number(mk.slice(5, 7)) - 1 : -1;
 };
 
-// Same row shape the analytics endpoint returns, so the charts stay agnostic
-// about whether the numbers came from the server or from a local filter pass.
+// Same row shape as the analytics endpoint, so the charts don't care where the numbers came from.
 export function buildCategoryRows(txns, kind = 'expense') {
   const map = new Map();
   (txns || []).filter(t => t?.type === kind).forEach(t => {
@@ -173,8 +168,7 @@ export function buildPeriodStats(txns) {
   return { income: Math.round(income), expense: Math.round(expense) };
 }
 
-// null = do not render a number. A rate over a filtered subset is arithmetically
-// true and semantically false: "type = income" would always read 100%.
+// null = render no number: a rate over a filtered subset is meaningless ("type = income" reads 100%).
 export function savingsRateOf(stats, filters) {
   if (hasActiveFilters(filters)) return null;
   if (!stats || !(stats.income > 0)) return null;

@@ -1,19 +1,7 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-/**
- * Envelope-lite soft cap for a spending group.
- *
- * Optional and opt-in: a user who never sets a cap has zero of these rows and
- * the feature stays invisible. Layered ON TOP of the single monthly Budget —
- * it does not replace it. Caps are recurring monthly envelopes (not per
- * yearMonth): set "discretionary ≤ 2,000,000" once and it applies every month,
- * which is the whole point of an envelope. They are advisory — nothing is
- * blocked when a cap is exceeded, the UI just shows a progress bar going red.
- *
- * Only the four steerable groups are cappable (essential / discretionary /
- * savings / social); you don't cap `income` or the `other` catch-all.
- */
+// Recurring monthly envelopes, not per-yearMonth rows: one cap applies every month. Advisory only.
 const CAPPABLE_GROUPS = ['essential', 'discretionary', 'savings', 'social'];
 
 const GroupBudgetSchema = new Schema({

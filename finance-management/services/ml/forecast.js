@@ -1,14 +1,6 @@
-// Linear-regression month-end spending forecast.
-//
-// Algorithm: fit a least-squares line on (day_number → cumulative_spend) for
-// the elapsed days of the current month, then evaluate at days_in_month.
-// R² serves as a confidence proxy. Slope vs simple-average pace determines
-// trend (accelerating / steady / decelerating).
 
 const MIN_DAYS = 4;
 
-// Closed-form least squares on a list of (x, y) points.
-// Returns { slope, intercept, r2 }. Variance is computed with the mean of y.
 const fitLinear = (xs, ys) => {
   const n = xs.length;
   const sumX = xs.reduce((a, b) => a + b, 0);
@@ -28,8 +20,7 @@ const fitLinear = (xs, ys) => {
   }
   const slope = sxx === 0 ? 0 : sxy / sxx;
   const intercept = meanY - slope * meanX;
-  // R² = 1 - SSE / SST. SSE = sum((y - (slope*x + intercept))^2). When SST=0
-  // (constant y), sklearn returns r2_score=1.0 if predictions match perfectly.
+  // SST=0 (constant y): sklearn's r2_score returns 1.0 when the predictions match exactly.
   let sse = 0;
   for (let i = 0; i < n; i++) {
     const pred = slope * xs[i] + intercept;
@@ -39,10 +30,6 @@ const fitLinear = (xs, ys) => {
   return { slope, intercept, r2 };
 };
 
-/**
- * @param {{daily_totals: Array<{day:number, amount:number}>, current_day:number, days_in_month:number, budget?:number|null}} payload
- * @returns {object} forecast
- */
 const forecastMonthSpend = ({ daily_totals, current_day, days_in_month, budget = null }) => {
   if (!Array.isArray(daily_totals) || daily_totals.length === 0 || current_day < MIN_DAYS) {
     return {
@@ -52,7 +39,6 @@ const forecastMonthSpend = ({ daily_totals, current_day, days_in_month, budget =
     };
   }
 
-  // Fill gaps with 0 and accumulate
   const spendByDay = {};
   for (const d of daily_totals) spendByDay[d.day] = d.amount;
   const days = [];
@@ -75,7 +61,6 @@ const forecastMonthSpend = ({ daily_totals, current_day, days_in_month, budget =
 
   const { slope, intercept, r2 } = fitLinear(days, cumulative);
 
-  // Predict at end of month, clamp ≥ spentSoFar
   const rawForecast = slope * days_in_month + intercept;
   const forecast = Math.max(rawForecast, spentSoFar);
 

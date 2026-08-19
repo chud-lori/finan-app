@@ -1,9 +1,6 @@
 'use client';
 
-// Money Recap — a monthly in-app "wrapped". Rule-based, fully in-process on the
-// backend (no LLM). This card renders the narrative + stat tiles it returns.
-// Currency lives only on the tiles; narrative lines are currency-free, so
-// formatting stays correct in any currency.
+// Currency lives only on the tiles — narrative lines come back currency-free.
 
 import { useState, useEffect } from 'react';
 import { getRecap } from '@/lib/api';

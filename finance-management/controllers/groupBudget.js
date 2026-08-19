@@ -6,11 +6,7 @@ const GroupBudget = require('../models/groupBudget.model');
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 const CAPPABLE = GroupBudget.CAPPABLE_GROUPS;
 
-/**
- * Aggregate the user's expense for a month, bucketed by the semantic group of
- * each transaction's category. Same name→group join getGroupSummary uses, kept
- * local so the two features stay independent.
- */
+// Same name→group join as getGroupSummary, kept local so the two features stay independent.
 const spendByGroup = async (userId, tz, monthParam) => {
     let start, end;
     if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
@@ -37,12 +33,6 @@ const spendByGroup = async (userId, tz, monthParam) => {
     return totals;
 };
 
-/**
- * GET /api/group-budget?tz=...&month=YYYY-MM
- * Returns every cappable group with its cap (if set), current-month spend, and
- * progress. Groups without a cap report `cap: null` so the FE can offer to set
- * one without cluttering the view for users who have opted out entirely.
- */
 const getGroupBudgets = async (req, res) => {
     const userId = req.user.id;
     const tz     = validTz(req.query.tz);
@@ -83,11 +73,7 @@ const getGroupBudgets = async (req, res) => {
     }
 };
 
-/**
- * PUT /api/group-budget/:group   body: { amount }
- * Set (upsert) or clear a soft cap for one group. amount <= 0 (or null) clears
- * the cap by deleting the row, so "no cap" and "cap of 0" are never confused.
- */
+// amount <= 0 or null deletes the row, so "no cap" and "cap of 0" stay distinct.
 const setGroupBudget = async (req, res) => {
     const userId = req.user.id;
     const { group } = req.params;
@@ -97,7 +83,6 @@ const setGroupBudget = async (req, res) => {
     }
 
     const raw = req.body.amount;
-    // Clearing the cap: null, missing, or a non-positive number removes the row.
     if (raw == null || raw === '' || Number(raw) <= 0) {
         await GroupBudget.deleteOne({ user: userId, group });
         return res.json({ status: 1, data: { group, cap: null } });

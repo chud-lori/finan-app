@@ -14,8 +14,7 @@ const PieTooltip = ({ active, payload }) => {
   );
 };
 
-// Radii are percentages, not pixels — a fixed 260px chart overflows its card on a
-// 320-360px phone and gives the whole page a horizontal scrollbar.
+// Radii are percentages, not pixels — a fixed 260px chart overflows its card on a phone and scrolls the page sideways.
 export default function DonutChart({ data, colors, onSliceClick }) {
   const handleClick = onSliceClick
     ? (d) => { const name = d?.name ?? d?.payload?.name; if (name) onSliceClick(name); }

@@ -10,7 +10,6 @@ import MoneyRecap from '@/components/MoneyRecap';
 import PaydayRunway from '@/components/PaydayRunway';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
@@ -51,14 +50,12 @@ function RefreshButton({ generatedAt, onRefresh, loading, stale }) {
   );
 }
 
-// ── Smart Insights Feed ───────────────────────────────────────────────────────
 
 function buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount) {
   const insights = [];
   const daysElapsed = new Date().getDate();
 
-  // Recurring: a missing bill is the highest-signal nudge; otherwise surface the
-  // subscription total so it's visible at a glance.
+  // A missing bill is the highest-signal nudge; otherwise surface the subscription total.
   if (recurring?.alerts?.length) {
     const miss = recurring.alerts.find(a => a.type === 'missing');
     if (miss) {
@@ -81,7 +78,6 @@ function buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount) {
     }
   }
 
-  // ML forecast insight
   if (ml?.forecast?.available) {
     const f = ml.forecast;
     if (f.over_budget) {
@@ -95,9 +91,7 @@ function buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount) {
     }
   }
 
-  // ML anomaly insights — if ML is available (even with 0 results) don't fall
-  // through to the rule-based count; the two use different detection logic and
-  // showing a rule-based count while the section displays ML results is misleading.
+  // If ML is available (even with 0 results) never fall through to the rule-based count — different logic.
   if (ml && !ml.unavailable) {
     if (ml.anomaly_count > 0) {
       insights.push({ level: 'warn', icon: '🚨', text: `${ml.anomaly_count} unusual transaction${ml.anomaly_count > 1 ? 's' : ''} detected this month — statistically outside your normal pattern`, anchor: 'spending-alerts', cta: 'See transactions' });
@@ -108,28 +102,18 @@ function buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount) {
 
   if (explain?.topCategories?.length) {
     explain.topCategories.forEach(c => {
-      // `volatility` is derived server-side from 6 months of history:
-      //   fixed    → committed cost (rent, insurance) the user can't flex month to month
-      //   flexible → discretionary (food, shopping) — the actionable lever
-      //   semi / unknown → treated like flexible, with the same thresholds
-      // `delta` is already pace-corrected server-side (run-rate vs the previous
-      // month pro-rated to the elapsed days), so it no longer reads "down" just
-      // because the month is young.
+      // `delta` is already pace-corrected server-side, so a young month doesn't read as "down".
       const fixed = c.volatility === 'fixed';
       const d = c.delta;
 
-      // Concentration. A large share of a fixed cost is normal and not a lever,
-      // so it's stated neutrally rather than warned about.
+      // A large share of a fixed cost is normal, so state it neutrally rather than warn.
       if (!fixed && c.pct >= 35) {
         insights.push({ level: 'warn', icon: '⚠️', text: `You spent ${c.pct}% on ${cap(c.category)} — very high dependency on a single category`, anchor: 'where-its-going', cta: 'See breakdown' });
       } else if (fixed && c.pct >= 40) {
         insights.push({ level: 'info', icon: '🏠', text: `${cap(c.category)} is ${c.pct}% of your spending — your fixed monthly base`, anchor: 'where-its-going', cta: 'See breakdown' });
       }
 
-      // Change vs last month. A fixed cost rarely moves, so any change is a
-      // reportable event (moved, renewed) — informational, low threshold. A
-      // flexible cost swings normally, so it needs a bigger move and is framed
-      // as something the user can act on.
+      // A fixed cost rarely moves so any change is reportable; a flexible one needs a bigger move.
       if (d !== null) {
         if (fixed) {
           if (Math.abs(d) >= 10) {
@@ -236,7 +220,6 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
   );
 }
 
-// ── Month Forecast card (ML — Linear Regression) ──────────────────────────────
 
 const TREND_CONFIG = {
   accelerating: { label: 'Spending up',   color: 'text-rose-600',    bg: 'bg-rose-50 dark:bg-rose-950/30',    icon: '↑' },
@@ -338,7 +321,6 @@ function ForecastCard({ data }) {
   );
 }
 
-// ── Time-to-Zero card ─────────────────────────────────────────────────────────
 
 const TTZ_CONFIG = {
   safe:         { label: 'Safe',            bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-400', text: 'text-emerald-700 dark:text-emerald-400' },
@@ -396,7 +378,6 @@ function TimeToZeroCard({ data }) {
   );
 }
 
-// ── Explainability card ───────────────────────────────────────────────────────
 
 function ExplainCard({ data }) {
   const formatAmount = useFormatAmount();
@@ -440,7 +421,6 @@ function ExplainCard({ data }) {
   );
 }
 
-// ── Spending Alerts (ML — Isolation Forest) ───────────────────────────────────
 
 const SEV_CONFIG = {
   high:   { badge: 'bg-rose-100 text-rose-700',   bar: 'bg-rose-400'   },
@@ -501,7 +481,7 @@ function MLAnomalyList({ data }) {
   );
 }
 
-// Fallback: existing rule-based anomaly list (shown if ML is unavailable)
+// Fallback shown only when ML is unavailable.
 function RuleBasedAnomalyList({ data }) {
   const formatAmount = useFormatAmount();
   if (data.count === 0) {
@@ -536,7 +516,6 @@ function RuleBasedAnomalyList({ data }) {
   );
 }
 
-// ── Spending by Category Group ────────────────────────────────────────────────
 
 const GROUP_META = {
   essential:     { label: 'Essential',     icon: '🏠', bar: 'bg-teal-500',    badge: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400',    desc: 'Rent, food, utilities, transport, health' },
@@ -669,7 +648,6 @@ function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, mov
   );
 }
 
-// ── Spending Mix (committed vs flexible) ──────────────────────────────────────
 
 function SpendingMixBar({ data, onSegmentClick }) {
   const formatAmount = useFormatAmount();
@@ -736,11 +714,6 @@ function SpendingMixBar({ data, onSegmentClick }) {
   );
 }
 
-// ── Group Budgets (envelope-lite soft caps) ───────────────────────────────────
-// Opt-in soft caps per spending group, layered on top of the single monthly
-// budget. Reuses GROUP_META (colours/labels) and the Spending Mix bar look. When
-// the user has set no caps it stays a single unobtrusive line so it never
-// clutters the core tracker.
 
 const CAP_GROUPS = ['essential', 'discretionary', 'savings', 'social'];
 
@@ -767,7 +740,6 @@ function GroupBudgetCaps({ data, onSave, savingGroup }) {
     await onSave(group, amount);
   };
 
-  // Collapsed opt-in state — no caps set and not editing.
   if (!hasCaps && !editing) {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
@@ -868,7 +840,6 @@ function GroupBudgetCaps({ data, onSave, savingGroup }) {
   );
 }
 
-// ── Financial Health Score ────────────────────────────────────────────────────
 const HEALTH_BANDS = {
   excellent:       { label: 'Excellent',      ring: '#10b981', chip: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' },
   healthy:         { label: 'Healthy',         ring: '#14b8a6', chip: 'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-400' },
@@ -945,7 +916,6 @@ function HealthScoreCard({ health }) {
   );
 }
 
-// ── Recurring & Subscriptions ─────────────────────────────────────────────────
 
 function RecurringCard({ data }) {
   const formatAmount = useFormatAmount();
@@ -1042,7 +1012,6 @@ function RecurringCard({ data }) {
   );
 }
 
-// ── Section wrapper ───────────────────────────────────────────────────────────
 
 function SectionSkeleton() {
   return (
@@ -1079,7 +1048,6 @@ function Section({ id, title, subtitle, tooltip, tag, headerRight, children, loa
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function InsightsPage() {
   const [ttz,        setTtz]        = useState(null);
@@ -1104,7 +1072,6 @@ export default function InsightsPage() {
   const [mixTxns,      setMixTxns]      = useState([]);
   const [mixLoading,   setMixLoading]   = useState(false);
 
-  // Spending Mix segment → the transactions behind it, this month.
   const openMixDrilldown = async (segment) => {
     setMixDrill(segment);
     setMixTxns([]);
@@ -1151,27 +1118,21 @@ export default function InsightsPage() {
     load('explain',   getExplainability, setExplain);
     load('recurring', getRecurring,      setRecurring);
     load('anomaly',   getAnomalies,      setAnomaly);
-    // Financial Health lives on this page (a persistent summary), separate from
-    // the gamification banner's transient celebrations.
     getGamificationSummary().then(res => setHealth(res.data?.health)).catch(() => {});
 
-    // Kick off background classification then fetch group summary
     classifyAllCategories().catch(() => {});
     (async () => {
       try {
         const res = await getGroupSummary();
         setGroups(res.data);
       } catch {
-        // non-fatal — section just won't show
       } finally {
         setGroupsLoading(false);
       }
     })();
 
-    // Group budgets (soft caps) — non-fatal; card hides on failure
     getGroupBudgets().then(res => setGroupBudgets(res.data)).catch(() => {});
 
-    // ML insights — apply metadata separately
     (async () => {
       try {
         const res = await getMLInsights();
@@ -1204,7 +1165,7 @@ export default function InsightsPage() {
       const res = await getGroupSummary();
       setGroups(res.data);
     } catch {
-      // silent — group stays as-is on failure
+      // silent
     } finally {
       setMovingCategory(null);
     }
@@ -1217,7 +1178,7 @@ export default function InsightsPage() {
       const res = await getGroupBudgets();
       setGroupBudgets(res.data);
     } catch {
-      // silent — cap stays as-is on failure
+      // silent
     } finally {
       setSavingGroupBudget(null);
     }
@@ -1236,7 +1197,6 @@ export default function InsightsPage() {
   };
 
   const feedLoading = loading.ttz || loading.explain || loading.anomaly || loading.ml;
-  // mlAvailable: we have data and it's not the empty "no data at all" shell
   const mlAvailable = ml && !mlUnavailable;
 
   const mlHeaderRight = (

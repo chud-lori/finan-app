@@ -19,9 +19,7 @@ describe('pieData — buildPieData', () => {
     expect(data[12].other).to.equal(true);
   });
 
-  // The bug: the legend divided by the total of ALL categories while recharts
-  // normalises the arc over the slices it was handed, so with 13+ categories the
-  // label undercounted the arc and the legend summed to less than 100%.
+  // Recharts normalises the arc over the slices handed to it, so dividing by the grand total undercounts.
   it('labels each slice with its share of the drawn ring, which is total spending', () => {
     const categories = cats(20, 50);
     const grandTotal = categories.reduce((s, c) => s + c.total, 0);

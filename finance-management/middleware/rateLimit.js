@@ -1,23 +1,7 @@
-/**
- * In-process sliding-window rate limiter. No external dependencies.
- *
- * Suitable for single-server deployments.
- * Scaling path: replace with an express-rate-limit + Redis store when
- * running multiple instances.
- *
- * Usage:
- *   const limiter = require('./rateLimit');
- *
- *   // 10 req/min per IP (unauthenticated, e.g. login/register)
- *   router.post('/login', limiter.byIp(10), loginUser);
- *
- *   // 60 req/min per authenticated user
- *   router.get('/analytics', authenticateJWT, limiter.byUser(60), getAnalytics);
- */
+// In-process sliding window — per-instance only, so it does not hold across multiple servers.
 
 const WINDOW_MS = 60 * 1000; // 1 minute — default window for byIp/byUser
-// Sweep retention must cover the longest custom window callers might use via check().
-// Currently the longest is 10 min (forgot-password per-email).
+// Retention must exceed the longest window any check() caller uses (currently 10 min).
 const SWEEP_RETENTION_MS = 60 * 60 * 1000; // 1 hour — generous headroom
 
 class RateLimiter {
@@ -36,8 +20,7 @@ class RateLimiter {
     }
 
     _middleware(max, keyFn) {
-        // Rate limiting is a no-op in test environment so integration tests
-        // can run repeated requests without tripping the limiter.
+        // No-op in test env so integration tests can hammer endpoints.
         if (process.env.NODE_ENV === 'test') {
             return (_req, _res, next) => next();
         }
@@ -54,27 +37,15 @@ class RateLimiter {
         };
     }
 
-    /** Rate limit by IP address. Use for unauthenticated endpoints. */
     byIp(max) {
         return this._middleware(max, (req) => `ip:${req.ip}`);
     }
 
-    /** Rate limit by authenticated user ID. Use after authenticateJWT. */
     byUser(max) {
         return this._middleware(max, (req) => `user:${req.user?.id ?? req.ip}`);
     }
 
-    /**
-     * Check (and increment) an arbitrary key against a per-window limit.
-     * Returns true if the request is allowed, false if it has exceeded `max`.
-     * Used inline by handlers that need to rate-limit on a body field
-     * (e.g. forgot-password by email address, which the middleware can't see
-     * until express.json() has parsed the body). No-op in test env.
-     *
-     * @param {string} key Caller-chosen bucket key, e.g. `forgot-pw:${email}`
-     * @param {number} max Max hits per window
-     * @param {number} [windowMs] Window length in ms. Defaults to the global 1-minute window.
-     */
+    // For limiting on a parsed body field, which middleware can't see. True = allowed.
     check(key, max, windowMs) {
         if (process.env.NODE_ENV === 'test') return true;
         return this._hit(key, windowMs) <= max;

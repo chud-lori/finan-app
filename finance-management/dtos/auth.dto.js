@@ -1,8 +1,5 @@
 const { BaseRequestDTO, BaseResponseDTO } = require('./base.dto');
 
-/**
- * Register Request DTO
- */
 class RegisterRequestDTO extends BaseRequestDTO {
     constructor(data) {
         super(data);
@@ -32,13 +29,10 @@ class RegisterRequestDTO extends BaseRequestDTO {
     }
 }
 
-/**
- * Login Request DTO
- */
 class LoginRequestDTO extends BaseRequestDTO {
     constructor(data) {
         super(data);
-        // Accept 'identifier' (new) or 'username' (legacy) interchangeably
+        // 'username' is the legacy field name, still accepted.
         this.identifier = data.identifier || data.username;
         this.password = data.password;
     }
@@ -55,9 +49,6 @@ class LoginRequestDTO extends BaseRequestDTO {
     }
 }
 
-/**
- * User Response DTO
- */
 class UserResponseDTO {
     constructor(user) {
         this.id = user._id;
@@ -68,9 +59,6 @@ class UserResponseDTO {
     }
 }
 
-/**
- * Balance Response DTO
- */
 class BalanceResponseDTO {
     constructor(balance) {
         this.id = balance._id;
@@ -79,9 +67,6 @@ class BalanceResponseDTO {
     }
 }
 
-/**
- * Register Response DTO
- */
 class RegisterResponseDTO {
     constructor(user, balance) {
         this.user = new UserResponseDTO(user);
@@ -89,9 +74,6 @@ class RegisterResponseDTO {
     }
 }
 
-/**
- * Login Response DTO
- */
 class LoginResponseDTO {
     constructor(token, user) {
         this.token = token;
@@ -103,9 +85,6 @@ class LoginResponseDTO {
     }
 }
 
-/**
- * Auth Check Response DTO
- */
 class AuthCheckResponseDTO {
     constructor(isAuthorized) {
         this.authorized = isAuthorized;

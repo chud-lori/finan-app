@@ -1,6 +1,3 @@
-// Guards for two low-severity injection surfaces:
-//   - CSV/spreadsheet formula injection in the transaction export
-//   - NoSQL operator-object query params producing 500s
 const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
@@ -30,8 +27,7 @@ describe('Input hardening', () => {
 
             expect(res).to.have.status(200);
             const body = res.text;
-            // The dangerous cell must be neutralised with a leading single quote,
-            // and the raw "=HYPERLINK" must never begin a cell.
+            // Must be neutralised with a leading single quote — no cell may begin with "=HYPERLINK".
             expect(body).to.contain('"\'=HYPERLINK');
             expect(body).to.not.contain(',=HYPERLINK');
             expect(body).to.not.match(/^=HYPERLINK/m);

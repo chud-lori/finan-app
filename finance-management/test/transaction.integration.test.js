@@ -33,7 +33,6 @@ describe('Transaction Integration Tests', () => {
             currency: 'IDR'
         };
 
-        // Register and login user
         await chai.request(server)
             .post('/api/auth/register')
             .send(testUser);
@@ -48,7 +47,6 @@ describe('Transaction Integration Tests', () => {
         authCookie = loginRes.headers['set-cookie'];
         userId = loginRes.body.data.user.id;
 
-        // Seed categories for this user
         await Category.create({ user: userId, name: 'Food & Dining' });
         await Category.create({ user: userId, name: 'Transportation' });
         await Category.create({ user: userId, name: 'Entertainment' });
@@ -140,7 +138,6 @@ describe('Transaction Integration Tests', () => {
 
     describe('GET /api/transaction/expense', () => {
         beforeEach(async () => {
-            // Create some test transactions
             await Transaction.create([
                 { user: userId, description: 'Food', amount: 50000, category: 'Food & Dining', type: 'expense', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
                 { user: userId, description: 'Transport', amount: 25000, category: 'Transportation', type: 'expense', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
@@ -200,7 +197,6 @@ describe('Transaction Integration Tests', () => {
 
     describe('POST /api/transaction/category', () => {
         it('should seed categories successfully', async () => {
-            // Clear existing categories
             await Category.deleteMany({});
 
             const res = await chai.request(server)
@@ -224,7 +220,6 @@ describe('Transaction Integration Tests', () => {
 
     describe('GET /api/transaction/{type}', () => {
         beforeEach(async () => {
-            // Create test transactions
             await Transaction.create([
                 { user: userId, description: 'Food', amount: 50000, category: 'Food & Dining', type: 'expense', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' },
                 { user: userId, description: 'Salary', amount: 1000000, category: 'Income', type: 'income', currency: 'IDR', time: new Date(), transaction_timezone: 'Asia/Jakarta' }
@@ -287,7 +282,6 @@ describe('Transaction Integration Tests', () => {
         let transactionId;
 
         beforeEach(async () => {
-            // Create a test transaction
             const transaction = await Transaction.create({
                 user: userId,
                 description: 'Test transaction',
@@ -336,7 +330,6 @@ describe('Transaction Integration Tests', () => {
 
     describe('GET /api/transaction/recommendation/{monthly}/{spend}', () => {
         beforeEach(async () => {
-            // Create some recent expense transactions
             const weekAgo = new Date();
             weekAgo.setDate(weekAgo.getDate() - 7);
 

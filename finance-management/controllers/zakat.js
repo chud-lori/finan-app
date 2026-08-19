@@ -6,18 +6,6 @@ const { estimateZakat } = require('../helpers/zakat');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 
-/**
- * GET /api/recommendations/zakat
- *
- * Estimates zakat-maal (2.5% of the zakatable base derived from NetWorth
- * holdings) and tracks this year's giving in `social`-group categories
- * (zakat / donation / sharing) against it. The output is an ESTIMATE — nisab and
- * haul nuance are not modelled — which the FE labels clearly. Optional and
- * dismissible, including for non-Muslim users.
- *
- * Query: `?tz=IANA` for the year boundary; `?nisab=<amount>` to apply an explicit
- * nisab threshold (below it, nothing is due).
- */
 const getZakat = async (req, res) => {
     const userId   = req.user.id;
     const tz       = validTz(req.query.tz);
@@ -33,9 +21,7 @@ const getZakat = async (req, res) => {
             Category.find({ user: userId, group: 'social' }).select('name').lean(),
         ]);
 
-        // Giving YTD = this year's expense transactions in social-group categories.
-        // Category and transaction category names are both stored lowercase, so an
-        // exact `$in` match is correct and indexed-friendly.
+        // Category names are stored lowercase on both sides, so an exact `$in` match is correct.
         const socialCategoryNames = socialCats.map(c => c.name);
         let givingYtd = 0;
         if (socialCategoryNames.length) {

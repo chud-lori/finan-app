@@ -25,7 +25,6 @@ export default function SwipeToDelete({ onDelete, disabled, children }) {
     const dx = e.touches[0].clientX - startX.current;
     const dy = e.touches[0].clientY - startY.current;
 
-    // Lock axis on first meaningful movement
     if (axis.current === undefined && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
       axis.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
     }
@@ -34,11 +33,9 @@ export default function SwipeToDelete({ onDelete, disabled, children }) {
     e.preventDefault(); // prevent page scroll while swiping row
 
     if (open) {
-      // Already open: swiping right closes
       const raw = REVEAL - dx;
       setOffset(Math.max(0, Math.min(REVEAL, raw)));
     } else {
-      // Swiping left opens; don't allow swiping right
       const pull = Math.max(0, -dx);
       setOffset(Math.min(pull, REVEAL + 12)); // slight overscroll feel
     }

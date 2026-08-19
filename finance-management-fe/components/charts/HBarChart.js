@@ -21,8 +21,7 @@ const HBarTooltip = ({ active, payload, label }) => {
   );
 };
 
-// Axis labels ellipsis at a fixed budget so they can't run under the bars; the
-// tooltip and the click handler both carry the full category name.
+// Axis labels ellipsis so they can't run under the bars; tooltip and click carry the full name.
 const truncTick = (v) => (typeof v === 'string' && v.length > 16 ? `${v.slice(0, 15)}…` : v);
 
 export default function HBarChart({ data, color = '#6366f1', onBarClick }) {

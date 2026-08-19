@@ -16,8 +16,7 @@ import {
 const MONTH_LABELS = ['January','February','March','April','May','June',
                       'July','August','September','October','November','December'];
 
-// Alpha ramp on the app's expense rose. Inline colour (not a Tailwind class) so
-// it has to read on both themes: low alpha stays near the card in either.
+// Inline colour, not a Tailwind class, so the low-alpha end reads on both themes.
 const LEVEL_BG = [null,
   'rgba(244, 63, 94, 0.18)',
   'rgba(244, 63, 94, 0.38)',
@@ -98,8 +97,7 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
     );
   }
 
-  // No savings list means no honest savings-excluded total, so show nothing
-  // rather than a confidently wrong heatmap.
+  // No savings list means no honest total — show nothing rather than a confidently wrong heatmap.
   if (error) {
     return (
       <div className="space-y-3">

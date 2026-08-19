@@ -12,7 +12,6 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    // Log to console in dev; in production you'd send to Sentry etc.
     console.error('[ErrorBoundary]', error, info);
   }
 

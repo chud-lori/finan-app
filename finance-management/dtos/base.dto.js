@@ -1,6 +1,3 @@
-/**
- * Base response DTO structure
- */
 class BaseResponseDTO {
     constructor(status, message, data = null, error = null) {
         this.status = status;
@@ -18,9 +15,6 @@ class BaseResponseDTO {
     }
 }
 
-/**
- * Base request DTO for validation
- */
 class BaseRequestDTO {
     constructor(data) {
         Object.assign(this, data);
@@ -28,7 +22,6 @@ class BaseRequestDTO {
 
     validate() {
         const errors = [];
-        // Override in child classes for specific validation
         return errors;
     }
 }

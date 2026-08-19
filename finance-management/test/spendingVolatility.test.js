@@ -34,8 +34,7 @@ describe('helpers/spendingVolatility — classifyVolatility', () => {
         });
 
         it('does NOT call a steady-total but many-transaction category fixed', () => {
-            // Same total each month but reached via ~30 transactions — that is a
-            // daily habit that happens to sum evenly, not a committed charge.
+            // Same total each month but via ~30 transactions — a daily habit, not a committed charge.
             const dailyCoffee = classifyVolatility([600000, 600000, 600000, 600000], 30);
             expect(dailyCoffee.volatility).to.not.equal('fixed');
         });
@@ -51,8 +50,7 @@ describe('helpers/spendingVolatility — classifyVolatility', () => {
 
     describe('semi', () => {
         it('classifies a moderately variable bill as semi', () => {
-            // Electricity: varies with usage but within a band — CV lands between
-            // the fixed (0.15) and flexible (0.35) cutoffs.
+            // Varies with usage but within a band — CV lands between the 0.15 and 0.35 cutoffs.
             const electricity = classifyVolatility([250000, 350000, 300000, 400000, 280000, 320000], 1);
             expect(electricity.volatility).to.equal('semi');
             expect(electricity.cv).to.be.within(0.15, 0.35);

@@ -26,7 +26,6 @@ describe('End-to-End Integration Tests', () => {
 
     describe('Complete User Journey', () => {
         it('should complete full user journey: register -> login -> create transactions -> manage goals', async () => {
-            // Step 1: Register user
             const registerRes = await chai.request(server)
                 .post('/api/auth/register')
                 .send(testUser);
@@ -35,7 +34,6 @@ describe('End-to-End Integration Tests', () => {
             expect(registerRes.body.data.user.name).to.equal(testUser.name);
             expect(registerRes.body.data.balance.amount).to.equal(0);
 
-            // Step 2: Login user
             const loginRes = await chai.request(server)
                 .post('/api/auth/login')
                 .send({
@@ -47,14 +45,12 @@ describe('End-to-End Integration Tests', () => {
             authCookie = loginRes.headers['set-cookie'];
             userId = loginRes.body.data.user.id;
 
-            // Step 3: Seed categories
             const seedRes = await chai.request(server)
                 .post('/api/transaction/category')
                 .set('Cookie', authCookie);
 
             expect(seedRes).to.have.status(200);
 
-            // Step 4: Create income transaction
             const incomeTransaction = {
                 description: 'Salary',
                 amount: 5000000,
@@ -73,7 +69,6 @@ describe('End-to-End Integration Tests', () => {
             expect(incomeRes).to.have.status(201);
             expect(incomeRes.body.data.balance.amount).to.equal(5000000);
 
-            // Step 5: Create expense transactions
             const expenseTransactions = [
                 {
                     description: 'Grocery shopping',
@@ -104,11 +99,9 @@ describe('End-to-End Integration Tests', () => {
                 expect(res).to.have.status(201);
             }
 
-            // Step 6: Check final balance
             const finalBalance = await Balance.findOne({ user: userId });
             expect(finalBalance.amount).to.equal(4650000); // 5M - 250K - 100K
 
-            // Step 7: Get all transactions
             const transactionsRes = await chai.request(server)
                 .get('/api/transaction')
                 .set('Cookie', authCookie);
@@ -117,7 +110,6 @@ describe('End-to-End Integration Tests', () => {
             expect(transactionsRes.body.data.transactions).to.have.length(3);
             expect(transactionsRes.body.data.balance.amount).to.equal(4650000);
 
-            // Step 8: Get expense summary
             const expenseRes = await chai.request(server)
                 .get('/api/transaction/expense')
                 .set('Cookie', authCookie);
@@ -125,7 +117,6 @@ describe('End-to-End Integration Tests', () => {
             expect(expenseRes).to.have.status(200);
             expect(expenseRes.body.data.totalExpense).to.equal(350000);
 
-            // Step 9: Create a financial goal
             const goal = {
                 description: 'Buy a new laptop',
                 price: 10000000
@@ -139,7 +130,6 @@ describe('End-to-End Integration Tests', () => {
             expect(goalRes).to.have.status(201);
             expect(goalRes.body.data.goal.description).to.equal(goal.description);
 
-            // Step 10: Get goal detail with manual progress fields
             const goalDetailRes = await chai.request(server)
                 .get(`/api/goal/goal/${goalRes.body.data.goal.id}`)
                 .set('Cookie', authCookie);
@@ -149,7 +139,6 @@ describe('End-to-End Integration Tests', () => {
             expect(goalDetailRes.body.data.goal.savedAmount).to.equal(0);
             expect(goalDetailRes.body.data.goal.progress).to.equal(0);
 
-            // Step 11: Get budget recommendation
             const recommendationRes = await chai.request(server)
                 .get('/api/transaction/recommendation/20000000/500000')
                 .set('Cookie', authCookie);
@@ -157,7 +146,6 @@ describe('End-to-End Integration Tests', () => {
             expect(recommendationRes).to.have.status(200);
             expect(recommendationRes.body.data).to.have.property('resultRecommendation');
 
-            // Step 12: Delete a transaction
             const transactionToDelete = transactionsRes.body.data.transactions.find(t => t.type === 'expense');
             const deleteRes = await chai.request(server)
                 .delete(`/api/transaction/${transactionToDelete.id}`)
@@ -165,11 +153,9 @@ describe('End-to-End Integration Tests', () => {
 
             expect(deleteRes).to.have.status(200);
 
-            // Step 13: Verify balance updated after deletion
             const updatedBalance = await Balance.findOne({ user: userId });
             expect(updatedBalance.amount).to.be.greaterThan(finalBalance.amount);
 
-            // Step 14: Check auth token still works
             const checkAuthRes = await chai.request(server)
                 .get('/api/auth/check')
                 .set('Cookie', authCookie);
@@ -199,7 +185,6 @@ describe('End-to-End Integration Tests', () => {
             const cookies = [];
             const userIds = [];
 
-            // Register and login both users
             for (const user of users) {
                 await chai.request(server)
                     .post('/api/auth/register')
@@ -216,7 +201,6 @@ describe('End-to-End Integration Tests', () => {
                 userIds.push(loginRes.body.data.user.id);
             }
 
-            // User 1 creates a transaction (category auto-created per user)
             const transaction1 = {
                 description: 'User 1 transaction',
                 amount: 100000,
@@ -234,7 +218,6 @@ describe('End-to-End Integration Tests', () => {
 
             expect(res1).to.have.status(201);
 
-            // User 2 creates a different transaction
             const transaction2 = {
                 description: 'User 2 transaction',
                 amount: 200000,
@@ -252,14 +235,12 @@ describe('End-to-End Integration Tests', () => {
 
             expect(res2).to.have.status(201);
 
-            // Verify users have independent balances
             const balance1 = await Balance.findOne({ user: userIds[0] });
             const balance2 = await Balance.findOne({ user: userIds[1] });
 
             expect(balance1.amount).to.equal(-100000);
             expect(balance2.amount).to.equal(-200000);
 
-            // Verify users can only see their own transactions
             const transactions1 = await chai.request(server)
                 .get('/api/transaction')
                 .set('Cookie', cookies[0]);
@@ -277,7 +258,6 @@ describe('End-to-End Integration Tests', () => {
 
     describe('Error Recovery Scenarios', () => {
         it('should handle invalid operations gracefully', async () => {
-            // Register and login user
             await chai.request(server)
                 .post('/api/auth/register')
                 .send(testUser);
@@ -291,7 +271,6 @@ describe('End-to-End Integration Tests', () => {
 
             authCookie = loginRes.headers['set-cookie'];
 
-            // Try to create transaction with missing category
             const invalidTransaction = {
                 description: 'Invalid transaction',
                 amount: 100000,
@@ -309,14 +288,12 @@ describe('End-to-End Integration Tests', () => {
 
             expect(res).to.have.status(422);
 
-            // Try to delete non-existent transaction
             const deleteRes = await chai.request(server)
                 .delete('/api/transaction/507f1f77bcf86cd799439011')
                 .set('Cookie', authCookie);
 
             expect(deleteRes).to.have.status(404);
 
-            // Try to get non-existent goal
             const goalRes = await chai.request(server)
                 .get('/api/goal/goal/507f1f77bcf86cd799439011')
                 .set('Cookie', authCookie);

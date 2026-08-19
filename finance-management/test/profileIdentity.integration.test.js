@@ -1,7 +1,4 @@
-// Financial Identity on GET /api/profile must agree with the Financial Health
-// score rendered on the same screen: money logged in a `group === 'savings'`
-// category is a transfer to yourself, not spending. It must be excluded from
-// avgMonthlyExpense, from the savings rate, and from the top-category headline.
+// Savings-group outflow is retained, not spent — the identity must agree with the health score on the same screen.
 const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
@@ -37,9 +34,7 @@ const addTxn = (cookie, { description, category, amount, type, day }) => {
     });
 };
 
-// Force a category into the savings group deterministically, then let the
-// fire-and-forget classification kicked off by addTransaction settle so it does
-// not race the assertions.
+// Let the fire-and-forget classification settle so it can't race the assertions.
 const markSavings = async (name) => {
     await drainBackgroundJobs();
     await Category.updateMany(
@@ -63,14 +58,12 @@ describe('Profile financial identity — savings-group outflow is not spend', ()
         expect(res).to.have.status(200);
         const id = res.body.data.identity;
 
-        // (10M income − 4M real spend) / 10M = 60%. Counting the 3M invested as
-        // expense would give 30% — the bug this test pins.
+        // (10M − 4M real spend) / 10M = 60%; counting the 3M invested as expense gives 30%.
         expect(id.avgSavingsRate).to.equal(60);
         // "Average monthly spending" is spending, so the investment is not in it.
         expect(id.avgMonthlyExpense).to.equal(4_000_000);
         expect(id.avgMonthlyIncome).to.equal(10_000_000);
-        // Top category is a spending headline — never the savings category, even
-        // though 3M would rank second here.
+        // A spending headline, so never the savings category even though 3M would rank second.
         expect(id.topCategory).to.equal('food');
         expect(id.topCategoryPct).to.equal(100); // 4M of 4M non-savings spend
     });

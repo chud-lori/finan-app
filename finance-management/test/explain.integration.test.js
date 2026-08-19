@@ -1,6 +1,3 @@
-// End-to-end coverage for GET /api/transaction/explain volatility classification
-// and pace-corrected month-over-month delta — the two changes that remove the
-// false "great progress" lines and the "high dependency on rent" noise.
 const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
@@ -118,8 +115,7 @@ describe('GET /api/transaction/explain — volatility & pace', () => {
 
         const rent = res.body.data.topCategories.find(c => c.category === 'rent/mortgage');
         expect(rent.volatility).to.equal('fixed');
-        // Same amount posted as last month → ~0% change, never a large negative
-        // "great progress" artifact.
+        // Same amount as last month → ~0% change, never a large negative "great progress" artifact.
         expect(rent.delta === null || Math.abs(rent.delta) <= 1).to.equal(true);
     });
 
@@ -144,8 +140,7 @@ describe('GET /api/transaction/explain — volatility & pace', () => {
 
         const food = res.body.data.topCategories.find(c => c.category === 'food');
         expect(food).to.exist;
-        // Spending exactly on last month's pace should read near 0%, NOT the large
-        // negative the old full-month comparison produced early in the month.
+        // On last month's pace must read near 0%, not the large negative a full-month comparison gives.
         expect(Math.abs(food.delta)).to.be.lessThan(25);
     });
 });

@@ -9,7 +9,6 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     const saved = localStorage.getItem('theme');
-    // Default is light; only go dark if user explicitly saved 'dark'
     setDark(saved === 'dark');
     setMounted(true);
   }, []);
@@ -18,8 +17,7 @@ export function ThemeProvider({ children }) {
     if (!mounted) return;
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem('theme', dark ? 'dark' : 'light');
-    // Tell browser exactly which scheme is active — never use "light dark" which lets the
-    // browser pick based on system preference, overriding our explicit light-mode default
+    // Never "light dark" — that lets the browser override our explicit light default from system preference
     const meta = document.querySelector('meta[name="color-scheme"]');
     if (meta) meta.setAttribute('content', dark ? 'dark' : 'only light');
   }, [dark, mounted]);

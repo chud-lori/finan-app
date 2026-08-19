@@ -1,21 +1,4 @@
-// Seasonal Radar — learn a user's recurring seasonal spending spikes from their
-// own monthly Snapshot history, with an in-process Hijri/Ramadan calendar as a
-// cold-start prior for Indonesian users (Ramadan / Lebaran / THR). NO external
-// API and no network — the Hijri dates are a bundled static table and the rest
-// is learned purely from which calendar months the user historically overspends.
-//
-// Two consumers:
-//   (a) anomaly suppression — `seasonalContext()` returns a gate multiplier so a
-//       transaction in a month the user always overspends is judged against a
-//       wider bar (an expected festive splurge is not an "anomaly").
-//   (b) a look-ahead nudge — `lookAhead()` pre-warns before a known personal
-//       spike with a suggested set-aside.
-
-// Gregorian calendar month(s) in which the bulk of Ramadan/Lebaran spending
-// falls, by year (fasting groceries, THR shopping, mudik, gifting). Ramadan
-// drifts ~11 days earlier each Gregorian year, so the season slides across the
-// calendar. Deterministic, bundled, no network. Used only as a cold-start hint;
-// once the user has ~1 year of history their learned pattern leads.
+// Gregorian months carrying the bulk of Ramadan/Lebaran spending; a bundled table, no network.
 const RAMADAN_SEASON = {
     2024: [3, 4],
     2025: [3],
@@ -33,14 +16,11 @@ const MONTH_NAMES = [
     'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-// A calendar month whose average expense sits at or above this multiple of the
-// user's overall monthly average is treated as a personal seasonal spike.
+// A month averaging this multiple of the overall monthly average counts as a personal spike.
 const SEASONAL_RATIO = 1.25;
-// Below this many months of history the learned signal isn't trusted — we fall
-// back to the Hijri prior only and a generic (numberless) heads-up.
+// Below this much history the learned signal isn't trusted — Hijri prior only, no numbers quoted.
 const MIN_MONTHS_FOR_LEARNING = 12;
-// Anomaly gate widening is clamped so a wild historical month can't switch the
-// detector off entirely.
+// Clamped so one wild historical month can't switch the anomaly detector off entirely.
 const MAX_MULTIPLIER = 2.0;
 const HIJRI_ONLY_MULTIPLIER = 1.4; // modest prior when we only have the calendar, not the history
 
@@ -50,14 +30,6 @@ const monthName = (m) => MONTH_NAMES[m] || '';
 const hijriSeasonMonths = (year) => RAMADAN_SEASON[year] || [];
 const isHijriSeasonMonth = (year, monthNum) => hijriSeasonMonths(year).includes(monthNum);
 
-/**
- * Bucket monthly snapshots by calendar month (1–12) and compare each month's
- * average expense to the user's overall monthly average.
- *
- * @param {Array<{yearMonth:string, expense:number}>} snapshots
- * @param {string|null} excludeYm  current, in-progress month to leave out
- * @returns {{ baseline:number, byMonth:Object, sampleMonths:number }}
- */
 const monthlyProfile = (snapshots, excludeYm = null) => {
     const rows = (snapshots || []).filter(s =>
         s && Number(s.expense) > 0 && s.yearMonth && s.yearMonth !== excludeYm);
@@ -80,13 +52,6 @@ const monthlyProfile = (snapshots, excludeYm = null) => {
     return { baseline, byMonth, sampleMonths: rows.length };
 };
 
-/**
- * Seasonal read for a specific (year, month) — used by the anomaly detectors to
- * widen their gate during a month the user historically overspends.
- *
- * @returns {{ isSeasonal:boolean, ratio:number|null, multiplier:number,
- *             source:'history'|'hijri'|'both'|'none', label:string }}
- */
 const seasonalContext = (snapshots, year, monthNum, excludeYm = null) => {
     const { byMonth, sampleMonths } = monthlyProfile(snapshots, excludeYm);
     const hijri = isHijriSeasonMonth(year, monthNum);
@@ -118,23 +83,12 @@ const seasonalContext = (snapshots, year, monthNum, excludeYm = null) => {
     return { isSeasonal: false, ratio: null, multiplier: 1, source: 'none', label: '' };
 };
 
-/**
- * Look ahead up to `horizon` months for the soonest personal seasonal spike, so
- * the user can be nudged to set money aside before it lands.
- *
- * @param {Array} snapshots
- * @param {{year:number, month:number}} nowYm  current year + month (1–12)
- * @param {number} horizon  months to look ahead (default 2)
- * @returns {null | { monthNum, monthName, year, monthsAway, ratio, source,
- *                    coldStart, baseline, expectedExtra, suggestedSetAside, label }}
- */
 const lookAhead = (snapshots, nowYm, horizon = 2) => {
     const { baseline, byMonth, sampleMonths } = monthlyProfile(
         snapshots, `${nowYm.year}-${String(nowYm.month).padStart(2, '0')}`);
     const coldStart = sampleMonths < MIN_MONTHS_FOR_LEARNING;
 
     for (let ahead = 1; ahead <= horizon; ahead++) {
-        // Advance (year, month) by `ahead` months, wrapping across December.
         const idx = (nowYm.month - 1) + ahead;
         const monthNum = (idx % 12) + 1;
         const year = nowYm.year + Math.floor(idx / 12);
@@ -144,8 +98,7 @@ const lookAhead = (snapshots, nowYm, horizon = 2) => {
         if (!ctx.isSeasonal) continue;
 
         const bucket = byMonth[monthNum];
-        // Only quote a number once there's a full year of history AND a learned
-        // read for this month; otherwise it's a generic (numberless) heads-up.
+        // Only quote a number with a full year of history and a learned read for this month.
         const canQuote = !coldStart && bucket && ctx.source !== 'hijri' && baseline > 0;
         const expectedExtra = canQuote ? Math.round(baseline * (bucket.ratio - 1)) : null;
 

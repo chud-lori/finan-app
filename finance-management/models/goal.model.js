@@ -24,9 +24,7 @@ const GoalSchema = new Schema({
         default: 0,
         min: 0,
     },
-    // Structured goal purpose — 'emergency' suppresses the emergency-fund nudge
-    // exactly, with no name matching. Set by the Emergency Fund tool's save flow;
-    // legacy emergency-named goals are flagged once by migrateGoalKinds.
+    // 'emergency' is what suppresses the emergency-fund nudge — never match on the goal's name instead
     kind: {
         type: String,
         enum: ['general', 'emergency'],

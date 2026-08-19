@@ -1,4 +1,3 @@
-// Currency code → natural display locale
 const CURRENCY_LOCALE = {
   IDR: 'id-ID', USD: 'en-US', EUR: 'de-DE', GBP: 'en-GB',
   SGD: 'en-SG', MYR: 'ms-MY', JPY: 'ja-JP', CNY: 'zh-CN',
@@ -6,15 +5,14 @@ const CURRENCY_LOCALE = {
   VND: 'vi-VN', KRW: 'ko-KR', INR: 'en-IN', BRL: 'pt-BR',
 };
 
-// numberFormat: 'dot' uses the currency's natural locale (e.g. id-ID → 5.000.000)
-//               'comma' forces en-US grouping style (5,000,000)
+// 'dot' uses the currency's natural locale (id-ID → 5.000.000), 'comma' forces en-US (5,000,000)
 export const formatCurrency = (amount, currency = 'IDR', numberFormat = 'dot') => {
   const naturalLocale = CURRENCY_LOCALE[currency] ?? 'en-US';
   const locale = numberFormat === 'comma' ? 'en-US' : naturalLocale;
   return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
 };
 
-// Kept for internal use — prefer formatCurrency via the CurrencyContext hook
+// Prefer formatCurrency via the CurrencyContext hook.
 export const formatIDR = (amount) => formatCurrency(amount, 'IDR');
 
 export const formatDate = (dateStr, timezone) => {
@@ -22,17 +20,14 @@ export const formatDate = (dateStr, timezone) => {
     day: 'numeric', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   };
-  // Show time in the timezone it was recorded, so it always reflects the
-  // original local time regardless of where the viewer is.
+  // Render in the zone it was recorded, not the viewer's.
   if (timezone) {
     try { opts.timeZone = timezone; } catch (_) {}
   }
   return new Intl.DateTimeFormat('id-ID', opts).format(new Date(dateStr));
 };
 
-// Coarse relative time for account metadata (last login, session last-seen).
-// Falls back to a "Mon YYYY" label past 30 days — beyond that an exact day
-// count reads as noise.
+// Falls back to "Mon YYYY" past 30 days — an exact day count reads as noise beyond that.
 export const timeAgo = (date) => {
   if (!date) return null;
   const secs = Math.floor((Date.now() - new Date(date)) / 1000);

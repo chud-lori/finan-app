@@ -5,15 +5,11 @@ const MAX_ROWS   = 50;
 const MAX_LABEL  = 60;
 const MAX_AMOUNT = 1e15; // guards against Infinity / overflow arriving as JSON numbers
 
-// Same treatment as transaction.dto.js#sanitizeText — strip HTML tags and null
-// bytes so a label can never round-trip as markup into the planner UI.
+// Same treatment as transaction.dto.js#sanitizeText — a label must never round-trip as markup.
 const sanitizeLabel = (value) =>
     String(value).replace(/<[^>]*>/g, '').replace(/\0/g, '').trim().slice(0, MAX_LABEL);
 
-/**
- * Validates and normalises one side of the balance sheet.
- * Returns { rows, errors } — rows is only meaningful when errors is empty.
- */
+// `rows` is only meaningful when `errors` is empty.
 const parseHoldings = (input, field, allowedTypes) => {
     const errors = [];
     if (input === undefined) return { rows: undefined, errors };

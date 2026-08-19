@@ -1,12 +1,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-/**
- * Monthly spending/income snapshot per user.
- * Recomputed whenever transactions are mutated (add / delete / import).
- * Gives O(1) reads for analytics and profile financial identity
- * instead of scanning all transactions each time.
- */
 const SnapshotSchema = new Schema({
     user:      { type: Schema.Types.ObjectId, ref: 'User', required: true },
     yearMonth: { type: String, required: true }, // 'YYYY-MM'

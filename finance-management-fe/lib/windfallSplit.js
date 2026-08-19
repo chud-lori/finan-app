@@ -1,11 +1,4 @@
-// Windfall split suggestion, extracted from the Planner page so it can be
-// unit-tested without React. Pure: an amount + a list of goals in, a per-goal
-// suggested allocation out.
-//
-// Strategy: fill goals in the order given (the caller passes them oldest-first),
-// giving each goal at most what it still needs (price − savedAmount) so nothing
-// is over-funded, until the windfall runs out. Whatever is left over is reported
-// so the UI can show "unallocated".
+// Fills goals in the order given, capped at what each still needs so nothing is over-funded.
 
 export const remainingNeed = (goal) =>
   Math.max((Number(goal?.price) || 0) - (Number(goal?.savedAmount) || 0), 0);

@@ -46,8 +46,7 @@ describe('Net Worth Integration Tests', () => {
         });
 
         it('seeds the app cash balance as an asset row without persisting it', async () => {
-            // Registration already creates a zero Balance — update it rather than
-            // inserting a second document.
+            // Registration already creates a zero Balance, so update rather than insert.
             await Balance.updateOne({ user: userId }, { $set: { amount: 7_500_000 } }, { upsert: true });
 
             const res = await chai.request(server).get('/api/networth').set('Cookie', authCookie);

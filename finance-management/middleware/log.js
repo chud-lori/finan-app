@@ -1,5 +1,4 @@
-// logMiddleware.js
-const logger = require('../helpers/logger'); // Your existing logger
+const logger = require('../helpers/logger');
 
 const logMiddleware = (req, res, next) => {
   const startHrTime = process.hrtime();

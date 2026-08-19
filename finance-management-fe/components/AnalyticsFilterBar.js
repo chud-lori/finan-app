@@ -7,8 +7,7 @@ const GROUP_LABELS = {
   social: 'Social', income: 'Income', other: 'Other',
 };
 
-// text-base on mobile is deliberate — a <16px control makes iOS Safari zoom the
-// viewport and an installed PWA never zooms back out.
+// text-base on mobile is deliberate — a <16px control makes iOS Safari zoom and a PWA never zooms back.
 const CONTROL = 'w-full border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-base sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500';
 const LABEL   = 'block text-[11px] font-medium text-gray-500 mb-1';
 

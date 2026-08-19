@@ -1,10 +1,4 @@
-// Donut slices for the analytics spending breakdown, extracted from the page so
-// the legend's percentage can be unit-tested against the arc it labels.
-//
-// Recharts normalises a <Pie> over the data it is handed, so a slice's arc is
-// value / sum(slices). Categories past the cut are therefore folded into one
-// "Other" slice instead of being dropped: the ring stays the whole picture and
-// `pct` is true both as the arc's share and as a share of total spending.
+// Trailing categories are folded into "Other", not dropped — Recharts normalises the arc over what it is handed, so dropping them makes `pct` lie.
 
 export function buildPieData(categories, max = 12) {
   const rows = (categories || []).map(c => ({
