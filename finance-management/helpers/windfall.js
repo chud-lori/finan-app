@@ -1,17 +1,4 @@
-/**
- * Windfall (THR / bonus / large one-off income) detection.
- *
- * A windfall is a recent income transaction that is far larger than the user's
- * usual income — a Lebaran THR, a year-end bonus, a tax refund. Detecting it lets
- * the planner nudge the user to earmark it into goals before it dissolves into
- * everyday spending.
- *
- * "Usual" is the median of the user's income history (robust: a single large
- * windfall barely moves a median, unlike a mean). The candidate is the largest
- * income inside the recent window; it qualifies when it is at least
- * WINDFALL_RATIO times that median. Pure and dependency-free so it can be
- * unit-tested without a DB.
- */
+// "Usual" is the median, not the mean — one big windfall barely moves a median.
 const WINDFALL_RATIO = 1.8;
 const MIN_BASELINE   = 3; // need a few income points before "unusual" means anything
 
@@ -22,11 +9,6 @@ const median = (arr) => {
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 
-/**
- * @param {Array<{_id:*, amount:number, time:*}>} recentIncome  income txns inside the recent window
- * @param {Array<number>} baselineAmounts  income amounts over a longer history (the "usual" baseline)
- * @returns {null | { transactionId:string, amount:number, date:*, typical:number, ratio:number }}
- */
 const detectWindfall = (recentIncome, baselineAmounts) => {
     if (!Array.isArray(recentIncome) || recentIncome.length === 0) return null;
     if (!Array.isArray(baselineAmounts) || baselineAmounts.length < MIN_BASELINE) return null;

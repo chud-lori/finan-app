@@ -2,11 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 
-/**
- * On Android PWA, the hardware back button fires popstate.
- * When the user is already at the "home" of the app and presses back,
- * we show a toast and exit on a second press within 2 seconds.
- */
+// Android PWA: the hardware back button fires popstate, so exit needs a confirmed second press.
 const ROOT_PATHS = ['/dashboard', '/analytics', '/profile', '/recommendation', '/insights'];
 
 export default function AndroidBackHandler() {
@@ -18,26 +14,21 @@ export default function AndroidBackHandler() {
     const isRoot = ROOT_PATHS.some(p => pathname === p);
     if (!isRoot) return;
 
-    // Push a sentinel entry so back button fires popstate instead of closing
+    // Sentinel entry so the back button fires popstate instead of closing the app.
     window.history.pushState({ sentinel: true }, '');
 
     const onPopState = (e) => {
       if (pendingExit.current) {
-        // Second back press — exit
         window.close();
-        // window.close() only works in some browsers; fallback: push sentinel again
-        // and let the OS handle it. Nothing more we can do.
+        // window.close() only works in some browsers; otherwise re-push and let the OS decide.
         return;
       }
 
-      // First back press — show toast, re-push sentinel
       pendingExit.current = true;
       window.history.pushState({ sentinel: true }, '');
 
-      // Show toast
       showExitToast();
 
-      // Reset after 2 s
       setTimeout(() => {
         pendingExit.current = false;
         hideExitToast();

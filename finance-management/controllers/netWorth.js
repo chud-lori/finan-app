@@ -16,16 +16,7 @@ const currentYearMonth = (tz) => moment.tz(tz).format('YYYY-MM');
 
 const MAX_HISTORY = 60; // 5 years of monthly points — plenty for a trend line
 
-/**
- * GET /api/networth
- *
- * Returns the user's holdings and the derived net worth. A user who has never
- * saved holdings gets a seed suggestion built from the app's cash Balance so
- * the editor is not empty on first open. That seed is NOT persisted — GET stays
- * read-only, and the row only becomes real once the user saves via PUT. Balance
- * itself is only ever read here; it is written exclusively by the transaction
- * controller's atomic $inc.
- */
+// The Balance seed row is NOT persisted here — GET stays read-only, PUT makes it real.
 const getNetWorth = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -50,13 +41,7 @@ const getNetWorth = async (req, res) => {
     }
 };
 
-/**
- * PUT /api/networth
- *
- * Replaces the holdings, recomputes the totals, and upserts the current
- * month's snapshot. Upsert (not insert) is deliberate: editing holdings three
- * times in August must leave one August point on the trend, not three.
- */
+// Upsert, not insert: editing holdings three times in August must leave one August point.
 const updateNetWorth = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -97,9 +82,6 @@ const updateNetWorth = async (req, res) => {
     }
 };
 
-/**
- * GET /api/networth/history — monthly snapshots, oldest first, for the trend line.
- */
 const getNetWorthHistory = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -108,8 +90,7 @@ const getNetWorthHistory = async (req, res) => {
             ? Math.min(requested, MAX_HISTORY)
             : 12;
 
-        // Sort descending to take the most recent `limit` months, then flip so
-        // the chart reads left-to-right in chronological order.
+        // Take the most recent `limit` months descending, then flip to chronological for the chart.
         const snapshots = await NetWorthSnapshot.find({ user: userId })
             .sort({ yearMonth: -1 })
             .limit(limit)

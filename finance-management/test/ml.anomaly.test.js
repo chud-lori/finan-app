@@ -1,9 +1,7 @@
 const { expect } = require('chai');
 const { detectAnomalies } = require('../services/ml/anomaly');
 
-// Helper: build a category history. `currentAmounts` are this month's
-// transactions (the only ones eligible to be flagged), `pastAmounts` are the
-// baseline from earlier months.
+// Only `currentAmounts` are eligible to be flagged; `pastAmounts` are the baseline.
 const build = (category, pastAmounts, currentAmounts) => [
     ...pastAmounts.map((amount, i) => ({
         id: `${category}-past-${i}`, amount, category, date: '2026-06-10',
@@ -42,18 +40,14 @@ describe('services/ml/anomaly — detectAnomalies', () => {
         });
 
         it('ignores savings-group outflow (is_savings) entirely', () => {
-            // A first-ever, extreme investment transfer must never be flagged — it
-            // is saved, not spent. It must also not seed a baseline for others.
+            // Saved, not spent: never flagged, and it must not seed a baseline either.
             const txs = build('reksa dana', [100_000, 100_000], [10_000_000])
                 .map(t => ({ ...t, is_savings: true }));
             expect(detectAnomalies(txs)).to.deep.equal([]);
         });
     });
 
-    // The regression this module was rewritten for. With a population stddev over
-    // a set that included the candidate, the maximum attainable z was
-    // (n-1)/sqrt(n) — 1.15 at n=3, 1.50 at n=4, 1.79 at n=5 — all under the 2.0
-    // threshold, so these categories could never fire regardless of amount.
+    // A self-inclusive stddev caps z at (n-1)/sqrt(n), so small categories could never fire.
     describe('small-sample categories (the (n-1)/sqrt(n) ceiling)', () => {
         it('flags an extreme amount when the category has only 3 transactions', () => {
             const out = detectAnomalies(build('food', [80_000, 85_000], [5_000_000]));
@@ -153,9 +147,7 @@ describe('services/ml/anomaly — detectAnomalies', () => {
         });
     });
 
-    // Sensitivity is gated by category volatility (needs >=3 distinct months of
-    // history to classify). Build one tx per month across `monthlyAmounts`, then
-    // a current-month tx.
+    // Volatility gating needs >=3 distinct months, so build one tx per month plus a current one.
     const buildMonthly = (category, monthlyAmounts, currentAmount) => {
         const txs = monthlyAmounts.map((amount, i) => ({
             id: `${category}-m${i}`, amount, category,
@@ -167,8 +159,7 @@ describe('services/ml/anomaly — detectAnomalies', () => {
 
     describe('volatility-gated sensitivity', () => {
         it('does NOT flag a modest spike in a naturally spiky (flexible) category', () => {
-            // Sharing/treating friends: swings wildly month to month → flexible.
-            // A 2.4x outing is normal life here, not an anomaly.
+            // A flexible category swings wildly, so a 2.4x outing is normal life.
             const sharing = buildMonthly('sharing', [100000, 400000, 150000, 600000, 250000], 500000);
             const out = detectAnomalies(sharing);
             expect(out.find(a => a.category === 'sharing')).to.be.undefined;
@@ -182,19 +173,14 @@ describe('services/ml/anomaly — detectAnomalies', () => {
         });
 
         it('flags a smaller spike in a stable (fixed) category', () => {
-            // Electricity is normally flat, so a modest jump is genuinely unexpected
-            // and worth flagging at the lower bar.
+            // A normally flat category flags at the lower bar.
             const power = buildMonthly('electricity', [300000, 305000, 298000, 302000, 300000], 620000);
             const out = detectAnomalies(power);
             expect(out.find(a => a.category === 'electricity')).to.exist;
         });
     });
 
-    // gotcha#566: the volatility class comes from MONTHLY totals, but the score
-    // runs on a SINGLE transaction. Low-frequency lumpy categories (social
-    // "traktir"/gifts) were mis-gated and a normal treat cried wolf. The category's
-    // semantic group is a structured expected-lumpy signal that promotes it to the
-    // flexible bar — without ever softening a genuinely flat category.
+    // Volatility comes from monthly totals but scoring is per transaction, so a lumpy category needs its group to promote it.
     describe('lumpy-category gate via semantic group (gotcha#566)', () => {
         it('a social-group treat that a groupless read WOULD flag is suppressed', () => {
             const past = [100_000, 120_000, 150_000];
@@ -212,13 +198,8 @@ describe('services/ml/anomaly — detectAnomalies', () => {
         });
     });
 
-    // Seasonal Radar suppression: during a month the user habitually overspends
-    // (Ramadan/Lebaran/holidays), the bar is widened by a multiplier so an expected
-    // festive spike is not flagged — while a genuine blow-out still clears it.
     describe('seasonal suppression', () => {
-        // Several transactions per month across four months, with real per-tx
-        // spread (median 100k, MAD 20k) but stable monthly totals — so the category
-        // is 'semi' (not promoted to lumpy by frequency) and the mz path is modest.
+        // Per-tx spread with stable monthly totals keeps the category 'semi', not lumpy.
         const buildBusy = (category, current) => {
             const monthAmts = [70_000, 90_000, 110_000, 130_000];
             const txs = [];

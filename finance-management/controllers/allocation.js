@@ -6,18 +6,7 @@ const { GoalResponseDTO } = require('../dtos/goal.dto');
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-/**
- * POST /api/recommendations/allocate
- *
- * One-tap allocation of a cash-flow surplus or an income windfall into an
- * existing goal. This is the persistent action behind the surplus-sweep and
- * windfall nudges — the state it writes is what suppresses them.
- *
- * The money moves onto the goal's OWN savedAmount via an atomic `$inc` (never a
- * read-modify-write, never a shared pool — goal-progress architecture rule), and
- * an Allocation row is recorded so the prompting nudge no longer fires for the
- * same surplus month / windfall transaction.
- */
+// The Allocation row written here is what suppresses the surplus-sweep / windfall nudge.
 const allocate = async (req, res) => {
     const userId = req.user.id;
     const dto    = new AllocateRequestDTO(req.body || {});
@@ -32,8 +21,7 @@ const allocate = async (req, res) => {
     try {
         const amount = Math.round(dto.amount);
 
-        // Atomic per-goal increment. Ownership is enforced in the same query so a
-        // user can never fund another user's goal.
+        // Atomic $inc on the goal's own savedAmount — never a shared pool; ownership filtered in the same query.
         const goal = await Goal.findOneAndUpdate(
             { _id: dto.goalId, user: userId },
             { $inc: { savedAmount: amount } },
@@ -43,7 +31,6 @@ const allocate = async (req, res) => {
             return res.status(404).json(BaseResponseDTO.error('Goal not found'));
         }
 
-        // Auto-mark achieved when the goal is now fully funded — mirrors updateGoal.
         if (goal.achieve !== 1 && goal.savedAmount >= goal.price) {
             goal.achieve = 1;
             await goal.save();

@@ -4,10 +4,7 @@ import { getRangeTransactions, deleteTransaction } from '@/lib/api';
 import { formatDate, toTitleCase } from '@/lib/format';
 import { useFormatAmount } from '@/components/CurrencyContext';
 
-// Custom date-range report — presets or a From/To range, income/expense summary,
-// expense breakdown and the transaction list. Extracted from the old Reports page
-// so it can live as the "Custom range" tab inside Analytics (one place, not a
-// separate nav item). Renders bare — the host page supplies Navbar/heading.
+// Renders bare — the host page supplies the Navbar and heading.
 function fmt(d) { return d.toISOString().slice(0, 10); }
 
 const PRESETS = [

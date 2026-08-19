@@ -54,12 +54,10 @@ describe('Auth Integration Tests', () => {
         });
 
         it('should return 409 for duplicate username', async () => {
-            // First registration
             await chai.request(server)
                 .post('/api/auth/register')
                 .send(testUser);
 
-            // Second registration with same username
             const duplicateUser = { ...testUser, email: 'different@example.com' };
             const res = await chai.request(server)
                 .post('/api/auth/register')
@@ -71,12 +69,10 @@ describe('Auth Integration Tests', () => {
         });
 
         it('should return 409 for duplicate email', async () => {
-            // First registration
             await chai.request(server)
                 .post('/api/auth/register')
                 .send(testUser);
 
-            // Second registration with same email
             const duplicateUser = { ...testUser, username: 'differentuser' };
             const res = await chai.request(server)
                 .post('/api/auth/register')
@@ -90,7 +86,6 @@ describe('Auth Integration Tests', () => {
 
     describe('POST /api/auth/login', () => {
         beforeEach(async () => {
-            // Register a user first
             await chai.request(server)
                 .post('/api/auth/register')
                 .send(testUser);
@@ -114,9 +109,7 @@ describe('Auth Integration Tests', () => {
             authCookie = res.headers['set-cookie'];
         });
 
-        // Anti-enumeration: both "wrong password" and "user does not exist"
-        // collapse into the same generic 401. Tests pinned on the old
-        // distinguishable responses were updated when the leak was closed.
+        // Anti-enumeration: "wrong password" and "user does not exist" collapse into one generic 401.
         it('should return 401 for invalid password', async () => {
             const res = await chai.request(server)
                 .post('/api/auth/login')
@@ -158,7 +151,6 @@ describe('Auth Integration Tests', () => {
 
     describe('GET /api/auth/check', () => {
         beforeEach(async () => {
-            // Register and login to get token
             await chai.request(server)
                 .post('/api/auth/register')
                 .send(testUser);

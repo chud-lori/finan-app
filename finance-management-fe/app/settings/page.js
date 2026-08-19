@@ -18,7 +18,6 @@ import {
 import { timeAgo } from '@/lib/format';
 import { useCurrency } from '@/components/CurrencyContext';
 
-// ─── Delete modal ─────────────────────────────────────────────────────────────
 function DeleteModal({ username, onCancel, onConfirmed }) {
   const [input,   setInput]   = useState('');
   const [loading, setLoading] = useState(false);
@@ -107,7 +106,6 @@ function DeleteModal({ username, onCancel, onConfirmed }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const router = useRouter();
   const { clearCurrency } = useCurrency();
@@ -115,18 +113,15 @@ export default function SettingsPage() {
   const [profile,      setProfile]      = useState(null);
   const [profileError, setProfileError] = useState('');
 
-  // Change password
   const [pwForm,     setPwForm]     = useState({ current: '', next: '', confirm: '' });
   const [pwSaving,   setPwSaving]   = useState(false);
   const [pwMsg,      setPwMsg]      = useState(null); // { ok, text }
   const [showPwForm, setShowPwForm] = useState(false);
 
-  // Logout all devices
   const [logoutAllLoading,     setLogoutAllLoading]     = useState(false);
   const [showLogoutAllConfirm, setShowLogoutAllConfirm] = useState(false);
   const [logoutAllError,       setLogoutAllError]       = useState(null);
 
-  // Sessions
   const [sessions,        setSessions]        = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [revokingId,      setRevokingId]      = useState(null);
@@ -282,8 +277,7 @@ export default function SettingsPage() {
                             value={pwForm[key]}
                             onChange={e => setPwForm(f => ({ ...f, [key]: e.target.value }))}
                             required
-                            /* text-base under sm — iOS zooms the viewport on focus for
-                               anything under 16px, which the PWA never zooms back out. */
+                            /* text-base under sm — iOS zooms on focus under 16px and the PWA never zooms back */
                             className="w-full px-3 py-2 rounded-xl border border-gray-300 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                           />
                         ))}

@@ -2,19 +2,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-// Renders a small ? icon that shows a tooltip on hover (desktop) or tap (mobile).
-// Usage: <Tooltip text="Explanation here" />
-// Or wrap custom trigger: <Tooltip text="..." trigger={<span>?</span>} />
-// position: 'top' | 'bottom'
-// align:    'center' | 'left' | 'right'
-// fixed:    true — renders bubble via portal at position:fixed to escape overflow:auto containers
+// `fixed` portals the bubble at position:fixed — needed inside any overflow:auto container.
 export default function Tooltip({ text, trigger, position = 'top', align = 'center', fixed: useFixed = false }) {
   const [show, setShow] = useState(false);
   const [rect, setRect] = useState(null);
   const ref    = useRef(null);
   const btnRef = useRef(null);
 
-  // Close on outside click (mobile tap-away)
   useEffect(() => {
     if (!show) return;
     const handler = (e) => {
@@ -46,7 +40,6 @@ export default function Tooltip({ text, trigger, position = 'top', align = 'cent
     ? `absolute top-full ${arrowAlign} border-[5px] border-transparent border-t-gray-900`
     : `absolute bottom-full ${arrowAlign} border-[5px] border-transparent border-b-gray-900`;
 
-  // Compute fixed-mode inline style from the trigger's bounding rect
   const fixedStyle = (useFixed && rect) ? (() => {
     const style = { position: 'fixed', zIndex: 9999, width: '14rem' };
     if (isTop) {

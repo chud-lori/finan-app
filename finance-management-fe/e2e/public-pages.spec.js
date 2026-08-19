@@ -1,7 +1,6 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
 
-// ── Landing page ──────────────────────────────────────────────────────────────
 test.describe('Landing page', () => {
   test('loads and shows hero headline', async ({ page }) => {
     await page.goto('/');
@@ -11,8 +10,7 @@ test.describe('Landing page', () => {
 
   test('has Get Started / Sign In links', async ({ page }) => {
     await page.goto('/');
-    // At least one visible link pointing to /register or /login
-    // (nav links may be hidden in mobile hamburger — check any visible one)
+    // Nav links may be hidden in the mobile hamburger, so check any visible one.
     const links = page.locator('a[href="/register"], a[href="/login"]');
     const count = await links.count();
     let anyVisible = false;
@@ -35,7 +33,6 @@ test.describe('Landing page', () => {
   });
 });
 
-// ── Auth pages ────────────────────────────────────────────────────────────────
 test.describe('Login page', () => {
   test('renders login form', async ({ page }) => {
     await page.goto('/login');
@@ -52,7 +49,6 @@ test.describe('Login page', () => {
   test('shows error on empty submit', async ({ page }) => {
     await page.goto('/login');
     await page.getByRole('button', { name: /log in|sign in/i }).click();
-    // Either browser validation or an error message should appear
     const hasValidation =
       (await page.locator('input:invalid').count()) > 0 ||
       (await page.locator('text=/required|username|password/i').count()) > 0;
@@ -63,7 +59,6 @@ test.describe('Login page', () => {
 test.describe('Register page', () => {
   test('renders registration form', async ({ page }) => {
     await page.goto('/register');
-    // Name field uses placeholder "Jajang Aja"
     await expect(page.locator('input[placeholder="Jajang Aja"]')).toBeVisible();
     await expect(page.locator('input[type="password"]').first()).toBeVisible();
     await expect(page.getByRole('button', { name: /register|sign up|create/i })).toBeVisible();
@@ -81,12 +76,11 @@ test.describe('Forgot password page', () => {
     await page.goto('/forgot-password');
     await page.locator('input[type="email"]').fill('nonexistent@example.com');
     await page.getByRole('button', { name: /send|reset/i }).click();
-    // Should show a success/confirmation message regardless (even if API unreachable)
+    // Confirmation must show even when the API is unreachable.
     await expect(page.locator('text=/inbox|registered|reset link/i').first()).toBeVisible({ timeout: 8000 });
   });
 });
 
-// ── Legal pages ───────────────────────────────────────────────────────────────
 test.describe('Privacy Policy page', () => {
   test('loads with correct heading', async ({ page }) => {
     await page.goto('/privacy');
@@ -101,7 +95,6 @@ test.describe('Terms of Service page', () => {
   });
 });
 
-// ── Protected route redirect ──────────────────────────────────────────────────
 test.describe('Auth guard', () => {
   test('dashboard redirects unauthenticated users to login', async ({ page }) => {
     await page.goto('/dashboard');

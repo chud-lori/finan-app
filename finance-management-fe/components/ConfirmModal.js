@@ -1,7 +1,6 @@
 'use client';
 import { useEffect } from 'react';
 
-// Generic confirm dialog used by the account/security flows.
 export default function ConfirmModal({
   title,
   message,

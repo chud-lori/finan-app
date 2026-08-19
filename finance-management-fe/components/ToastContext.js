@@ -35,7 +35,6 @@ export function useToast() {
   return ctx;
 }
 
-// ─── UI ───────────────────────────────────────────────────────────────────────
 const STYLES = {
   success: 'bg-teal-600 text-white',
   error:   'bg-red-600 text-white',

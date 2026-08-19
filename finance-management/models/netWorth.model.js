@@ -1,21 +1,11 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-// 'emergency_fund' is a structured signal, not just a label: it suppresses the
-// emergency-fund nudge exactly (no name matching) and counts as liquid for zakat.
+// 'emergency_fund' is a structured signal, not a label: it suppresses the emergency-fund nudge and counts as liquid for zakat.
 const ASSET_TYPES     = ['cash', 'emergency_fund', 'investment', 'property', 'vehicle', 'receivable', 'other'];
 const LIABILITY_TYPES = ['loan', 'mortgage', 'credit_card', 'bnpl', 'payable', 'other'];
 
-/**
- * Current net-worth holdings — exactly one document per user.
- *
- * This is the live editable state; the monthly trend lives in
- * netWorthSnapshot.model.js. Holdings are user-declared and deliberately not
- * derived from the ledger: the app only knows about cash flow, not about a
- * house or a car loan. The one exception is the optional "app cash balance"
- * seed row, which is copied from Balance on first read (read-only copy — the
- * Balance document itself is never written from here).
- */
+// User-declared, not ledger-derived; the Balance seed row is a read-only copy.
 const HoldingSchema = new Schema({
     label:  { type: String, required: true, trim: true, maxlength: 60 },
     amount: { type: Number, required: true, min: 0 },

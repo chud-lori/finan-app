@@ -11,9 +11,6 @@ chai.use(chaiHttp);
 
 const TZ = 'Asia/Jakarta';
 
-// The group budget endpoints score current-month expense by the semantic group
-// of each transaction's category, so tests seed a category with a known group
-// then post an expense to it.
 describe('Group Budget (envelope-lite soft caps)', () => {
     let authCookie;
     let userId;
@@ -99,7 +96,6 @@ describe('Group Budget (envelope-lite soft caps)', () => {
             let doc = await GroupBudget.findOne({ user: userId, group: 'social' }).lean();
             expect(doc.amount).to.equal(250000);
 
-            // Update
             await chai.request(server).put('/api/group-budget/social')
                 .set('Cookie', authCookie).send({ amount: 400000 });
             doc = await GroupBudget.findOne({ user: userId, group: 'social' }).lean();

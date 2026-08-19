@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { getGamificationSummary } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 
-// ── CSS keyframes injected once ────────────────────────────────────────────────
 const STYLES = `
 @keyframes gam-slide-in {
   from { opacity: 0; transform: translateY(10px); }
@@ -40,7 +39,6 @@ function StyleInjector() {
   return <style dangerouslySetInnerHTML={{ __html: STYLES }} />;
 }
 
-// ── Streak Badge ───────────────────────────────────────────────────────────────
 function StreakBadge({ streak, onDismiss }) {
   if (!streak || streak.current < 2) return null;
 
@@ -148,7 +146,6 @@ function StreakBadge({ streak, onDismiss }) {
   );
 }
 
-// ── Budget Win Banner ──────────────────────────────────────────────────────────
 const CONFETTI_COLORS = ['#fbbf24', '#34d399', '#60a5fa', '#f472b6', '#a78bfa'];
 
 function Confetti() {
@@ -239,7 +236,6 @@ function BudgetWinBanner({ win, formatAmount, onDismiss }) {
   );
 }
 
-// ── Health band level-up ────────────────────────────────────────────────────────
 const HEALTH_BAND_META = {
   building:        { label: 'Building',   grad: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', glow: 'rgba(245,158,11,0.45)' },
   healthy:         { label: 'Healthy',    grad: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)', glow: 'rgba(20,184,166,0.45)' },
@@ -280,7 +276,6 @@ function HealthLevelUpBanner({ to, onDismiss }) {
   );
 }
 
-// ── Goal Progress Ring ─────────────────────────────────────────────────────────
 const MILESTONE_THEME = {
   100: { ring: '#14b8a6', glow: 'rgba(20,184,166,0.35)', label: '🎉 Goal reached!',  bg: 'from-teal-500/10 to-teal-500/5',   border: 'border-teal-200',   text: 'text-teal-700'   },
   75:  { ring: '#3b82f6', glow: 'rgba(59,130,246,0.35)', label: '75% — almost there!', bg: 'from-blue-500/10 to-blue-500/5',  border: 'border-blue-200',   text: 'text-blue-700'   },
@@ -368,7 +363,6 @@ function GoalRing({ goal, index, onDismiss }) {
   );
 }
 
-// ── Dismiss helpers (localStorage) ────────────────────────────────────────────
 const STREAK_DISMISS_KEY  = 'gam_streak_dismissed_';   // + YYYY-MM-DD
 const BUDGET_DISMISS_KEY  = 'gam_budget_dismissed_';   // + YYYY-MM
 const GOAL_DISMISS_KEY    = 'gam_goal_dismissed_';     // + goalId_milestone
@@ -381,10 +375,7 @@ const MILESTONE_DAYS = new Set([7, 14, 30, 60, 100, 365]);
 function lsGet(key)      { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, val);   } catch {}              }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
-// Health band ordering for level-up detection. We celebrate only an increase,
-// and only once per new band (persisted in localStorage). A drop quietly
-// re-baselines so the next climb celebrates again.
+// Celebrate only a climb, once per new band; a drop quietly re-baselines.
 const HEALTH_BAND_RANK = { needs_attention: 0, building: 1, healthy: 2, excellent: 3 };
 const HEALTH_ACK_KEY = 'gam_health_ack_band';
 
@@ -399,7 +390,6 @@ export default function GamificationBanner() {
   const formatAmount = useFormatAmount();
 
   useEffect(() => {
-    // Read all dismiss states from localStorage up-front
     setDismissed({
       streak:    !!lsGet(STREAK_DISMISS_KEY + today()),
       budgetWin: !!lsGet(BUDGET_DISMISS_KEY + thisMonth()),
@@ -408,7 +398,6 @@ export default function GamificationBanner() {
     getGamificationSummary()
       .then(res => {
         const d = res.data;
-        // Load per-goal dismissals once we know which goals exist
         const goalDismissals = {};
         (d?.goals || []).forEach(g => {
           const key = `${g.id}_${g.milestone}`;
@@ -416,7 +405,6 @@ export default function GamificationBanner() {
         });
         setDismissed(prev => ({ ...prev, goals: goalDismissals }));
 
-        // Health band level-up: celebrate a climb, once per new band.
         const band = d?.health?.band;
         if (band && HEALTH_BAND_RANK[band] != null) {
           const ack = lsGet(HEALTH_ACK_KEY);
@@ -457,18 +445,15 @@ export default function GamificationBanner() {
 
   const streak = data.streak;
 
-  // Streak: always show when NOT logged today (actionable).
-  // When already logged, only show on milestone days or dismiss-able.
+  // Always show when NOT logged today; once logged, only on milestone days.
   const isMilestoneStreak = MILESTONE_DAYS.has(streak?.current);
   const showStreak =
     streak?.current >= 2 &&
     !dismissed.streak &&
     (!streak.todayLogged || isMilestoneStreak);
 
-  // Budget win: show once per month, persisted via localStorage.
   const showBudgetWin = data.budgetWin?.won && !dismissed.budgetWin;
 
-  // Goals: show only undismissed milestones ≥ 25.
   const activeGoals = (data.goals || [])
     .filter(g => g.milestone >= 25 && !g.achieved && !dismissed.goals[`${g.id}_${g.milestone}`])
     .slice(0, 3);

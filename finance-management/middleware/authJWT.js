@@ -14,7 +14,7 @@ const authenticateJWT = async (req, res, next) => {
         return res.status(403).json({ message: 'Forbidden' });
     }
 
-    // Validate against the session store — this is what makes revocation instant
+    // A valid JWT is not enough — the Session doc is the real auth gate.
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     let session;
     try {
@@ -27,7 +27,6 @@ const authenticateJWT = async (req, res, next) => {
         return res.status(403).json({ message: 'Session expired. Please log in again.' });
     }
 
-    // Update lastSeen fire-and-forget — don't block the request
     Session.updateOne({ _id: session._id }, { lastSeen: new Date() }).catch(() => {});
 
     req.user      = decoded;

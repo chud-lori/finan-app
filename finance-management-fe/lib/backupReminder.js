@@ -1,9 +1,4 @@
-// Last-backup nudge.
-//
-// The backend has no "you exported on X" record — export streams a CSV blob and
-// keeps no audit row — so the timestamp is remembered client-side. It's a
-// reminder, not a guarantee: a user who exports on another device just sees the
-// nudge again, which fails safe (nudging too often, never too little).
+// Client-side only — the backend keeps no export audit row, so another device just re-nudges.
 
 const STALE_DAYS = 60;
 const DAY_MS = 86_400_000;
@@ -30,18 +25,11 @@ export const markExportedNow = (now = Date.now()) => {
   return now;
 };
 
-/**
- * Pure formatter — the piece worth testing.
- * @param {number|null} ts  epoch ms of the last successful export, or null
- * @param {number} now      epoch ms
- * @returns {{ text: string, days: number|null, stale: boolean }}
- *          `stale` drives the gentle amber emphasis (never exported, or > 60 days).
- */
+// `stale` = never exported, or over 60 days.
 export const describeLastBackup = (ts, now = Date.now()) => {
   if (!Number.isFinite(ts) || ts == null || ts <= 0) {
     return { text: "You've never exported a backup", days: null, stale: true };
   }
-  // A clock skew / future timestamp reads as "today" rather than a negative age.
   const days = Math.max(0, Math.floor((now - ts) / DAY_MS));
   const text =
     days === 0 ? 'Last export: today'

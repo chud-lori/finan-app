@@ -45,8 +45,7 @@ describe('Auth', () => {
             res.body.should.have.nested.property('data.user');
         });
 
-        // password incorrect — now 401 generic "Invalid credentials"
-        // (anti-enumeration: same response as user-not-found)
+        // Anti-enumeration: same generic 401 as user-not-found.
         it('it should return 401 password incorrect', async () => {
             const res = await chai.request(server)
                 .post('/api/auth/login')

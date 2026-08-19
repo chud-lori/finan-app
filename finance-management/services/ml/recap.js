@@ -1,19 +1,7 @@
-// Money Recap — a rule-based, fully in-process monthly "wrapped".
-//
-// Pure math. No model, no LLM, nothing leaves the box. It stitches a plain-
-// language narrative plus a set of stat tiles out of signals the app already
-// computes: the monthly income/expense Snapshot (this month vs the one before),
-// the Financial Health Score, the logging streak, the net-worth reading, the
-// ML anomaly count, and the per-category spend that drives the Spending Mix.
-//
-// Currency discipline: narrative lines never bake in a formatted amount — they
-// speak in percentages, counts, category names and month labels so they read
-// correctly in any currency. Raw amounts ride only on the `tiles`, which the
-// frontend formats with the user's currency via useFormatAmount().
+// Narrative lines must stay currency-free; raw amounts ride only on `tiles`, which the FE formats.
 
 const round = (n) => Math.round(n);
 
-// Percentage change from `prev` to `cur`, or null when there is no baseline.
 const pctChange = (cur, prev) => {
   if (!(prev > 0)) return null;
   return round(((cur - prev) / prev) * 100);
@@ -21,9 +9,7 @@ const pctChange = (cur, prev) => {
 
 const cap = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s);
 
-// Biggest category increase this month vs last — the "top mover". Returns the
-// category with the largest positive delta that has a real prior baseline, so a
-// brand-new category (no baseline) doesn't masquerade as a spike.
+// Requires a real prior baseline, so a brand-new category can't masquerade as a spike.
 const topMover = (curByCat, priorByCat) => {
   const prior = new Map((priorByCat || []).map((c) => [c.category, c.total]));
   let best = null;
@@ -39,19 +25,6 @@ const topMover = (curByCat, priorByCat) => {
   return best;
 };
 
-/**
- * @param {{
- *   month: string,            // 'YYYY-MM'
- *   monthLabel: string,       // e.g. 'July 2026'
- *   current: { income:number, expense:number, txCount:number, byCategory:Array<{category,total,count}> } | null,
- *   prior:   { income:number, expense:number, byCategory:Array } | null,
- *   netWorth?: { current:number|null, prior:number|null },
- *   streak?:  { current:number, longest:number },
- *   health?:  { score:number|null } | null,
- *   anomalyCount?: number | null,
- * }} input
- * @returns {{ available:boolean, month:string, monthLabel:string, reason?:string, narrative:string[], tiles:Array }}
- */
 const buildRecap = (input = {}) => {
   const { month = null, monthLabel = '', current, prior } = input;
   const netWorth = input.netWorth || { current: null, prior: null };
@@ -59,8 +32,7 @@ const buildRecap = (input = {}) => {
   const health = input.health || null;
   const anomalyCount = input.anomalyCount == null ? null : input.anomalyCount;
 
-  // Recap needs the month itself AND at least one full prior month to compare
-  // against — otherwise every "vs last month" line is meaningless.
+  // Needs a full prior month, or every "vs last month" line is meaningless.
   if (!current || !prior) {
     return {
       available: false,
@@ -85,7 +57,6 @@ const buildRecap = (input = {}) => {
 
   const nwDelta = pctChange(netWorth.current, netWorth.prior);
 
-  // ── Narrative (currency-free) ───────────────────────────────────────────────
   const narrative = [];
   const label = monthLabel || month || 'this month';
 
@@ -130,7 +101,6 @@ const buildRecap = (input = {}) => {
 
   narrative.push(`Altogether you logged ${current.txCount || 0} transaction${(current.txCount || 0) === 1 ? '' : 's'} in ${label}.`);
 
-  // ── Tiles (raw numbers — the FE formats currency ones) ──────────────────────
   const tiles = [
     { key: 'net', label: net >= 0 ? 'Net saved' : 'Net shortfall', value: net, format: 'currency', tone: net >= 0 ? 'positive' : 'negative' },
     { key: 'income', label: 'Income', value: income, format: 'currency', tone: 'neutral' },

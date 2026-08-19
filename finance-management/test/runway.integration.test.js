@@ -7,8 +7,7 @@ const Transaction = require('../models/transaction.model');
 
 chai.use(chaiHttp);
 
-// Seed one income transaction directly (bypasses the controller so the setup is
-// deterministic — no fire-and-forget snapshot timing to wait on).
+// Bypasses the controller so there is no fire-and-forget snapshot timing to wait on.
 const income = (userId, date, amount) => Transaction.create({
   user: userId, description: 'Salary', amount, category: 'salary',
   type: 'income', currency: 'idr', time: new Date(date + 'T00:00:00Z'),

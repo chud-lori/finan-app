@@ -1,8 +1,5 @@
 'use client';
 
-// Section primitives shared by /profile and /settings. Both pages render the
-// same stack of titled cards, so the chrome lives here rather than being
-// duplicated per page.
 
 export function Card({ title, subtitle, danger = false, headerRight, children }) {
   return (
@@ -19,8 +16,7 @@ export function Card({ title, subtitle, danger = false, headerRight, children })
   );
 }
 
-// Segmented control. Columns are driven by the option count so 2- and 4-option
-// groups both stay edge-to-edge without wrapping on narrow screens.
+// Columns follow the option count so 2- and 4-option groups both stay edge-to-edge.
 export function Toggle({ options, value, onChange }) {
   return (
     <div className="grid p-1 bg-gray-100 rounded-xl" style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>

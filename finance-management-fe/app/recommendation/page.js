@@ -24,7 +24,6 @@ const monthLabel = (ym) => {
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 };
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
 const parseNum = (v) => Number(String(v).replace(/[^0-9]/g, ''));
 const fmtInput = (v) => {
   const d = String(v).replace(/[^0-9]/g, '');
@@ -36,7 +35,6 @@ const monthsFromNow = (months) => {
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 };
 
-// ─── Shared UI ────────────────────────────────────────────────────────────────
 function ProgressBar({ value, max, color = 'teal' }) {
   const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0;
   const cls = { teal: 'bg-teal-500', emerald: 'bg-emerald-500', rose: 'bg-rose-500', amber: 'bg-amber-400' };
@@ -91,7 +89,6 @@ function SubmitBtn({ loading, label = 'Calculate' }) {
   );
 }
 
-// Saved-budget auto-fill button
 function UseSavedBudgetBtn({ savedBudget, onUse }) {
   const { formatAmount, currency } = useCurrency();
   if (!savedBudget) return null;
@@ -103,7 +100,6 @@ function UseSavedBudgetBtn({ savedBudget, onUse }) {
   );
 }
 
-// ─── Tool 1: Can I Afford This? ───────────────────────────────────────────────
 const VELOCITY_CONFIG = {
   on_track:  { label: 'On track',          color: 'text-emerald-600', bg: 'bg-emerald-50', dot: 'bg-emerald-400' },
   fast:      { label: 'Spending fast',      color: 'text-amber-600',  bg: 'bg-amber-50',   dot: 'bg-amber-400'  },
@@ -229,14 +225,7 @@ function AffordTool({ savedBudget }) {
   );
 }
 
-// ─── Tool 2: 50/30/20 Rule — personalised from category groups ────────────────
-//
-// The rule is only useful against your real split. Mapping (issue #7):
-//   needs   = essential
-//   wants   = discretionary + social
-//   savings = savings group + whatever is left over of income (the surplus)
-// Anything still sitting in `other` is unclassified and is reported separately
-// rather than silently padding a bucket — a wrong bucket is worse than a gap.
+// `other` is unclassified and reported separately — a wrong bucket is worse than a gap.
 const RULE_BUCKET_STYLE = {
   needs:   { label: 'Needs',   target: 50, sub: 'Essential — rent, groceries, utilities, transport', bar: 'bg-teal-500',    text: 'text-teal-700',    bg: 'bg-teal-50',    border: 'border-teal-200'    },
   wants:   { label: 'Wants',   target: 30, sub: 'Discretionary + social — dining, hobbies, sharing',  bar: 'bg-amber-400',   text: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200'   },
@@ -263,8 +252,7 @@ function BudgetRuleTool({ identity }) {
       const groups      = groupRes?.data ?? null;
       const monthIncome = Math.round(analyticsRes?.data?.monthStats?.income ?? 0);
       const avgIncome   = Math.round(identity?.avgMonthlyIncome ?? 0);
-      // Salary usually lands mid-month, so an empty income column this early is
-      // normal — fall back to the tracked average rather than showing 0% saved.
+      // Salary lands mid-month, so fall back to the tracked average rather than showing 0% saved.
       const usedAverage = monthIncome <= 0 && avgIncome > 0;
       const incomeBasis = monthIncome > 0 ? monthIncome : avgIncome;
 
@@ -279,7 +267,6 @@ function BudgetRuleTool({ identity }) {
     return () => { cancelled = true; };
   }, [identity]);
 
-  // Manual what-if — the original blank-slate calculator, kept as a fallback.
   const handleSubmit = (e) => {
     e.preventDefault();
     const amt = parseNum(income);
@@ -345,7 +332,6 @@ function BudgetRuleTool({ identity }) {
             {real.buckets.map(({ key, amount, pct }) => {
               const s = RULE_BUCKET_STYLE[key];
               const delta = pct - s.target;
-              // Over target is bad for needs/wants, good for savings.
               const good = key === 'savings' ? delta >= 0 : delta <= 0;
               const targetAmount = Math.round(real.incomeBasis * s.target / 100);
               return (
@@ -451,7 +437,6 @@ function BudgetRuleTool({ identity }) {
   );
 }
 
-// ─── Tool 3: Savings Goal (DB-backed + Calculator) ────────────────────────────
 function GoalRingSmall({ pct }) {
   const r = 14, circ = 2 * Math.PI * r;
   const color = pct >= 100 ? '#14b8a6' : pct >= 75 ? '#3b82f6' : pct >= 50 ? '#8b5cf6' : pct >= 25 ? '#f59e0b' : '#d1d5db';
@@ -569,10 +554,7 @@ function GoalRow({ goal, onSaved, onDelete, onToggleAchieve }) {
   );
 }
 
-// Surplus sweep — reached from the dashboard nudge (?tool=goal&sweep=YYYY-MM&amount=N).
-// One tap moves the whole surplus onto a goal's own savedAmount and records the
-// Allocation that suppresses the nudge. Copy is careful: the money was never moved
-// anywhere real — it is your cash-flow surplus, just earmarked to a goal.
+// Writes the Allocation that suppresses the dashboard nudge; no money is actually moved.
 function SurplusSweepBanner({ month, amount, goals, onSwept }) {
   const { formatAmount } = useCurrency();
   const [busyGoal, setBusyGoal] = useState(null);
@@ -627,29 +609,24 @@ function SavingsGoalTool() {
   const { formatAmount, currency } = useCurrency();
   const searchParams = useSearchParams();
 
-  // Surplus-sweep context carried by the nudge CTA.
   const sweepMonth  = searchParams.get('sweep');
   const sweepAmount = parseNum(searchParams.get('amount') || '');
   const [swept, setSwept] = useState(false);
 
-  // ── DB-backed goals ──
   const [goals,       setGoals]       = useState([]);
   const [goalsLoaded, setGoalsLoaded] = useState(false);
 
-  // ── Add goal form ──
   const [newName,   setNewName]   = useState('');
   const [newAmount, setNewAmount] = useState('');
   const [adding,    setAdding]    = useState(false);
   const [addError,  setAddError]  = useState('');
 
-  // ── Calculator ──
   const [calcName,    setCalcName]    = useState('');
   const [goal,        setGoal]        = useState('');
   const [saved,       setSaved]       = useState('');
   const [monthly,     setMonthly]     = useState('');
   const [result,      setResult]      = useState(null);
 
-  // Pre-fill add form from calculator result
   const [prefillBanner, setPrefillBanner] = useState(null);
 
   const reloadGoals = () =>
@@ -697,7 +674,6 @@ function SavingsGoalTool() {
     setNewName(result.name !== 'My Goal' ? result.name : '');
     setNewAmount(fmtInput(String(result.target)));
     setPrefillBanner(result.name);
-    // Scroll up to the My Goals card
     document.getElementById('my-goals-card')?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -829,7 +805,6 @@ function SavingsGoalTool() {
   );
 }
 
-// ─── Tool 4: Safe Daily Budget ────────────────────────────────────────────────
 function DailyBudgetTool({ savedBudget }) {
   const { formatAmount, currency } = useCurrency();
   const [monthly, setMonthly] = useState('');
@@ -929,7 +904,6 @@ function DailyBudgetTool({ savedBudget }) {
   );
 }
 
-// ─── Tool 5: Emergency Fund Check ────────────────────────────────────────────
 function EmergencyFundTool() {
   const { formatAmount, currency } = useCurrency();
   const searchParams = useSearchParams();
@@ -938,22 +912,18 @@ function EmergencyFundTool() {
   const [saving,   setSaving]   = useState('');
   const [result,   setResult]   = useState(null);
 
-  // Persisted emergency-fund goal — the calculator alone stores nothing, so the
-  // dashboard nudge would never clear. Saving writes a real Goal via addGoal().
+  // Saving must write a real Goal, or the dashboard nudge never clears.
   const [goal,      setGoal]      = useState(null);
   const [goalsLoaded, setGoalsLoaded] = useState(false);
   const [savingGoal, setSavingGoal]   = useState(null); // 3 | 6 | null
   const [goalError, setGoalError] = useState('');
 
-  // Where the prefilled figures came from, so the form can say so rather than
-  // silently asserting numbers the user didn't type.
   const [sources, setSources] = useState(null);
 
   const loadGoal = useCallback(() => {
     return getAllGoals()
       .then(res => {
-        // kind is the structured signal (legacy emergency-named goals were
-        // migrated to it server-side) — no name matching.
+        // `kind` is the structured signal — never match on the goal's name.
         const found = (res.data?.goals ?? []).find(g => g.kind === 'emergency');
         setGoal(found ?? null);
       })
@@ -963,7 +933,6 @@ function EmergencyFundTool() {
 
   useEffect(() => { loadGoal(); }, [loadGoal]);
 
-  // Prefill from the dashboard nudge CTA (?monthly=&saved=)
   useEffect(() => {
     const monthly = parseNum(searchParams.get('monthly') || '');
     const saved   = parseNum(searchParams.get('saved') || '');
@@ -971,11 +940,6 @@ function EmergencyFundTool() {
     if (saved)   setCurrent(fmtInput(String(saved)));
   }, [searchParams]);
 
-  // Data-connected prefill. The app already knows both figures — emergency-fund
-  // holdings declared in Net Worth, and tracked average monthly spend — so
-  // asking the user to retype them is a dead end. This matters most for people
-  // who HAVE an emergency fund: declaring it suppresses the dashboard nudge,
-  // which was previously the only thing carrying these numbers in via the URL.
   useEffect(() => {
     let cancelled = false;
     Promise.all([getNetWorth().catch(() => null), getProfile().catch(() => null)])
@@ -987,8 +951,7 @@ function EmergencyFundTool() {
         const avgExpense = Math.round(prof?.data?.identity?.avgMonthlyExpense ?? 0);
         setSources({ emergencyHoldings, avgExpense });
 
-        // Never overwrite what the user typed, and never override the nudge CTA
-        // params — those are a more specific intent than a generic prefill.
+        // Never overwrite the user's typing or the nudge CTA params — both beat a generic prefill.
         if (emergencyHoldings > 0 && !parseNum(searchParams.get('saved') || '')) {
           setCurrent(c => c || fmtInput(String(emergencyHoldings)));
         }
@@ -1004,8 +967,7 @@ function EmergencyFundTool() {
     try {
       await addGoal(`Emergency fund (${months} months)`, Math.round(target), 'emergency');
       await loadGoal();
-      // The save buttons disappear once a goal exists, so bring the confirmation
-      // into view — otherwise the action reads as "nothing happened".
+      // The save buttons disappear once a goal exists, so scroll the confirmation into view.
       document.getElementById('emergency-goal-banner')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (err) {
       setGoalError(err.message || 'Failed to save goal');
@@ -1136,7 +1098,6 @@ function EmergencyFundTool() {
   );
 }
 
-// ─── Tool 6: Debt Snowball / Avalanche ────────────────────────────────────────
 function DebtTool() {
   const { formatAmount, currency } = useCurrency();
   const [method, setMethod] = useState('avalanche'); // 'snowball' | 'avalanche'
@@ -1161,19 +1122,16 @@ function DebtTool() {
     const extraAmt = parseNum(extra);
     const totalMin = parsed.reduce((s, d) => s + d.minPay, 0);
 
-    // Sort by method
     const sorted = [...parsed].sort((a, b) =>
       method === 'snowball' ? a.balance - b.balance : b.rate - a.rate
     );
 
-    // Simulate payoff month by month
     let debtsState = sorted.map(d => ({ ...d, paid: false }));
     let month = 0;
     const MAX_MONTHS = 360;
     while (debtsState.some(d => !d.paid) && month < MAX_MONTHS) {
       month++;
       let available = totalMin + extraAmt;
-      // Pay minimums first
       debtsState = debtsState.map(d => {
         if (d.paid) return d;
         const interest = d.balance * (d.rate / 100 / 12);
@@ -1181,14 +1139,12 @@ function DebtTool() {
         available -= d.minPay;
         return { ...d, balance: Math.max(bal, 0) };
       });
-      // Put extra on first unpaid
       for (let i = 0; i < debtsState.length; i++) {
         if (!debtsState[i].paid && debtsState[i].balance > 0) {
           debtsState[i] = { ...debtsState[i], balance: Math.max(debtsState[i].balance - available, 0) };
           break;
         }
       }
-      // Mark paid
       debtsState = debtsState.map(d => ({ ...d, paid: d.balance <= 0 }));
     }
 
@@ -1313,7 +1269,6 @@ function DebtTool() {
   );
 }
 
-// ─── Tool 7: FIRE Calculator ──────────────────────────────────────────────────
 function FireTool() {
   const { formatAmount, currency } = useCurrency();
   const [annualExpense, setAnnualExpense] = useState('');
@@ -1405,8 +1360,7 @@ function FireTool() {
   );
 }
 
-// ─── Tool 8: Tax Estimator (PPh 21 Indonesia) ─────────────────────────────────
-// Annual progressive rates and PTKP per UU HPP (Law 7/2021), unchanged for 2026.
+// Annual progressive rates and PTKP per UU HPP (Law 7/2021).
 const PPH21_BRACKETS = [
   { max: 60_000_000,   rate: 0.05 },
   { max: 250_000_000,  rate: 0.15 },
@@ -1416,11 +1370,7 @@ const PPH21_BRACKETS = [
 ];
 const PTKP = { tk: 54_000_000, k0: 58_500_000, k1: 63_000_000, k2: 67_500_000, k3: 72_000_000 };
 
-// TER (Tarif Efektif Rata-rata, PP 58/2023) category per PTKP status. Since
-// January 2024 employers withhold Jan–Nov at a single effective rate looked up
-// from the TER table for this category, then reconcile in December against the
-// annual progressive calculation below — so the annual figure is still the one
-// that decides what you actually owe for the year.
+// TER (PP 58/2023) drives monthly withholding only; the annual progressive figure decides what is owed.
 const TER_CATEGORY = { tk: 'A', k0: 'A', k1: 'B', k2: 'B', k3: 'C' };
 
 function TaxTool({ identity }) {
@@ -1571,10 +1521,7 @@ function TaxTool({ identity }) {
   );
 }
 
-// ─── Tool 9: Net Worth (persistent — tracked monthly) ────────────────────────
-// Not a calculator: holdings are stored server-side and every save upserts one
-// snapshot for the current month, so the trend line gets a point per month
-// rather than a point per edit.
+// Every save upserts one snapshot for the current month — a point per month, not per edit.
 const ASSET_TYPES = [
   { val: 'cash',           label: 'Cash & savings' },
   { val: 'emergency_fund', label: 'Emergency fund' },
@@ -1601,16 +1548,13 @@ const rowsTotal = (rows) => rows.reduce((s, r) => s + parseNum(r.amount), 0);
 // Only fully-blank rows are dropped silently; a half-filled row is a validation error.
 const isBlankRow = (r) => !r.label.trim() && !parseNum(r.amount);
 
-// Module-level so React keeps the inputs mounted across re-renders — a nested
-// component definition remounts every keystroke and drops focus mid-typing.
+// Module-level on purpose: a nested component definition remounts every keystroke and drops focus.
 function HoldingRows({ rows, types, accent, namePlaceholder, onEdit, onRemove, onAdd }) {
   const { currency } = useCurrency();
   return (
     <div className="space-y-2">
       {rows.map((r, i) => (
-        // Mobile: the label takes its own full-width line, type + amount + remove
-        // share the second — three fixed-width controls on one phone row squeezed
-        // the name input down to a few characters. sm+ keeps the single row.
+        // Three controls on one phone row squeeze the name input to a few characters, so wrap under sm.
         <div key={r.key} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
           <input type="text" placeholder={`${namePlaceholder} ${i + 1}`} value={r.label}
             onChange={e => onEdit(r.key, 'label', e.target.value)}
@@ -1822,12 +1766,7 @@ function NetWorthTool() {
   );
 }
 
-// ─── Tool 10: Windfall Planner (THR / bonus) ─────────────────────────────────
-// Detects a recent unusually large income server-side and lets the user split it
-// into their goals, one tap per goal. Each tap increments that goal's own
-// savedAmount (never a shared pool) and records the Allocation that suppresses
-// the dashboard windfall nudge. Emergency fund and debt payoff are just goals —
-// the split targets whatever active goals exist.
+// Each tap increments that goal's own savedAmount (never a shared pool) and records the suppressing Allocation.
 function WindfallTool() {
   const { formatAmount, currency } = useCurrency();
   const [data,    setData]    = useState(null);
@@ -1973,10 +1912,7 @@ function WindfallTool() {
   );
 }
 
-// ─── Tool 11: Zakat Estimator (ID) ───────────────────────────────────────────
-// A planning ESTIMATE of zakat-maal (2.5% of the zakatable base from Net Worth)
-// vs this year's social-group giving. Not a fatwa — nisab/haul nuance is not
-// modelled. Optional and dismissible, including for non-Muslim users.
+// An ESTIMATE, not a fatwa — nisab/haul nuance is not modelled.
 function ZakatTool() {
   const { formatAmount, currency } = useCurrency();
   const [data,    setData]    = useState(null);
@@ -2122,7 +2058,6 @@ function ZakatTool() {
   );
 }
 
-// ─── Right panel: tips + quick reference per tool ─────────────────────────────
 const TOOL_INFO = {
   afford: {
     tip:   { title: 'Pay yourself first', body: 'Transfer savings on payday before you can spend it. Automating savings removes willpower from the equation.' },
@@ -2264,7 +2199,6 @@ function RightPanel({ toolId }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 const TOOLS = [
   { id: 'afford',    label: 'Can I Afford This?', icon: '🛒', desc: 'Check if a purchase fits your budget',         Component: AffordTool,     passbudget: true  },
   { id: 'rule',      label: '50/30/20 Rule',       icon: '📊', desc: 'Split income into needs, wants & savings',    Component: BudgetRuleTool, passbudget: false },

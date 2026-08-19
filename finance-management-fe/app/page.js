@@ -41,7 +41,6 @@ export const metadata = {
   },
 };
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
 const FEATURES = [
   { icon: '📊', title: 'Smart Dashboard',   desc: 'Balance, income, and expenses at a glance. Filter by month, search, and sort — all in real time.' },
   { icon: '📈', title: 'Deep Analytics',    desc: 'Monthly & yearly breakdowns, category trends, and savings rate history. Know where money actually goes.' },
@@ -132,7 +131,6 @@ const FOOTER_LINKS = {
   ],
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
 function FeatureCard({ icon, title, desc, delay }) {
   return (
     <Reveal delay={delay}>
@@ -161,7 +159,6 @@ function ToolPill({ icon, name, desc, delay }) {
   );
 }
 
-// ─── Landing footer ───────────────────────────────────────────────────────────
 function LandingFooter() {
   return (
     <footer className="bg-gray-950">
@@ -215,7 +212,6 @@ function LandingFooter() {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebApplication',

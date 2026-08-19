@@ -8,14 +8,12 @@ import { addTransaction, getCategories, getCategorySuggestions, getTransactions 
 import { toTitleCase, formatDate } from '@/lib/format';
 import { useFormatAmount } from '@/components/CurrencyContext';
 
-// ─── Category picker — click-to-open dropdown ─────────────────────────────────
 function CategoryCombobox({ value, onChange, categories }) {
   const [open,  setOpen]  = useState(false);
   const [query, setQuery] = useState('');
   const containerRef      = useRef(null);
   const inputRef          = useRef(null);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -47,7 +45,6 @@ function CategoryCombobox({ value, onChange, categories }) {
 
   const openDropdown = () => {
     setOpen(true);
-    // autofocus the search input after paint
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
@@ -146,10 +143,7 @@ function CategoryCombobox({ value, onChange, categories }) {
   );
 }
 
-// Light client-side hint only — the authoritative savings grouping lives on the
-// category's `group` field server-side. These terms cover the seeded savings
-// defaults plus the common ways users name an investment/transfer-to-savings, so
-// we can nudge them that this expense is tracked as saved, not spent.
+// Display hint only — the authoritative savings grouping is the category's server-side `group`.
 const SAVINGS_HINT_TERMS = [
   'saving', 'tabungan', 'nabung', 'menabung',
   'invest', 'investasi', 'reksa dana', 'reksadana', 'mutual fund',
@@ -163,7 +157,6 @@ const looksLikeSavings = (category) => {
   return SAVINGS_HINT_TERMS.some(term => c.includes(term) || term.includes(c));
 };
 
-// ─── Side panel ───────────────────────────────────────────────────────────────
 function SidePanel() {
   const formatAmount = useFormatAmount();
   const [recent, setRecent]   = useState([]);
@@ -273,7 +266,6 @@ function SidePanel() {
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
 export default function AddPage() {
   const router = useRouter();
   const [categories, setCategories]   = useState([]);
@@ -291,15 +283,13 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Load categories, filtered to the selected type so income categories
-  // (salary, bonus) don't show while adding an expense, and vice versa.
+  // Filtered by type so income categories don't show while adding an expense.
   useEffect(() => {
     getCategories(form.type || null)
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
   }, [form.type]);
 
-  // Refresh suggestions when type changes
   useEffect(() => {
     if (!form.type) return;
     getCategorySuggestions(form.type)

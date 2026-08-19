@@ -39,7 +39,6 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
 
-  // Auth state is cookie-based — no localStorage check needed here
 
   const handleSubmit = async (e) => {
     e.preventDefault();

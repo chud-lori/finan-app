@@ -2,8 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
-// Renders "Go to Dashboard" if logged in, "Sign in" otherwise.
-// Used in server-component pages (Privacy, Terms) that can't read localStorage directly.
+// For server-component pages (Privacy, Terms) that can't read localStorage directly.
 export default function AuthNavLink({ className }) {
   const [loggedIn, setLoggedIn] = useState(false);
 

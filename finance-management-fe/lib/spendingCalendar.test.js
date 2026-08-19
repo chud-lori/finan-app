@@ -34,8 +34,7 @@ describe('dayKey — timezone bucketing', () => {
   });
 
   it('falls back instead of throwing on an unknown zone', () => {
-    // Falls back to the host zone — assert the actual day, not just "a string",
-    // or a wrong-day fallback would still pass.
+    // Assert the actual day, not just "a string", or a wrong-day fallback still passes.
     const local = new Date('2026-08-03T12:00:00.000Z').toLocaleDateString('en-CA');
     expect(dayKey('2026-08-03T12:00:00.000Z', 'Mars/Olympus')).to.equal(local);
     expect(dayKey('not a date', 'UTC')).to.equal(null);
@@ -151,10 +150,7 @@ describe('intensityLevel', () => {
   });
 });
 
-// ── Regression cover for the month-boundary hole ──────────────────────────────
-// The server bounds /range in the browser's zone (moment.tz(start, tz)), while
-// buildDailySpend buckets each row in its own transaction_timezone. These
-// helpers mirror the server so a test can assert "fetched AND rendered".
+// The server bounds /range in the browser's zone while rows bucket in their own — these mirror the server.
 const tzOffsetMs = (tz, instantMs) => {
   const p = Object.fromEntries(
     new Intl.DateTimeFormat('en-US', {
@@ -260,8 +256,7 @@ describe('resolveCalendarState — never guesses at the savings exclusion', () =
   });
 
   it('errors instead of treating savings transfers as spending when the group summary fails', () => {
-    // A 429 from the category rate limiter used to resolve to null, so savings
-    // silently became [] and a payday investment painted the darkest cell.
+    // A null savings list must not silently become [] — a payday investment would paint the darkest cell.
     const state = resolveCalendarState(range([tx({ category: 'Reksa Dana', amount: 5_000_000 })]),
                                        failed('Too many requests'));
     expect(state.error).to.match(/savings/i);

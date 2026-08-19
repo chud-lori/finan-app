@@ -1,7 +1,4 @@
-// Coverage for Savings & Investment Visibility (Option A): money logged as an
-// expense in a `group === 'savings'` category is a transfer to yourself, not
-// consumption. It must be EXCLUDED from spend totals, top-spend explainability
-// and anomaly baselines — investing is not overspending.
+// Savings-group expense is retained, not spent: excluded from spend totals, explainability and anomaly baselines.
 const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
@@ -37,9 +34,7 @@ const addExpense = (cookie, { description, category, amount, monthsAgo, day }) =
     });
 };
 
-// Force a category into the savings group deterministically, then let any
-// fire-and-forget classification kicked off by addTransaction settle so it does
-// not race the assertions.
+// Let the fire-and-forget classification settle so it can't race the assertions.
 const markSavings = async (name) => {
     await drainBackgroundJobs();
     await Category.updateMany(
@@ -79,8 +74,7 @@ describe('Savings & Investment Visibility — savings-group outflow is not spend
         await addExpense(cookie, { description: 'Food', category: 'food', amount: 100_000, monthsAgo: 1, day: 15 });
         await addExpense(cookie, { description: 'Food', category: 'food', amount: 100_000, monthsAgo: 2, day: 15 });
 
-        // This month: a genuinely large food spend (should flag) and a first-ever,
-        // very large investment transfer (must NOT flag — it is not overspending).
+        // A large food spend should flag; a far larger investment transfer must not.
         await addExpense(cookie, { description: 'Big grocery run', category: 'food', amount: 5_000_000, monthsAgo: 0, day: 4 });
         await addExpense(cookie, { description: 'Lump-sum reksa dana', category: 'reksa dana', amount: 10_000_000, monthsAgo: 0, day: 5 });
 

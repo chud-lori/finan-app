@@ -1,9 +1,6 @@
 'use client';
 import { useEffect, useRef } from 'react';
 
-// Wraps children with a scroll-triggered reveal animation.
-// variant: 'up' | 'left' | 'right' | 'scale' | 'blur'
-// delay: CSS delay string e.g. '150ms'
 export default function Reveal({ children, className = '', variant = 'up', delay = '0ms', threshold = 0.12 }) {
   const ref = useRef(null);
 

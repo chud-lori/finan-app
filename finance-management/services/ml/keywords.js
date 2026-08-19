@@ -1,5 +1,4 @@
-// Bilingual (English + Indonesian) keyword taxonomy.
-// Groups: essential | discretionary | savings | social | income | other
+// Bilingual (EN/ID) keyword taxonomy.
 module.exports = {
   essential: [
     // Food (basic)

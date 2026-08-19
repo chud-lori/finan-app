@@ -6,8 +6,6 @@ const eslintConfig = defineConfig([
   {
     rules: {
       // Existing client components hydrate localStorage-derived state in effects.
-      // Keep lint focused on actionable correctness issues until those flows are
-      // refactored to external-store or server-provided state.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/static-components": "off",
       "react-hooks/refs": "off",

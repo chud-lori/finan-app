@@ -20,14 +20,12 @@ passport.use(
         const email = profile.emails?.[0]?.value;
         if (!email) return done(new Error('Google account has no email address'));
 
-        // 1. Existing user with this Google ID
         let user = await User.findOne({ googleId: profile.id });
         if (user) {
           logger.info(`Google OAuth: existing user ${user._id}`);
           return done(null, user);
         }
 
-        // 2. Existing user with same email → link Google ID
         user = await User.findOne({ email });
         if (user) {
           user.googleId = profile.id;
@@ -36,7 +34,6 @@ passport.use(
           return done(null, user);
         }
 
-        // 3. New user — create account + balance
         const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20);
         const suffix = Math.random().toString(36).slice(2, 6);
         const username = `${baseUsername}_${suffix}`;
@@ -59,9 +56,9 @@ passport.use(
     }
   )
 );
-} // end if credentials set
+}
 
-// Minimal serialize/deserialize — only used for the transient OAuth session handshake
+// Only used for the transient OAuth session handshake.
 passport.serializeUser((user, done) => done(null, user._id.toString()));
 passport.deserializeUser(async (id, done) => {
   try {

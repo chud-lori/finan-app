@@ -1,15 +1,4 @@
-/**
- * In-process per-user analytics cache with TTL.
- *
- * Why in-process, not Redis?
- *   - This is a single-server deployment. Redis would add ops overhead for no gain.
- *   - Analytics data changes only when transactions are mutated (add / delete / import).
- *   - A 5-minute TTL gives a tight freshness guarantee even without explicit invalidation.
- *   - If the server restarts the cache is cold — that is fine, MongoDB is the source of truth.
- *
- * Scaling path: swap this module for a Redis-backed equivalent with the same API
- * when running multiple instances behind a load balancer.
- */
+// In-process, so it does not survive a restart or hold across multiple instances.
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -17,7 +6,6 @@ class AnalyticsCache {
     constructor(ttlMs = DEFAULT_TTL_MS) {
         this._store = new Map(); // key -> { value, expiresAt }
         this._ttl = ttlMs;
-        // Sweep expired entries periodically to prevent unbounded memory growth.
         setInterval(() => this._sweep(), ttlMs).unref();
     }
 
@@ -43,10 +31,7 @@ class AnalyticsCache {
         });
     }
 
-    /**
-     * Invalidate every cached entry for a user.
-     * Call this after any write that changes the user's transaction data.
-     */
+    // Call after any write that changes the user's transaction data.
     invalidateUser(userId) {
         const prefix = `${userId}:`;
         for (const key of this._store.keys()) {

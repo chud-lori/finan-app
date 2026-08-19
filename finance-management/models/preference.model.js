@@ -7,8 +7,7 @@ const PreferenceSchema = new Schema({
     timezone:     { type: String, default: 'Asia/Jakarta' },
     weekStartsOn:  { type: String, enum: ['monday', 'sunday'], default: 'monday' },
     numberFormat:  { type: String, enum: ['dot', 'comma'], default: 'dot' },
-    // dot   = 1.000.000 (Indonesian style)
-    // comma = 1,000,000 (Western style)
+    // dot = 1.000.000, comma = 1,000,000
     monthlyBudget: { type: Number, default: 0, min: 0 },
 }, { timestamps: true });
 

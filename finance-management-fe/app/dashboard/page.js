@@ -25,8 +25,7 @@ function ymLabel(ym) {
   return `${MONTH_LABELS[parseInt(m, 10)]} ${y}`;
 }
 
-// Build a gapless month list: from earliest active month (or current) back to current.
-// No gaps — every month between earliest-with-data and today is included.
+// Gapless: every month between the earliest with data and today, not just active ones.
 function buildMonthOptions(activeMonths = []) {
   const now = new Date();
   const currentYM = toYM(now);
@@ -47,20 +46,17 @@ function buildMonthOptions(activeMonths = []) {
     if (y === ey && m === em) break;
     m--;
     if (m === 0) { m = 12; y--; }
-    // safety: don't go before year 2000
     if (y < 2000) break;
   }
 
   return options;
 }
 
-// ─── Custom month picker dropdown ─────────────────────────────────────────────
 function MonthPicker({ value, options, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const listRef = useRef(null);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -68,7 +64,6 @@ function MonthPicker({ value, options, onChange }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Scroll selected item into view when opening
   useEffect(() => {
     if (!open || !listRef.current) return;
     const selected = listRef.current.querySelector('[data-selected="true"]');
@@ -134,7 +129,6 @@ function MonthPicker({ value, options, onChange }) {
   );
 }
 
-// ─── Sort button ─────────────────────────────────────────────────────────────
 function SortButton({ field, label, current, order, onClick }) {
   const active = current === field;
   return (
@@ -154,14 +148,12 @@ function SortButton({ field, label, current, order, onClick }) {
   );
 }
 
-// ─── Pagination ───────────────────────────────────────────────────────────────
 function Pagination({ page, totalPages, total, limit, onPage }) {
   if (totalPages <= 1) return null;
 
   const start = (page - 1) * limit + 1;
   const end   = Math.min(page * limit, total);
 
-  // Build page numbers: always show first, last, current ±1, with ellipsis
   const pages = new Set([1, totalPages, page, page - 1, page + 1].filter(p => p >= 1 && p <= totalPages));
   const sorted = [...pages].sort((a, b) => a - b);
   const withGaps = [];
@@ -212,7 +204,6 @@ function Pagination({ page, totalPages, total, limit, onPage }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [data, setData]       = useState({ transactions: [], balance: { amount: 0 }, total: 0, page: 1, totalPages: 1 });
   const [loading, setLoading] = useState(true);
@@ -236,7 +227,6 @@ export default function DashboardPage() {
   const [editValues,   setEditValues]    = useState({ description: '', category: '', amount: '' });
   const [editSaving,   setEditSaving]    = useState(false);
 
-  // Bootstrap from URL params (e.g. navigated here from Analytics)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const cat = params.get('category');
@@ -247,7 +237,6 @@ export default function DashboardPage() {
     if (ty === 'income' || ty === 'expense') setTypeFilter(ty);
   }, []);
 
-  // Fetch active months + categories once on mount
   useEffect(() => {
     getActiveMonths()
       .then(res => setActiveMonths(res.data?.months ?? []))
@@ -257,9 +246,7 @@ export default function DashboardPage() {
       .catch(() => {});
   }, []);
 
-  // <input type="datetime-local"> wants 'YYYY-MM-DDTHH:mm' in the transaction's own
-  // timezone, not the browser's — otherwise editing a Jakarta transaction from a
-  // UTC browser silently shifts it.
+  // datetime-local wants the transaction's OWN timezone — the browser's would silently shift it.
   const toLocalInput = (iso, tz) => {
     if (!iso) return '';
     try {
@@ -301,7 +288,6 @@ export default function DashboardPage() {
       editValues.time !== toLocalInput(original.time, original.transaction_timezone);
 
     const patch = { description: editValues.description, category: editValues.category, amount };
-    // Send seconds so the backend's strict-mode parser matches 'YYYY-MM-DD HH:mm:ss'.
     if (timeChanged) patch.time = `${editValues.time.replace('T', ' ')}:00`;
 
     setEditSaving(true);
@@ -309,9 +295,7 @@ export default function DashboardPage() {
       await updateTransaction(id, patch);
       setEditingId(null);
       toast('Transaction updated', 'success');
-      // Amount moves the balance; time can move the row into another month or
-      // reorder the list. Either way refetch — patching locally would leave the
-      // summary cards and ordering stale.
+      // Refetch: patching locally leaves the summary cards and ordering stale.
       if (amountChanged || timeChanged) {
         load();
       } else {
@@ -329,7 +313,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Debounce search input
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const searchTimer = useRef(null);
   const handleSearchChange = (val) => {
@@ -564,9 +547,7 @@ export default function DashboardPage() {
                   const tid = t.id || t._id;
                   const isEditing = editingId === tid;
                   if (isEditing) {
-                    // text-base (16px) on every control: iOS Safari auto-zooms the
-                    // viewport when a focused input's font-size is under 16px, which
-                    // is why the add-transaction form (already 16px) doesn't jump.
+                    // Keep 16px: iOS Safari auto-zooms the viewport on a focused input under 16px.
                     return (
                       <div key={tid} className="px-4 py-3 bg-teal-50 space-y-2">
                         <input

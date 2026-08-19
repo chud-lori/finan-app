@@ -17,9 +17,7 @@ const registerValidatorRules = () => {
     return [
         body('name').notEmpty().withMessage('Invalid value'),
         body('email').notEmpty().isEmail().withMessage('Invalid value'),
-        // username must be filled
         body('username').notEmpty().withMessage('Please isi'),
-        // password must be at least 8 chars long
         body('password').isLength({ min: 8 }).withMessage('must be at least 8 chars long'),
     ]
 }
@@ -30,7 +28,6 @@ const transactionValidatorRules = () => {
         body('category').notEmpty().withMessage('Invalid value'),
         body('amount').isNumeric().withMessage('Invalid value'),
         body('type').isIn(['income', 'expense']).withMessage('Invalid value'),
-        // body('time').isDate().withMessage('Invalid value'),
     ]
 }
 

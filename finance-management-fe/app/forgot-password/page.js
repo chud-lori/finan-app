@@ -18,7 +18,7 @@ export default function ForgotPasswordPage() {
       await forgotPassword(email.trim().toLowerCase());
       setSent(true);
     } catch (err) {
-      // Still show "sent" — never reveal whether email exists
+      // Always "sent" — never reveal whether the email exists.
       setSent(true);
     } finally {
       setLoading(false);

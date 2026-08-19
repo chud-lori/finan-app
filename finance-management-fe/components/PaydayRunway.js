@@ -1,9 +1,5 @@
 'use client';
 
-// Payday Runway — a forward "safe to spend before your next income" strip.
-// Backend infers income cadence, projects the balance to the next payday using
-// upcoming recurring bills + a discretionary run-rate, and returns a safe-to-
-// spend figure. Framed as a guide, not a guarantee.
 
 import { useState, useEffect } from 'react';
 import { getRunway } from '@/lib/api';

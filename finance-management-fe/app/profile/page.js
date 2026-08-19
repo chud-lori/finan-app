@@ -24,7 +24,6 @@ import { Card, Toggle } from '@/components/SectionCard';
 import MobileLogoutButton from '@/components/MobileLogoutButton';
 import MonthCalendarPicker from '@/components/MonthCalendarPicker';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const TIMEZONES = [
   'UTC',
@@ -55,7 +54,6 @@ function memberSince(date) {
   return new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
-// ─── Spending style badge color ───────────────────────────────────────────────
 function styleColor(label = '') {
   if (label.includes('Dependent'))  return 'bg-rose-100 text-rose-700';
   if (label.includes('Frequent'))   return 'bg-amber-100 text-amber-700';
@@ -64,7 +62,6 @@ function styleColor(label = '') {
   return 'bg-teal-100 text-teal-700';
 }
 
-// ─── Upload progress overlay ──────────────────────────────────────────────────
 function UploadProgress({ filename }) {
   const [step, setStep]     = useState(0);
   const [progress, setProgress] = useState(0);
@@ -109,10 +106,9 @@ function UploadProgress({ filename }) {
   );
 }
 
-// ─── Import success modal ─────────────────────────────────────────────────────
 function ImportSuccessModal({ result, onClose }) {
   const router  = useRouter();
-  // Support both multi-file { files, totalSuccess, totalFailed } and legacy single { success, failed, total }
+  // Accepts both the multi-file and the single-file response shapes.
   const isMulti  = Array.isArray(result.files);
   const totalSuccess = isMulti ? result.totalSuccess : result.success;
   const totalFailed  = isMulti ? result.totalFailed  : result.failed;
@@ -184,7 +180,6 @@ function ImportSuccessModal({ result, onClose }) {
   );
 }
 
-// ─── Manage categories ────────────────────────────────────────────────────────
 const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
 const GROUP_BADGE = {
@@ -229,11 +224,9 @@ function ManageCategoriesModal({ onClose }) {
 
   useEffect(() => {
     load();
-    // focus search after load
     setTimeout(() => searchRef.current?.focus(), 80);
   }, []);
 
-  // close on Escape
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handler);
@@ -442,9 +435,7 @@ function ManageCategoriesModal({ onClose }) {
   );
 }
 
-// ─── Financial Health strip ───────────────────────────────────────────────────
-// Compact read-only echo of the full HealthScoreCard on /insights — same score,
-// same bands, no pillar breakdown. Insights stays the place to dig in.
+// Read-only echo of the HealthScoreCard on /insights — same score and bands, no breakdown.
 const HEALTH_BANDS = {
   excellent:       { label: 'Excellent',    ring: '#059669', chip: 'bg-emerald-100 text-emerald-700' },
   healthy:         { label: 'Healthy',      ring: '#0d9488', chip: 'bg-teal-100 text-teal-700'       },
@@ -485,7 +476,6 @@ function HealthStrip({ health }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const formatAmount = useFormatAmount();
   const { refreshCurrency } = useCurrency();
@@ -523,16 +513,14 @@ export default function ProfilePage() {
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
-  // Financial-identity extras. Each is optional garnish on the card — a failed
-  // call just drops its tile rather than failing the whole page.
+  // Each extra is optional — a failed call drops its tile rather than the page.
   const [health,   setHealth]   = useState(null);
   const [streak,   setStreak]   = useState(null);
   const [netWorth, setNetWorth] = useState(null);
 
-  // Last-backup nudge (localStorage — the backend keeps no export audit trail)
+  // localStorage only — the backend keeps no export audit trail.
   const [lastExportAt, setLastExportAt] = useState(undefined); // undefined = not yet read
 
-  // ── Load profile + the identity extras, in parallel ───────────────────────
   useEffect(() => {
     setLastExportAt(getLastExportAt());
 
@@ -557,7 +545,6 @@ export default function ProfilePage() {
       .catch(() => {});
   }, []);
 
-  // ── Save preferences ──────────────────────────────────────────────────────
   const savePrefs = async () => {
     setPrefsSaving(true); setPrefsError(''); setPrefsSaved(false);
     try {
@@ -572,7 +559,6 @@ export default function ProfilePage() {
     }
   };
 
-  // ── Export ────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     setExportLoading(true); setExportError('');
     try {
@@ -594,7 +580,6 @@ export default function ProfilePage() {
                  : 'transactions-all.csv';
       a.click();
       URL.revokeObjectURL(url);
-      // Only a download that actually fired counts as a backup.
       setLastExportAt(markExportedNow());
     } catch (e) {
       setExportError(e.message || 'Export failed');
@@ -603,7 +588,6 @@ export default function ProfilePage() {
     }
   };
 
-  // ── Parse CSV preview (client-side, first 3 data rows) ────────────────────
   const parseCsvPreview = (text) => {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 4);
     if (lines.length === 0) return null;
@@ -621,7 +605,6 @@ export default function ProfilePage() {
     return { headers: parseRow(headerLine), rows: dataLines.map(parseRow) };
   };
 
-  // ── Import CSV ────────────────────────────────────────────────────────────
   const handleImportFiles = (fileList) => {
     if (!fileList || fileList.length === 0) return;
     const valid = Array.from(fileList).filter(f => f.name.endsWith('.csv') || f.type === 'text/csv');
@@ -630,7 +613,6 @@ export default function ProfilePage() {
     else setImportError('');
     if (valid.length === 0) return;
     setImportFiles(valid); setImportResult(null);
-    // Preview first file only
     const reader = new FileReader();
     reader.onload = (e) => setCsvPreview(parseCsvPreview(e.target.result));
     reader.readAsText(valid[0]);
@@ -657,7 +639,6 @@ export default function ProfilePage() {
     }
   };
 
-  // ── Save name / username ──────────────────────────────────────────────────
   const handleSaveIdentity = async () => {
     setIdentityError('');
     setIdentitySaving(true);
@@ -672,7 +653,6 @@ export default function ProfilePage() {
     }
   };
 
-  // ─── Data shortcuts ───────────────────────────────────────────────────────
   const user     = profile?.user     || {};
   const identity = profile?.identity || {};
   const initial  = (user.username || user.name || 'U')[0].toUpperCase();
@@ -681,16 +661,13 @@ export default function ProfilePage() {
     || (exportPeriod === 'yearly'  && !exportYear)
     || (exportPeriod === 'range'   && (!exportRangeStart || !exportRangeEnd));
 
-  // Backup nudge — hold the line back until localStorage has been read so the
-  // "never exported" copy can't flash at a user who exports every week.
+  // Hold back until localStorage is read, or "never exported" flashes at a weekly exporter.
   const backup = lastExportAt === undefined ? null : describeLastBackup(lastExportAt);
 
-  // Net worth is only meaningful once the user has actually saved holdings.
-  // A `seeded` payload is the backend's draft suggestion, not a real figure.
+  // A `seeded` payload is the backend's draft suggestion, not a saved figure.
   const hasNetWorth = !!netWorth && !netWorth.seeded
     && (netWorth.assets?.length > 0 || netWorth.liabilities?.length > 0);
 
-  // The card has something to say if any one source came back with data.
   const hasIdentityData = identity.monthsTracked > 0 || health?.score != null || hasNetWorth;
 
   const identityTiles = [

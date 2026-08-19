@@ -1,8 +1,4 @@
-// Emergency-fund nudge suppression is STRUCTURED-ONLY: a goal with
-// kind='emergency' or a net-worth asset row typed emergency_fund. No name
-// matching at runtime — users name things anything, so a label heuristic both
-// misses real funds and can't be reasoned about. Legacy emergency-named goals
-// are converted once by migrateGoalKinds at startup.
+// Suppression is structured-only: kind='emergency' or an emergency_fund asset row, never a name match.
 const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
@@ -24,8 +20,7 @@ const register = async (suffix) => {
     return { cookie: login.headers['set-cookie'], userId: login.body.data.user.id };
 };
 
-// Spend last month so avg monthly expense > 0 and the (zero-ish) balance covers
-// < 3 months — the state in which the nudge fires.
+// Puts the user in the state where the nudge fires: expense > 0 and balance covering < 3 months.
 const spendLastMonth = (cookie) => chai.request(server)
     .post('/api/transaction')
     .set('Cookie', cookie)
@@ -58,8 +53,7 @@ describe('Emergency-fund nudge suppression', () => {
     });
 
     it('is NOT suppressed by an emergency-sounding name alone (no structured signal)', async () => {
-        // Post-migration, runtime never name-matches: a kind='general' goal that
-        // merely sounds like an emergency fund does not suppress.
+        // Runtime never name-matches: a kind='general' goal that sounds like one does not suppress.
         const { cookie, userId } = await register('namegoal');
         await spendLastMonth(cookie);
         await Goal.create({ user: userId, description: 'Dana darurat', price: 30_000_000, savedAmount: 0, kind: 'general' });

@@ -1,6 +1,3 @@
-// Day-level spend for a single month, derived client-side from that month's
-// transactions. Pure — no React, no fetch — so the bucketing, the savings
-// exclusion and the intensity scale can be unit-tested.
 
 const WEEKDAYS_SUN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -24,8 +21,7 @@ const dateFormatter = (tz) => {
   return f;
 };
 
-// 'YYYY-MM-DD' as the clock in `tz` saw it — a 23:40 charge must not slide into
-// the next day. Falls back to the browser zone when tz is absent or unknown.
+// 'YYYY-MM-DD' as the clock in `tz` saw it — a 23:40 charge must not slide into the next day.
 export const dayKey = (time, tz) => {
   const d = time instanceof Date ? time : new Date(time);
   if (Number.isNaN(d.getTime())) return null;
@@ -33,7 +29,6 @@ export const dayKey = (time, tz) => {
   return `${p.year}-${p.month}-${p.day}`;
 };
 
-// Cells for a 7-column month grid: leading/trailing nulls pad the weeks.
 export const buildMonthGrid = (year, month, weekStartsOn = 'monday') => {
   const dow  = new Date(year, month - 1, 1).getDay(); // 0 = Sunday
   const lead = weekStartsOn === 'sunday' ? dow : (dow + 6) % 7;
@@ -45,9 +40,7 @@ export const buildMonthGrid = (year, month, weekStartsOn = 'monday') => {
   return cells;
 };
 
-// Expense per day, excluding savings-group outflow (moving cash to savings is
-// not spending). `yearMonth` drops anything that lands outside the month once
-// bucketed in its own zone.
+// Excludes savings-group outflow — moving cash to savings is not spending.
 export const buildDailySpend = (transactions = [], { yearMonth, savingsCategories = [] } = {}) => {
   const savings = new Set([...savingsCategories].map((c) => String(c).toLowerCase()));
   const byDay = {};
@@ -73,8 +66,7 @@ export const buildDailySpend = (transactions = [], { yearMonth, savingsCategorie
   };
 };
 
-// Every transaction of the day, income included — the drill-down shows the day
-// as it happened, not just what fed the heat.
+// Income included: the drill-down shows the day as it happened, not just what fed the heat.
 export const groupTransactionsByDay = (transactions = []) => {
   const byDay = {};
   for (const t of transactions) {
@@ -87,7 +79,7 @@ export const groupTransactionsByDay = (transactions = []) => {
   return byDay;
 };
 
-// 0 = no spend (rendered empty), 1-4 = quartiles of the month's own maximum.
+// 0 = no spend, 1-4 = quartiles of the month's own maximum.
 export const intensityLevel = (amount, max) => {
   if (!(amount > 0) || !(max > 0)) return 0;
   const ratio = amount / max;
@@ -97,10 +89,7 @@ export const intensityLevel = (amount, max) => {
   return 4;
 };
 
-// The server bounds the range in the *browser's* zone while rows are bucketed
-// in their own transaction_timezone, so a boundary row can fall outside both
-// months. Pad each end by two days (max zone spread is 26h) — buildDailySpend
-// still drops anything outside `yearMonth`, so nothing leaks into the grid.
+// The server bounds in the browser's zone but rows bucket in their own, so pad two days each end.
 const PAD_DAYS = 2;
 const DAY_MS = 86_400_000;
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -110,9 +99,7 @@ export const monthFetchRange = (year, month) => ({
   end:   isoDay(Date.UTC(year, month, 0) + PAD_DAYS * DAY_MS),
 });
 
-// Both requests have to land. Without the savings-group list the calendar
-// cannot keep its "savings is not spending" promise, so it refuses to show
-// numbers rather than quietly painting a transfer as the month's darkest day.
+// Both requests must land — without the savings list the calendar would paint a transfer as the darkest day.
 export const resolveCalendarState = (rangeResult, groupResult) => {
   if (rangeResult?.status !== 'fulfilled') {
     return { txns: [], savings: [], error: rangeResult?.reason?.message || 'Could not load daily spending.' };

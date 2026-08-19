@@ -35,8 +35,7 @@ describe('helpers/financialHealth — computeFinancialHealth', () => {
     });
 
     it('does not punish a new user for unmeasured pillars', () => {
-        // Perfect savings, no budget/goals/emergency data → should still be excellent,
-        // not dragged down by treating missing pillars as zero.
+        // Missing pillars must not be treated as zero.
         const withMissing = computeFinancialHealth({ savingsRate: 0.25, emergencyMonths: null, budgetPaceRatio: null, avgGoalProgress: null });
         expect(withMissing.score).to.equal(100);
     });

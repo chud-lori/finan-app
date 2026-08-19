@@ -1,4 +1,3 @@
-// In-process ML facade for category classification and smart insights.
 
 const { classifyBatch } = require('./classifier');
 const { detectAnomalies } = require('./anomaly');

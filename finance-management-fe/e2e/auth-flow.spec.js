@@ -1,17 +1,10 @@
 // @ts-check
-/**
- * Authenticated user flows.
- * Requires TEST_EMAIL and TEST_PASSWORD env vars pointing to a real account.
- * Skip gracefully when credentials aren't available.
- *
- *   TEST_EMAIL=you@example.com TEST_PASSWORD=yourpass npx playwright test e2e/auth-flow.spec.js
- */
+// Needs TEST_EMAIL / TEST_PASSWORD for a real account; skips when unset.
 const { test, expect } = require('@playwright/test');
 
 const EMAIL    = process.env.TEST_EMAIL;
 const PASSWORD = process.env.TEST_PASSWORD;
 
-// Helper — logs in and stores storage state in `page`
 async function login(page) {
   await page.goto('/login');
   const userField = page.locator('input[name="identifier"], input[type="text"], input[placeholder*="username" i]').first();
@@ -26,7 +19,6 @@ test.describe('Authenticated flows', () => {
 
   test('full login flow lands on dashboard', async ({ page }) => {
     await login(page);
-    // Dashboard should show balance or transaction section
     await expect(page.locator('text=/balance|transaction|income|expense/i').first()).toBeVisible();
   });
 
@@ -39,7 +31,7 @@ test.describe('Authenticated flows', () => {
   test('add transaction page loads with category field visible', async ({ page }) => {
     await login(page);
     await page.goto('/add');
-    // Category combobox should be visible immediately (not gated behind type selection)
+    // Must be visible immediately, not gated behind the type selection.
     await expect(page.locator('[placeholder*="category" i], button[role="combobox"]').first()).toBeVisible();
   });
 

@@ -18,7 +18,7 @@ export function CurrencyProvider({ children }) {
   const [weekStartsOn, setWeekStartsOn] = useState('monday');
 
   const refresh = useCallback(async () => {
-    // Only fetch if a user session is likely active (username is stored on login, cleared on logout)
+    // Only fetch when a session is likely active — username is set on login, cleared on logout.
     const username = typeof window !== 'undefined' ? localStorage.getItem('username') : null;
     if (!username) return;
     try {
@@ -34,7 +34,6 @@ export function CurrencyProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    // Read localStorage first (instant, no network)
     try {
       const savedCur = localStorage.getItem('currency');
       if (savedCur) setCurrency(savedCur);
@@ -43,7 +42,6 @@ export function CurrencyProvider({ children }) {
       const savedWk = localStorage.getItem('weekStartsOn');
       if (savedWk) setWeekStartsOn(savedWk);
     } catch {}
-    // Then validate/refresh from API
     refresh();
   }, [refresh]);
 

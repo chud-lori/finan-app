@@ -3,8 +3,7 @@ import { useRouter } from 'next/navigation';
 import { logout as apiLogout } from '@/lib/api';
 import { useCurrency } from '@/components/CurrencyContext';
 
-// Mobile-only log out. Desktop has it in the Navbar user menu, which is
-// `hidden md:flex`, so without this the bottom-nav pages have no exit.
+// The desktop logout is in the `hidden md:flex` Navbar menu, so bottom-nav pages need this one.
 export default function MobileLogoutButton() {
   const router = useRouter();
   const { clearCurrency } = useCurrency();
