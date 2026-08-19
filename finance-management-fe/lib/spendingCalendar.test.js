@@ -5,6 +5,8 @@ import {
   dayKey,
   groupTransactionsByDay,
   intensityLevel,
+  monthFetchRange,
+  resolveCalendarState,
   weekdayLabels,
 } from './spendingCalendar';
 
@@ -32,7 +34,10 @@ describe('dayKey — timezone bucketing', () => {
   });
 
   it('falls back instead of throwing on an unknown zone', () => {
-    expect(dayKey('2026-08-03T12:00:00.000Z', 'Mars/Olympus')).to.be.a('string');
+    // Falls back to the host zone — assert the actual day, not just "a string",
+    // or a wrong-day fallback would still pass.
+    const local = new Date('2026-08-03T12:00:00.000Z').toLocaleDateString('en-CA');
+    expect(dayKey('2026-08-03T12:00:00.000Z', 'Mars/Olympus')).to.equal(local);
     expect(dayKey('not a date', 'UTC')).to.equal(null);
   });
 });
@@ -50,6 +55,7 @@ describe('buildMonthGrid — weekday alignment', () => {
     const cells = buildMonthGrid(2026, 8, 'sunday');
     expect(cells.slice(0, 6).every((c) => c === null)).to.equal(true);
     expect(cells[6]).to.deep.equal({ day: 1, key: '2026-08-01' });
+    expect(cells.length % 7).to.equal(0);
   });
 
   it('covers every day of the month including a leap February', () => {
@@ -142,5 +148,137 @@ describe('intensityLevel', () => {
     expect(intensityLevel(1000, 1000)).to.equal(4);
     // Same ratio, different currency magnitude -> same level
     expect(intensityLevel(1_000_000, 10_000_000)).to.equal(1);
+  });
+});
+
+// ── Regression cover for the month-boundary hole ──────────────────────────────
+// The server bounds /range in the browser's zone (moment.tz(start, tz)), while
+// buildDailySpend buckets each row in its own transaction_timezone. These
+// helpers mirror the server so a test can assert "fetched AND rendered".
+const tzOffsetMs = (tz, instantMs) => {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(new Date(instantMs)).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - instantMs;
+};
+
+const startOfZonedDay = (dayStr, tz) => {
+  const guess = Date.parse(`${dayStr}T00:00:00Z`);
+  const once  = guess - tzOffsetMs(tz, guess);
+  return guess - tzOffsetMs(tz, once);
+};
+
+const serverWindow = (year, month, browserTz) => {
+  const { start, end } = monthFetchRange(year, month);
+  return {
+    from: startOfZonedDay(start, browserTz),
+    to:   startOfZonedDay(end, browserTz) + 86_400_000 - 1,
+  };
+};
+
+const fetched = (isoTime, year, month, browserTz) => {
+  const { from, to } = serverWindow(year, month, browserTz);
+  const t = Date.parse(isoTime);
+  return t >= from && t <= to;
+};
+
+describe('monthFetchRange — the fetch window covers every zone', () => {
+  it('pads both ends of the month', () => {
+    expect(monthFetchRange(2026, 8)).to.deep.equal({ start: '2026-07-30', end: '2026-09-02' });
+    expect(monthFetchRange(2026, 1)).to.deep.equal({ start: '2025-12-30', end: '2026-02-02' });
+    expect(monthFetchRange(2024, 2)).to.deep.equal({ start: '2024-01-30', end: '2024-03-02' });
+  });
+
+  it('fetches a row whose zone is behind the browser zone (west txn, east browser)', () => {
+    // 03:00Z on 1 Sep is still 31 Aug 23:00 in New York -> belongs to August.
+    const time = '2026-09-01T03:00:00.000Z';
+    expect(fetched(time, 2026, 8, 'Asia/Jakarta')).to.equal(true);
+
+    const res = buildDailySpend(
+      [tx({ amount: 700, time, transaction_timezone: 'America/New_York' })],
+      { yearMonth: '2026-08' },
+    );
+    expect(res.byDay['2026-08-31']).to.equal(700);
+    expect(res.total).to.equal(700);
+  });
+
+  it('fetches a row whose zone is ahead of the browser zone (east txn, UTC browser)', () => {
+    // 22:00Z on 31 Aug is already 1 Sep 05:00 in Jakarta -> belongs to September.
+    const time = '2026-08-31T22:00:00.000Z';
+    expect(fetched(time, 2026, 9, 'UTC')).to.equal(true);
+
+    const res = buildDailySpend(
+      [tx({ amount: 450, time, transaction_timezone: 'Asia/Jakarta' })],
+      { yearMonth: '2026-09' },
+    );
+    expect(res.byDay['2026-09-01']).to.equal(450);
+  });
+
+  it('survives the widest possible zone spread (UTC+14 row, UTC-12 browser)', () => {
+    const first = '2026-08-31T10:00:00.000Z'; // 1 Sep 00:00 in Kiritimati
+    expect(dayKey(first, 'Pacific/Kiritimati')).to.equal('2026-09-01');
+    expect(fetched(first, 2026, 9, 'Etc/GMT+12')).to.equal(true);
+
+    const last = '2026-09-30T23:00:00.000Z'; // 30 Sep 11:00 in Etc/GMT+12
+    expect(dayKey(last, 'Etc/GMT+12')).to.equal('2026-09-30');
+    expect(fetched(last, 2026, 9, 'Pacific/Kiritimati')).to.equal(true);
+  });
+
+  it('does not let the padded days leak into the grid or the busiest day', () => {
+    const res = buildDailySpend(
+      [
+        tx({ amount: 9_000, time: '2026-07-30T05:00:00.000Z' }),
+        tx({ amount: 8_000, time: '2026-09-02T05:00:00.000Z' }),
+        tx({ amount: 300,   time: '2026-08-14T05:00:00.000Z' }),
+      ],
+      { yearMonth: '2026-08' },
+    );
+    expect(Object.keys(res.byDay)).to.deep.equal(['2026-08-14']);
+    expect(res.max).to.equal(300);
+    expect(res.total).to.equal(300);
+    expect(res.activeDays).to.equal(1);
+  });
+});
+
+describe('resolveCalendarState — never guesses at the savings exclusion', () => {
+  const range = (transactions) => ({ status: 'fulfilled', value: { data: { transactions } } });
+  const groups = (list) => ({ status: 'fulfilled', value: { data: { groups: list } } });
+  const failed = (message) => ({ status: 'rejected', reason: new Error(message) });
+
+  it('passes both payloads through when they land', () => {
+    const state = resolveCalendarState(
+      range([tx({ id: 'x' })]),
+      groups([{ group: 'essential', categories: [{ name: 'food' }] },
+              { group: 'savings',   categories: [{ name: 'Reksa Dana' }, { name: 'emas' }] }]),
+    );
+    expect(state.error).to.equal('');
+    expect(state.txns).to.have.lengthOf(1);
+    expect(state.savings).to.deep.equal(['Reksa Dana', 'emas']);
+  });
+
+  it('errors instead of treating savings transfers as spending when the group summary fails', () => {
+    // A 429 from the category rate limiter used to resolve to null, so savings
+    // silently became [] and a payday investment painted the darkest cell.
+    const state = resolveCalendarState(range([tx({ category: 'Reksa Dana', amount: 5_000_000 })]),
+                                       failed('Too many requests'));
+    expect(state.error).to.match(/savings/i);
+    expect(state.txns).to.deep.equal([]);
+    expect(state.savings).to.deep.equal([]);
+  });
+
+  it('clears the previous month savings list when the range fetch fails', () => {
+    const state = resolveCalendarState(failed('Network error'), groups([{ group: 'savings', categories: [{ name: 'emas' }] }]));
+    expect(state.error).to.equal('Network error');
+    expect(state.txns).to.deep.equal([]);
+    expect(state.savings).to.deep.equal([]);
+  });
+
+  it('treats a missing savings group as an empty list, not an error', () => {
+    const state = resolveCalendarState(range([]), groups([{ group: 'essential', categories: [] }]));
+    expect(state.error).to.equal('');
+    expect(state.savings).to.deep.equal([]);
   });
 });

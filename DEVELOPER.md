@@ -1238,7 +1238,7 @@ PLAYWRIGHT_BASE_URL=https://your-domain.com npm run test:e2e
 
 | File | What it covers |
 |------|---------------|
-| `lib/spendingCalendar.test.js` | Spending-calendar day bucketing (per-transaction timezone), weekday alignment for both `weekStartsOn` values, savings-group exclusion, intensity scaling |
+| `lib/spendingCalendar.test.js` | Spending-calendar day bucketing (per-transaction timezone), month-boundary fetch window across east/west zones, weekday alignment for both `weekStartsOn` values, savings-group exclusion and its failure path, intensity scaling |
 | `public-pages.spec.js` | Landing, auth pages, legal pages, auth guard redirects — 30 tests desktop + mobile |
 | `auth-flow.spec.js` | Login, dashboard, add transaction, analytics, logout-all (skipped without credentials) |
 
@@ -1463,6 +1463,8 @@ The app is multi-currency. Never hardcode `Rp`, `IDR`, or `jt` in UI text. Use `
 The Analytics spending heatmap adds **no backend endpoint**. `SpendingCalendar` fetches the selected month once through the existing `GET /api/transaction/range/:start/:end` (unpaginated — the paginated list endpoint caps at 100 rows and would silently truncate a busy month's day totals) plus `GET /api/category/group-summary` for the savings-group names, then derives everything locally in `lib/spendingCalendar.js`:
 
 - **Day bucketing** uses each transaction's own `transaction_timezone` via a cached `Intl.DateTimeFormat` — a 23:40 charge must not slide into the next day. Same rule the backend analytics aggregation follows; zero new dependencies.
+- **The fetch window is padded two days on each side** (`monthFetchRange`). The server bounds `/range` in the *browser's* zone while rows bucket in their own zone, so an unpadded window can miss a boundary row and it disappears from both months. Two days covers the full 26h zone spread; `buildDailySpend` still drops any key outside `yearMonth`, so the padding never leaks into the grid or the busiest-day figure.
+- **Both requests must succeed** (`resolveCalendarState` over `Promise.allSettled`). If `group-summary` fails — a 500, a blip, or a 429 from its 30/min limiter — the calendar shows an error with Retry instead of silently treating savings transfers as spend. A confidently wrong number is worse than an error.
 - **Intensity** is relative to the month's own maximum (4 quartile levels), never an absolute currency band — the scale has to work for any currency and any income level. A zero-spend day is level 0 and renders empty, not pale-but-coloured.
 - **Savings-group outflow is excluded** from the day totals (see *Savings & investment visibility*) but the drill-down still lists every transaction of the day, income included.
 - **Week alignment** honours `Preference.weekStartsOn`. That preference reaches the component through `CurrencyContext`, which already loads `GET /api/profile` once per session — no extra request and no new settings surface.

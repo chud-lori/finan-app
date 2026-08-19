@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getGroupSummary, getRangeTransactions } from '@/lib/api';
 import { useCurrency } from '@/components/CurrencyContext';
 import Tooltip from '@/components/Tooltip';
@@ -8,6 +8,8 @@ import {
   buildMonthGrid,
   groupTransactionsByDay,
   intensityLevel,
+  monthFetchRange,
+  resolveCalendarState,
   weekdayLabels,
 } from '@/lib/spendingCalendar';
 
@@ -30,34 +32,31 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
   const [savings, setSavings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   const yearMonth = `${year}-${pad(month)}`;
+  const labels    = useMemo(() => weekdayLabels(weekStartsOn), [weekStartsOn]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError('');
 
-    const last = new Date(year, month, 0).getDate();
-    Promise.all([
-      getRangeTransactions(`${yearMonth}-01`, `${yearMonth}-${pad(last)}`),
-      getGroupSummary(yearMonth).catch(() => null),
-    ])
-      .then(([txRes, groupRes]) => {
+    const { start, end } = monthFetchRange(year, month);
+    Promise.allSettled([getRangeTransactions(start, end), getGroupSummary(yearMonth)])
+      .then(([rangeRes, groupRes]) => {
         if (cancelled) return;
-        setTxns(txRes.data?.transactions ?? []);
-        const savingsGroup = (groupRes?.data?.groups ?? []).find((g) => g.group === 'savings');
-        setSavings((savingsGroup?.categories ?? []).map((c) => c.name));
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setTxns([]);
-        setError(err.message || 'Could not load daily spending.');
+        const next = resolveCalendarState(rangeRes, groupRes);
+        setTxns(next.txns);
+        setSavings(next.savings);
+        setError(next.error);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [year, month, yearMonth]);
+  }, [year, month, yearMonth, attempt]);
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const { byDay, max, total, activeDays } = useMemo(
     () => buildDailySpend(txns, { yearMonth, savingsCategories: savings }),
@@ -65,7 +64,6 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
   );
   const txnsByDay = useMemo(() => groupTransactionsByDay(txns), [txns]);
   const cells     = useMemo(() => buildMonthGrid(year, month, weekStartsOn), [year, month, weekStartsOn]);
-  const labels    = useMemo(() => weekdayLabels(weekStartsOn), [weekStartsOn]);
 
   const todayKey = (() => {
     const d = new Date();
@@ -76,35 +74,60 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
     ? Object.entries(byDay).reduce((best, e) => (e[1] > best[1] ? e : best))
     : null;
 
+  const header = (
+    <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+      {labels.map((l) => (
+        <div key={l} className="text-[10px] font-medium text-gray-400 text-center uppercase tracking-wide">{l}</div>
+      ))}
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="grid grid-cols-7 gap-1.5 w-full max-w-xl">
-        {Array.from({ length: 42 }, (_, i) => (
-          <div key={i} className="h-11 rounded-lg bg-gray-100 animate-pulse" />
-        ))}
+      <div className="space-y-3">
+        <div className="w-full max-w-xl">
+          {header}
+          <div className="grid grid-cols-7 gap-1.5">
+            {Array.from({ length: 42 }, (_, i) => (
+              <div key={i} className="h-11 rounded-lg bg-gray-100 animate-pulse" />
+            ))}
+          </div>
+        </div>
+        <div className="h-4 w-56 rounded bg-gray-100 animate-pulse" />
+      </div>
+    );
+  }
+
+  // No savings list means no honest savings-excluded total, so show nothing
+  // rather than a confidently wrong heatmap.
+  if (error) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-rose-600">{error}</p>
+        <button
+          type="button"
+          onClick={retry}
+          className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      {error && <p className="text-xs text-rose-600">{error}</p>}
-
       <div className="w-full max-w-xl">
-        <div className="grid grid-cols-7 gap-1.5 mb-1.5">
-          {labels.map((l) => (
-            <div key={l} className="text-[10px] font-medium text-gray-400 text-center uppercase tracking-wide">{l}</div>
-          ))}
-        </div>
+        {header}
 
         <div className="grid grid-cols-7 gap-1.5">
           {cells.map((cell, i) => {
-            if (!cell) return <div key={`pad-${i}`} className="h-11" />;
+            if (!cell) return <div key={`pad-${i}`} className="h-11" aria-hidden="true" />;
 
-            const amount = byDay[cell.key] ?? 0;
-            const level  = intensityLevel(amount, max);
+            const amount  = byDay[cell.key] ?? 0;
+            const level   = intensityLevel(amount, max);
             const dayTxns = txnsByDay[cell.key] ?? [];
-            const isToday = cell.key === todayKey;
+            const label   = `${cell.day} ${MONTH_LABELS[month - 1]} ${year}`;
 
             const base = 'h-11 rounded-lg flex items-start justify-end px-1.5 pt-1 text-xs tabular-nums transition-all';
             const tone = level === 0
@@ -112,24 +135,16 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
               : level === 4
                 ? 'text-white font-semibold'
                 : 'text-gray-700 font-medium';
-            const ring = isToday ? ' ring-1 ring-teal-500' : '';
-
-            if (!dayTxns.length) {
-              return <div key={cell.key} className={`${base} ${tone}${ring}`}>{cell.day}</div>;
-            }
+            const ring = cell.key === todayKey ? ' ring-1 ring-teal-500' : '';
 
             return (
               <button
                 key={cell.key}
                 type="button"
-                onClick={() => onDayClick?.({
-                  key:   cell.key,
-                  label: `${cell.day} ${MONTH_LABELS[month - 1]} ${year}`,
-                  txns:  dayTxns,
-                })}
+                onClick={() => onDayClick?.({ key: cell.key, label, txns: dayTxns })}
                 style={level > 0 ? { background: LEVEL_BG[level] } : undefined}
                 className={`${base} ${tone}${ring} hover:ring-2 hover:ring-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer`}
-                aria-label={`${cell.day} ${MONTH_LABELS[month - 1]} ${year} — ${amount > 0 ? `spent ${formatAmount(amount)}` : 'no spending'}`}
+                aria-label={`${label} — ${amount > 0 ? `spent ${formatAmount(amount)}` : 'no spending'}`}
                 title={amount > 0 ? formatAmount(amount) : 'No spending'}
               >
                 {cell.day}

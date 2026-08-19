@@ -96,3 +96,38 @@ export const intensityLevel = (amount, max) => {
   if (ratio <= 0.75) return 3;
   return 4;
 };
+
+// The server bounds the range in the *browser's* zone while rows are bucketed
+// in their own transaction_timezone, so a boundary row can fall outside both
+// months. Pad each end by two days (max zone spread is 26h) — buildDailySpend
+// still drops anything outside `yearMonth`, so nothing leaks into the grid.
+const PAD_DAYS = 2;
+const DAY_MS = 86_400_000;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+export const monthFetchRange = (year, month) => ({
+  start: isoDay(Date.UTC(year, month - 1, 1) - PAD_DAYS * DAY_MS),
+  end:   isoDay(Date.UTC(year, month, 0) + PAD_DAYS * DAY_MS),
+});
+
+// Both requests have to land. Without the savings-group list the calendar
+// cannot keep its "savings is not spending" promise, so it refuses to show
+// numbers rather than quietly painting a transfer as the month's darkest day.
+export const resolveCalendarState = (rangeResult, groupResult) => {
+  if (rangeResult?.status !== 'fulfilled') {
+    return { txns: [], savings: [], error: rangeResult?.reason?.message || 'Could not load daily spending.' };
+  }
+  if (groupResult?.status !== 'fulfilled') {
+    return {
+      txns: [], savings: [],
+      error: 'Could not load your savings categories — daily totals would count transfers to savings as spending.',
+    };
+  }
+  const groups  = groupResult.value?.data?.groups ?? [];
+  const savings = groups.find((g) => g.group === 'savings');
+  return {
+    txns:    rangeResult.value?.data?.transactions ?? [],
+    savings: (savings?.categories ?? []).map((c) => c.name),
+    error:   '',
+  };
+};
