@@ -1618,7 +1618,7 @@ function HoldingRows({ rows, types, accent, namePlaceholder, onEdit, onRemove, o
             className="w-full sm:w-auto sm:flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-gray-200 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           {/* pr-7 keeps the option text clear of the native dropdown chevron */}
           <select value={r.type} onChange={e => onEdit(r.key, 'type', e.target.value)}
-            className="flex-1 sm:flex-none sm:w-32 min-w-0 shrink pl-2 pr-7 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+            className="flex-1 sm:flex-none sm:w-32 min-w-0 shrink pl-2 pr-7 py-1.5 rounded-lg border border-gray-200 text-base sm:text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
             {types.map(t => <option key={t.val} value={t.val}>{t.label}</option>)}
           </select>
           <div className="relative flex-1 sm:flex-none sm:w-36 min-w-0">

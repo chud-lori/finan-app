@@ -115,8 +115,9 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
 
   const grandTotal  = categories.reduce((s, c) => s + c.total, 0);
   const pieData     = categories.slice(0, 12).map(c => ({ name: c.category, value: c.total }));
+  // Full name here — HBarChart ellipsises the axis tick and the tooltip shows the rest.
   const barData     = categories.slice(0, 10).map(c => ({
-    name:  c.category.length > 20 ? c.category.slice(0, 20) + '…' : c.category,
+    name:  c.category,
     Value: showAvg ? c.avgMonthly : c.total,
   }));
 
@@ -147,11 +148,16 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Spending breakdown">
           <DonutChart data={pieData} colors={PIE_COLORS} />
+          {/* Legend wraps and carries the share — a 1% slice is unreadable in the
+              donut but still legible here. */}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
             {pieData.map((d, i) => (
-              <div key={d.name} className="flex items-center gap-1.5 text-xs text-gray-600">
+              <div key={d.name} title={d.name} className="flex items-center gap-1.5 text-xs text-gray-600 max-w-full">
                 <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                {d.name}
+                <span className="truncate min-w-0">{d.name}</span>
+                {grandTotal > 0 && (
+                  <span className="text-gray-400 tabular-nums flex-shrink-0">{Math.round((d.value / grandTotal) * 100)}%</span>
+                )}
               </div>
             ))}
           </div>
@@ -531,7 +537,7 @@ export default function AnalyticsPage() {
                   {data?.categories?.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-gray-500 mr-1">Compare:</span>
-                      <Tooltip text="Show how each category changed vs a reference period. Positive % = spending more, negative % = spending less." align="left" />
+                      <Tooltip text="Show how each category changed vs a reference period. Positive % = spending more, negative % = spending less." align="left" fixed />
                       {[
                         { value: 'none',       label: 'None',          tip: null },
                         { value: 'last_month', label: 'vs Last Month', tip: 'Show how much each category changed compared to the previous month.' },
@@ -595,15 +601,21 @@ export default function AnalyticsPage() {
                   </div>
 
                   <ChartCard title={`Monthly income vs expense — ${year}`} hint="Click a bar to see transactions">
-                    <VBarChart
-                      data={monthlyBars}
-                      bars={[
-                        { key: 'Income',  color: '#10b981' },
-                        { key: 'Expense', color: '#f43f5e' },
-                      ]}
-                      height={300}
-                      onBarClick={handleBarClick}
-                    />
+                    {/* Twelve months in 320px leaves ~20px per month — labels drop out
+                        and the bars are too narrow to tap. Scroll instead. */}
+                    <div className="overflow-x-auto scroll-x-hint -mx-5 px-5 sm:mx-0 sm:px-0">
+                      <div className="min-w-[560px] sm:min-w-0">
+                        <VBarChart
+                          data={monthlyBars}
+                          bars={[
+                            { key: 'Income',  color: '#10b981' },
+                            { key: 'Expense', color: '#f43f5e' },
+                          ]}
+                          height={300}
+                          onBarClick={handleBarClick}
+                        />
+                      </div>
+                    </div>
                   </ChartCard>
 
                   <ChartCard title="Month-by-month breakdown">
@@ -769,7 +781,7 @@ function SummaryCard({ label, value, color }) {
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
       <div className="flex items-center gap-1.5 mb-1">
         <p className="text-xs text-gray-500">{label}</p>
-        {tip && <Tooltip text={tip} />}
+        {tip && <Tooltip text={tip} fixed />}
       </div>
       <p className={`text-lg font-bold ${cls}`}>{value}</p>
     </div>

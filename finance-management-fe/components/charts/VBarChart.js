@@ -21,6 +21,8 @@ const VBarTooltip = ({ active, payload, label }) => {
   );
 };
 
+// Every category label is drawn (interval 0) — the caller is responsible for
+// giving the chart ~40px per category, scrolling horizontally on mobile if needed.
 export default function VBarChart({ data, bars, height = 300, onBarClick }) {
   const handleClick = onBarClick
     ? (d) => { if (d?.activeLabel) onBarClick(d.activeLabel); }
@@ -35,7 +37,7 @@ export default function VBarChart({ data, bars, height = 300, onBarClick }) {
         style={onBarClick ? { cursor: 'pointer' } : undefined}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+        <XAxis dataKey="name" interval={0} tick={{ fontSize: 12 }} />
         <YAxis tickFormatter={formatK} tick={{ fontSize: 11 }} width={52} />
         <Tooltip content={<VBarTooltip />} />
         <Legend />

@@ -890,7 +890,7 @@ function BudgetCard({ expense, budget, month, onSaved }) {
                 setInput(digits ? fmtInput(digits) : '');
               }}
               onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
-              className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="flex-1 min-w-0 text-base sm:text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
               placeholder={fmtInput(5000000)}
             />
             <button onClick={handleSave} disabled={saving} className="px-2.5 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-50 shrink-0">
