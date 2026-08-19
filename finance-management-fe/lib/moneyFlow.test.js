@@ -271,21 +271,24 @@ describe('moneyFlow — layoutMoneyFlow', () => {
     );
     const box = layoutMoneyFlow(lopsided, { width: 900 });
     expect(box.groups.length).to.be.greaterThan(3);
-    for (let i = 1; i < box.groups.length; i++) {
-      expect(box.groups[i].labelY - box.groups[i - 1].labelY).to.be.at.least(13.999);
+    const shown = box.groups.filter(g => g.labelled);
+    for (let i = 1; i < shown.length; i++) {
+      expect(shown[i].labelY - shown[i - 1].labelY).to.be.at.least(11.999);
     }
+    box.groups.filter(g => !g.labelled).forEach(g => expect(g.h).to.be.lessThan(12));
   });
 
   it('never prints two leaf labels on top of each other', () => {
     const thin = buildMoneyFlow(
       [cat('rent', 100_000, 'essential'), ...Array.from({ length: 6 }, (_, i) => cat(`t${i}`, 20 + i, 'discretionary'))],
-      { income: 200_000, expense: 100_125 },
+      { income: 120_000 },
     );
     const box = layoutMoneyFlow(thin, { width: 900 });
-    for (let i = 1; i < box.leaves.length; i++) {
-      expect(box.leaves[i].labelY - box.leaves[i - 1].labelY).to.be.at.least(29.999);
+    const shown = box.leaves.filter(l => l.labelled);
+    for (let i = 1; i < shown.length; i++) {
+      expect(shown[i].labelY - shown[i - 1].labelY).to.be.at.least(25.999);
     }
-    expect(box.leaves[box.leaves.length - 1].labelY).to.be.at.most(box.height);
+    box.leaves.filter(l => !l.labelled).forEach(l => expect(l.h).to.be.lessThan(26));
   });
 
   it('keeps the label lane inside the viewBox', () => {
@@ -300,5 +303,107 @@ describe('moneyFlow — layoutMoneyFlow', () => {
     expect(d.startsWith('M')).to.equal(true);
     expect(d.endsWith('Z')).to.equal(true);
     expect(d).to.not.match(/NaN|Infinity/);
+  });
+});
+
+describe('layoutMoneyFlow — geometry a numeric assertion misses', () => {
+  const flow = buildMoneyFlow([
+      { category: 'rent', total: 4_000_000, group: 'essential' },
+      { category: 'food', total: 1_500_000, group: 'essential' },
+      { category: 'coffee', total: 800_000, group: 'discretionary' },
+      { category: 'games', total: 400_000, group: 'discretionary' },
+      { category: 'reksadana', total: 1_000_000, group: 'savings' },
+    ], { income: 10_000_000 });
+  const box = layoutMoneyFlow(flow);
+  const outLinks = box.links.filter(k => k.leaf);
+
+  it('starts each leaf ribbon at its own leaf, not at the group', () => {
+    box.leaves.forEach(l => {
+      const link = outLinks.find(k => k.leaf === l.key);
+      expect(link.y1).to.equal(l.y);
+      expect(link.h1).to.equal(l.h);
+      expect(link.h0).to.equal(l.h);
+    });
+  });
+
+  it('keeps every group ribbon inside its own group node', () => {
+    box.groups.forEach(g => {
+      const inbound = box.links.find(k => k.key === `in:${g.key}`);
+      expect(inbound.y1).to.equal(g.y);
+      expect(inbound.h1).to.equal(g.h);
+      const own = outLinks.filter(k => k.leaf.startsWith(`${g.key}:`));
+      const first = Math.min(...own.map(k => k.y0));
+      const last = Math.max(...own.map(k => k.y0 + k.h0));
+      expect(first).to.be.at.least(g.y - 0.001);
+      expect(last).to.be.at.most(g.y + g.h + 0.001);
+    });
+  });
+
+  it('leaves no gap in the source band — a straddling link means a mis-stacked column', () => {
+    const inbound = box.links.filter(k => k.key.startsWith('in:')).sort((a, b) => a.y0 - b.y0);
+    expect(inbound.length).to.be.greaterThan(1);
+    for (let i = 1; i < inbound.length; i++) {
+      expect(inbound[i].y0).to.be.closeTo(inbound[i - 1].y0 + inbound[i - 1].h0, 0.001);
+    }
+  });
+
+  it('orders the columns left to right', () => {
+    const groupX = box.groups[0].x;
+    const leafX = box.leaves[0].x;
+    expect(groupX).to.be.greaterThan(box.nodeWidth);
+    expect(leafX).to.be.greaterThan(groupX + box.nodeWidth);
+    expect(box.labelX).to.be.at.least(leafX + box.nodeWidth);
+  });
+
+  it('centres each column on the same band', () => {
+    const span = (nodes) => {
+      const top = Math.min(...nodes.map(n => n.y));
+      const bottom = Math.max(...nodes.map(n => n.y + n.h));
+      return (top + bottom) / 2;
+    };
+    expect(span(box.groups)).to.be.closeTo(span(box.leaves), 1);
+    expect(span(box.sources)).to.be.closeTo(span(box.leaves), 1);
+  });
+
+  it('never draws a label off its own node, and never off the canvas', () => {
+    box.leaves.filter(l => l.labelled).forEach(l => {
+      expect(l.labelY).to.be.at.least(l.y - 0.001);
+      expect(l.labelY).to.be.at.most(l.y + l.h + 0.001);
+      expect(l.labelY + 11).to.be.at.most(box.height + 22);
+    });
+    box.groups.filter(g => g.labelled).forEach(g => {
+      expect(g.labelY).to.be.at.least(g.y - 0.001);
+      expect(g.labelY).to.be.at.most(g.y + g.h + 0.001);
+    });
+  });
+
+  it('omits a label that its node has no room for', () => {
+    const skewed = buildMoneyFlow([
+        { category: 'rent', total: 15_000_000, group: 'essential' },
+        { category: 'gum', total: 2_000, group: 'discretionary' },
+      ], { income: 20_000_000 });
+    const tiny = layoutMoneyFlow(skewed).leaves.find(l => l.name === 'gum');
+    expect(tiny.labelled).to.equal(false);
+  });
+
+  it('ribbons run top-edge to top-edge, never crossed', () => {
+    box.links.forEach(k => {
+      const d = ribbonPath(k);
+      expect(d).to.contain(`L${k.x1},${k.y1 + k.h1}`);
+      expect(k.h0).to.be.at.least(0);
+    });
+  });
+});
+
+describe('percentages share the denominator they are drawn against', () => {
+  it('sums group percentages to the whole, not to outflow', () => {
+    const flow = buildMoneyFlow([
+        { category: 'rent', total: 3_000_000, group: 'essential' },
+        { category: 'kopi', total: 1_000_000, group: 'discretionary' },
+      ], { income: 8_000_000 });
+    const sum = flow.groups.reduce((s, g) => s + flow.pctOf(g.value), 0);
+    expect(sum).to.be.closeTo(100, 1.5);
+    const leafSum = flow.leaves.reduce((s, l) => s + flow.pctOf(l.value), 0);
+    expect(leafSum).to.be.closeTo(100, 1.5);
   });
 });

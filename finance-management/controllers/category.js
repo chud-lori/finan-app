@@ -3,6 +3,7 @@ const mongoose  = require('mongoose');
 const Category  = require('../models/category.model');
 const Transaction = require('../models/transaction.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
+const cache = require('../helpers/cache');
 
 const validTz   = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -37,6 +38,7 @@ const classifyAll = async (req, res) => {
 
         if (ops.length) await Category.bulkWrite(ops);
 
+        cache.invalidateUser(userId);
         return res.json({ status: 1, data: { classified: ops.length, total: names.length } });
     } catch (err) {
         return res.status(500).json({ status: 0, message: 'Classification failed' });
@@ -143,6 +145,7 @@ const setCategoryGroup = async (req, res) => {
 
         if (!updated) return res.status(404).json({ status: 0, message: 'Category not found' });
 
+        cache.invalidateUser(userId);
         return res.json({ status: 1, data: { _id: updated._id, name: updated.name, group: updated.group } });
     } catch (err) {
         return res.status(500).json({ status: 0, message: 'Failed to update category group' });
@@ -190,6 +193,7 @@ const deleteCategory = async (req, res) => {
         }
 
         await Category.deleteOne({ _id: id, user: userId });
+        cache.invalidateUser(userId);
         return res.json({ status: 1, data: { _id: id, name: cat.name } });
     } catch (err) {
         return res.status(500).json({ status: 0, message: 'Failed to delete category' });
@@ -235,6 +239,7 @@ const renameCategory = async (req, res) => {
             { $set: { category: newName } }
         );
 
+        cache.invalidateUser(userId);
         return res.json({ status: 1, data: { _id: id, oldName: cat.name, name: newName } });
     } catch (err) {
         return res.status(500).json({ status: 0, message: 'Failed to rename category' });

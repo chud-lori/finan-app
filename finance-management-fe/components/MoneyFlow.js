@@ -89,9 +89,9 @@ export default function MoneyFlow({ categories, income, expense, periodLabel, on
           {box.groups.map((g) => (
             <g key={g.key}>
               <rect x={g.x} y={g.y} width={g.w} height={Math.max(g.h, 1)} rx="2" fill={g.color} />
-              <text x={g.x} y={g.labelY} className="text-gray-600" fill="currentColor" fontSize="10" fontWeight="600">
+              {g.labelled && <text x={g.x} y={g.labelY} className="text-gray-600" fill="currentColor" fontSize="10" fontWeight="600">
                 {g.label} · {formatAmount(g.value)} · {pct(flow, g.value)}%
-              </text>
+              </text>}
             </g>
           ))}
 
@@ -105,19 +105,21 @@ export default function MoneyFlow({ categories, income, expense, periodLabel, on
               >
                 <title>{`${l.name} — ${formatAmount(l.value)}`}</title>
                 <rect x={l.x} y={l.y} width={l.w} height={Math.max(l.h, 1)} rx="2" fill={l.color} />
-                <text
-                  x={box.labelX}
-                  y={l.labelY}
-                  className="text-gray-700"
-                  fill="currentColor"
-                  fontSize="12"
-                  style={{ textTransform: 'capitalize' }}
-                >
-                  {truncate(l.name, 24)}
-                </text>
-                <text x={box.labelX} y={l.labelY + 13} className="text-gray-400" fill="currentColor" fontSize="11">
-                  {formatAmount(l.value)} · {pct(flow, l.value)}%
-                </text>
+                {l.labelled && (<>
+                  <text
+                    x={box.labelX}
+                    y={l.labelY - 3}
+                    className="text-gray-700"
+                    fill="currentColor"
+                    fontSize="12"
+                    style={{ textTransform: 'capitalize' }}
+                  >
+                    {truncate(l.name, 24)}
+                  </text>
+                  <text x={box.labelX} y={l.labelY + 11} className="text-gray-400" fill="currentColor" fontSize="11">
+                    {formatAmount(l.value)} · {pct(flow, l.value)}%
+                  </text>
+                </>)}
               </g>
             );
           })}

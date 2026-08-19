@@ -79,7 +79,7 @@ export function buildMoneyFlow(categories, opts = {}) {
 
   // Fold the tail into a per-group "Other" so the leaf count stays capped
   // without ever moving money between groups.
-  const budget = Math.max(1, maxLeaves - (uncategorised > 0 ? 1 : 0));
+  const budget = Math.max(1, maxLeaves - (uncategorised > 0 ? 1 : 0) - (surplus > 0 ? 1 : 0));
   const kept = rows.slice();
   const tail = [];
   const leafCount = () => kept.length + new Set(tail.map((r) => r.group)).size;
@@ -147,7 +147,7 @@ export function buildMoneyFlow(categories, opts = {}) {
 
 const DEFAULTS = {
   width: 900, nodeWidth: 14, gap: 12, leafRow: 46, minHeight: 240,
-  labelLane: 214, labelStep: 30, groupLabelStep: 14, padTop: 14,
+  labelLane: 214, minLeafLabelH: 26, minGroupLabelH: 12, padTop: 14,
 };
 
 export function layoutMoneyFlow(flow, opts = {}) {
@@ -176,12 +176,10 @@ export function layoutMoneyFlow(flow, opts = {}) {
   let sy = top(h(flow.totalIn)); // cursor along the source band
   const groups = [];
   const links  = [];
-  let gLabelY  = -Infinity; // a near-zero group is thinner than its own label
 
   flow.groups.forEach((g) => {
     const gh = h(g.value);
-    gLabelY = Math.max(gLabelY + o.groupLabelStep, gy - 4);
-    groups.push({ ...g, x: groupX, w: o.nodeWidth, y: gy, h: gh, labelY: gLabelY });
+    groups.push({ ...g, x: groupX, w: o.nodeWidth, y: gy, h: gh, labelY: gy + gh / 2, labelled: gh >= o.minGroupLabelH });
     links.push({ key: `in:${g.key}`, color: g.color, x0: o.nodeWidth, x1: groupX, y0: sy, y1: gy, h0: gh, h1: gh });
     sy += gh;
 
@@ -194,15 +192,13 @@ export function layoutMoneyFlow(flow, opts = {}) {
     gy += gh + o.gap;
   });
 
-  // Leaves: the gapped stack fills the full height by construction of `scale`.
-  // Labels are then pushed down so two thin neighbours cannot print on top of
-  // each other — the node keeps its true position, only the text moves.
+  // A label is drawn only where its own node has room for it. Pushing labels
+  // down to avoid collisions drifted them onto the neighbouring bar and off the
+  // canvas — the list below the chart carries every value anyway.
   let ly = 0;
-  let labelY = o.padTop - o.labelStep;
   const leaves = flow.leaves.map((l) => {
     const lh   = h(l.value);
-    labelY = Math.max(labelY + o.labelStep, ly + lh / 2);
-    const node = { ...l, x: leafX, w: o.nodeWidth, y: ly, h: lh, labelY };
+    const node = { ...l, x: leafX, w: o.nodeWidth, y: ly, h: lh, labelY: ly + lh / 2, labelled: lh >= o.minLeafLabelH };
     ly += lh + o.gap;
     return node;
   });

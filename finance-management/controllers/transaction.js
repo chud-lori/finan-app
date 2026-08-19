@@ -935,7 +935,7 @@ const getAnalytics = async (req, res) => {
             Category.find({ user: userId }).select('name group').lean(),
         ]);
 
-        const groupOf = new Map(cats.map(c => [c.name, c.group || 'other']));
+        const groupOf = new Map(cats.map(c => [String(c.name).toLowerCase(), c.group || 'other']));
 
         // Category breakdown scoped to the selected period (expense only)
         // Group months in user's local timezone so Jan in Tokyo stays in Jan
@@ -951,7 +951,7 @@ const getAnalytics = async (req, res) => {
             });
             return Object.values(map).map(c => ({
                 category:     c.category,
-                group:        groupOf.get(c.category) || 'other',
+                group:        groupOf.get(String(c.category).toLowerCase()) || 'other',
                 total:        Math.round(c.total),
                 count:        c.count,
                 avgMonthly:   c.months.size > 0 ? Math.round(c.total / c.months.size) : 0,
