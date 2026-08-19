@@ -16,6 +16,7 @@ const {
     getRecommendation,
     importCsv,
     getAnalytics,
+    getMerchants,
     getAnomalies,
     getExplainability,
     getRecurring,
@@ -86,6 +87,7 @@ const upload = multer({
  */
 router.get('/expense',        authenticateJWT, limiter.byUser(60), getExpense);
 router.get('/analytics',      authenticateJWT, limiter.byUser(60), getAnalytics);
+router.get('/merchants',      authenticateJWT, limiter.byUser(60), getMerchants);
 router.get('/anomalies',      authenticateJWT, limiter.byUser(60), getAnomalies);
 router.get('/explain',        authenticateJWT, limiter.byUser(60), getExplainability);
 router.get('/recurring',      authenticateJWT, limiter.byUser(60), getRecurring);

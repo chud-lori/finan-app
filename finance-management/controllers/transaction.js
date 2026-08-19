@@ -25,6 +25,7 @@ const { seedDefaultCategories, DEFAULT_UTILITY_CATEGORY_NAMES } = require('../he
 const { track } = require('../helpers/backgroundJobs');
 const nativeMl = require('../services/ml');
 const nativeMlRecurring = require('../services/ml/recurring');
+const { topMerchants } = require('../services/ml/merchants');
 const NetWorthSnapshot = require('../models/netWorthSnapshot.model');
 const { buildRecap } = require('../services/ml/recap');
 const { computeRunway } = require('../services/ml/runway');
@@ -102,6 +103,7 @@ const {
     GetByDateResponseDTO,
     DeleteTransactionResponseDTO,
     SeedCategoryResponseDTO,
+    MerchantsResponseDTO,
     BaseResponseDTO
 } = require('../dtos/transaction.dto');
 
@@ -1003,6 +1005,61 @@ const getAnalytics = async (req, res) => {
     }
 };
 
+// Top merchants for a period, computed on read. Nothing is stored: a merchant
+// key is a derived view of the period's own descriptions, so a stored one would
+// go stale the moment a description is edited.
+const getMerchants = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const yearRaw  = parseInt(req.query.year);
+        const year     = Number.isInteger(yearRaw) && yearRaw >= 1970 && yearRaw <= 9999
+            ? yearRaw : new Date().getFullYear();
+        const monthRaw = parseInt(req.query.month);
+        const month    = Number.isInteger(monthRaw) && monthRaw >= 1 && monthRaw <= 12 ? monthRaw : null;
+        const limitRaw = parseInt(req.query.limit);
+        const limit    = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 12;
+        const userTz   = validTz(req.query.tz);
+
+        const cacheParams = `${year}:${month ?? 'all'}:${limit}:${userTz}`;
+        const cached = cache.get(userId, 'merchants', cacheParams);
+        if (cached) return res.status(200).json(cached);
+
+        // Same period window as getAnalytics — the two cards must agree.
+        let periodStart, periodEnd;
+        if (month) {
+            const pad = String(month).padStart(2, '0');
+            periodStart = moment.tz(`${year}-${pad}-01`, 'YYYY-MM-DD', userTz).startOf('month').toDate();
+            periodEnd   = moment.tz(`${year}-${pad}-01`, 'YYYY-MM-DD', userTz).endOf('month').toDate();
+        } else {
+            periodStart = moment.tz(`${year}-01-01`, 'YYYY-MM-DD', userTz).startOf('year').toDate();
+            periodEnd   = moment.tz(`${year}-12-31`, 'YYYY-MM-DD', userTz).endOf('year').toDate();
+        }
+
+        const [txns, savingsNames] = await Promise.all([
+            Transaction.find({ user: userId, type: 'expense', time: { $gte: periodStart, $lte: periodEnd } })
+                .select('amount category description time').lean(),
+            getSavingsCategoryNames(userId),
+        ]);
+
+        const result = topMerchants(txns.map(t => ({
+            id:          t._id.toString(),
+            amount:      t.amount,
+            category:    t.category,
+            description: t.description,
+            date:        moment(t.time).tz(t.transaction_timezone || userTz).format('YYYY-MM-DD'),
+            type:        'expense',
+        })), { savingsCategories: savingsNames, limit });
+
+        const response = BaseResponseDTO.success('Merchants retrieved',
+            new MerchantsResponseDTO(result, { year, month, limit }));
+        cache.set(userId, 'merchants', cacheParams, response);
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error(`Get merchants error: ${error.message}`);
+        res.status(500).json(BaseResponseDTO.error('Internal server error'));
+    }
+};
+
 const getAnomalies = async (req, res) => {
     try {
         const userTz = validTz(req.query.tz);
@@ -1786,6 +1843,7 @@ module.exports = {
     getRecommendation,
     importCsv,
     getAnalytics,
+    getMerchants,
     getAnomalies,
     getExplainability,
     getRecurring,

@@ -109,6 +109,7 @@ finan-app/                          ← monorepo root
 │   │       ├── classifier.js       ← keyword + TF-IDF char-ngram cosine
 │   │       ├── anomaly.js          ← per-category median/MAD outlier detector
 │   │       ├── recurring.js        ← subscription/bill detection (category + amount + cadence gate)
+│   │       ├── merchants.js        ← top-merchants aggregation (shared merchantKey, one-off roll-up)
 │   │       ├── forecast.js         ← linear-regression month-end forecast
 │   │       └── keywords.js         ← bilingual EN/ID taxonomy
 │   ├── helpers/
@@ -119,6 +120,7 @@ finan-app/                          ← monorepo root
 │   │   ├── snapshot.js             ← refreshSnapshot() + applySnapshotDelta()
 │   │   ├── spendingVolatility.js  ← classifyVolatility() — CV-based fixed/flexible category class
 │   │   ├── savingsCategories.js   ← getSavingsCategoryNames() — group==='savings' names to exclude from spend
+│   │   ├── merchantKey.js         ← merchantKey() + deriveStopwords() — shared by recurring + merchant analytics
 │   │   ├── financialHealth.js     ← computeFinancialHealth() — 0-100 score from 4 pillars
 │   │   ├── cache.js                ← in-process request cache
 │   │   └── logger.js               ← Winston logger
@@ -136,6 +138,8 @@ finan-app/                          ← monorepo root
 │       ├── goal.integration.test.js
 │       ├── ml.anomaly.test.js
 │       ├── ml.recurring.test.js
+│       ├── ml.merchants.test.js
+│       ├── merchants.integration.test.js
 │       ├── spendingVolatility.test.js
 │       ├── financialHealth.test.js
 │       ├── dataIntegrity.integration.test.js
@@ -887,7 +891,7 @@ Requires ≥ 4 days of data. Returns `{ available: false, reason, days_tracked }
 
 ### Recurring detection (`services/ml/recurring.js`)
 
-Groups expenses by a normalized merchant key (lowercase, digits/punctuation stripped, first 3 tokens), then reads the median gap between consecutive charges to pick a cadence bucket (daily → yearly).
+Groups expenses by the shared merchant key (`helpers/merchantKey.js` — see Merchant analytics below), then reads the median gap between consecutive charges to pick a cadence bucket (daily → yearly).
 
 Periodicity alone is **not** enough to call a group a subscription — a fixed-price lunch bought roughly monthly is indistinguishable from a streaming bill on cadence and amount alone. A group is promoted to a subscription/bill only when **all three gates** pass:
 
@@ -907,7 +911,26 @@ Stable sub-monthly repeats (a weekly gym pass, a near-daily coffee) are surfaced
 
 Grouping is unchanged by this gate — this is a classification step, not a clustering one. No external AI, no embeddings, no fuzzy merchant matching: those would only add false-*merge* risk (joining two merchants that share a word) for no benefit.
 
-**API:** `detectRecurring(transactions, { asOf, utilityCategories })` → `{ recurring[], monthlyTotal, count, alerts[], frequent[], frequentMonthlyTotal }`. `utilityCategories` is an optional Set of exact lowercased category names that earn the looser amount gate. Also exports `merchantKey()` and `isBlockedCategory()`.
+**API:** `detectRecurring(transactions, { asOf, utilityCategories })` → `{ recurring[], monthlyTotal, count, alerts[], frequent[], frequentMonthlyTotal }`. `utilityCategories` is an optional Set of exact lowercased category names that earn the looser amount gate. Also exports `merchantKey()` (re-exported from `helpers/merchantKey.js`) and `isBlockedCategory()`.
+
+### Merchant analytics (`services/ml/merchants.js` + `helpers/merchantKey.js`)
+
+Answers "how much at this particular place", using the merchant dimension recurring detection already computed but never exposed.
+
+**One definition of "merchant".** `merchantKey()` moved out of `services/ml/recurring.js` into `helpers/merchantKey.js` and is imported by both. Merchant bucketing is **exact**, not fuzzy: lowercase → drop digits → drop punctuation → drop corpus filler → keep the first 3 tokens. `Spotify`, `SPOTIFY ID` and `spotify premium` are three merchants, not one. A false *split* costs a duplicate row; a false *merge* silently corrupts a total — so splits are the accepted failure mode and no two distinct keys are ever merged.
+
+**Document-frequency stopwords.** Before keying, tokens the user writes on more than 30% of the period's descriptions are stripped — those are verbs and filler (`beli`, `bayar`, `ke`, `di`, `top up`), not merchant names, and they were splitting one merchant across two rows. The list is *derived from the data*, never hardcoded: the user writes EN and ID interchangeably and a maintained list would rot. Two guards:
+
+- corpora under 8 descriptions are left alone (document frequency there is noise);
+- a frequent token is only filler if it attaches to ≥3 *different* other tokens. Someone who buys coffee daily writes that merchant's name on well over 30% of the month's descriptions; a name keeps company with the couple of tokens it is always written with, filler does not.
+
+**Computed on read, never stored.** No field on `Transaction`, no precomputed key, no worker. A stored key goes stale the moment a description is edited — and with corpus stopwords the same description keys differently as history grows, so a merchant key is a **derived view, never an identifier**: never store one, never join on one. The corpus is small enough that token counting is dwarfed by the Mongo round trip already being paid, and the result is cached per `(year, month, limit, tz)` in the same 5-minute `helpers/cache.js` the other analytics reads use.
+
+**Savings-group outflow is excluded** via `helpers/savingsCategories.js`, so a monthly transfer into an investment category never tops the merchant list. Shares are computed against the period's non-savings spend, so a merchant's share does not move when the list is capped.
+
+**Single-transaction merchants are collapsed** into one `oneOff` roll-up (count + total + share + its transaction ids) rather than listed. A ranked list has no cadence gate to hide fragments and one-offs behind the way recurring detection does, so without the roll-up the tail would drown the repeat spend the list exists to show.
+
+**API:** `topMerchants(transactions, { limit, savingsCategories })` → `{ merchants[], oneOff, total, merchantCount }`. Each merchant carries `{ key, total, count, share, avg, category, lastDate, txIds }`; `txIds` is what the frontend drills down on, so the client never re-derives a key the server owns. Covered by `test/ml.merchants.test.js` (pure) and `test/merchants.integration.test.js`.
 
 ### Money Recap (`services/ml/recap.js`)
 
@@ -1280,6 +1303,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | DELETE | `/api/transaction/:id` | — | ✓ | Delete transaction; balance updated atomically |
 | GET | `/api/transaction/expense` | 60/min | ✓ | Total expense summary (all time) |
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M` |
+| GET | `/api/transaction/merchants` | 60/min | ✓ | Top merchants for a period; query: `?year=YYYY&month=M&limit=N&tz=` (`month` omitted = whole year, `limit` defaults to 12 and is clamped to 50). Returns `{ merchants[], oneOff, total, merchantCount, year, month, limit }`. Merchants are grouped on read by the shared `merchantKey()`, savings-group outflow is excluded, and single-transaction merchants are collapsed into `oneOff` — see Merchant analytics |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
 | GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category, plus `volatilityBreakdown.categories` (names per class) — see Category volatility section |
 | GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12, or ≤ 0.35 for flagged utility categories) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
@@ -1522,6 +1546,15 @@ The Analytics filter bar (category / group / type / amount range) recomputes the
 - **A filtered figure never keeps a whole-period label.** Summary cards gain a `(filtered)` suffix; the savings rate is suppressed entirely, because a rate over a subset is arithmetically true and semantically false (`type = income` would always read 100%). Period comparison (`vs Last Month` / `vs My Average`) is hidden for the same reason — the reference payload is server-aggregated and unfiltered.
 - The chart `kind` (income vs expense breakdown) falls back to income when the filtered set has no expenses at all, so a `group = income` filter does not render an empty expense chart under a non-zero income card.
 - Both month drill-down paths — filtered and not — read the same uncapped period set, so the count in the modal does not change with filter state.
+
+### Top merchants card
+
+`components/TopMerchants.js` sits at the bottom of the Monthly and Yearly tabs and fetches its own period from `GET /api/transaction/merchants`. Unlike the calendar and the filter bar this one is **not** derived client-side: merchant identity is `helpers/merchantKey.js`, and a second implementation in the browser is exactly the divergence the shared helper exists to prevent.
+
+- The card is **hidden while filters are active**. Its numbers come from the server's grouping of the whole period, so showing them under filter chips would repeat the mistake the `(filtered)` suffix and the suppressed savings rate were added to avoid.
+- Each row carries the `txIds` the server grouped, so tapping one opens the shared `TransactionDrilldownModal` off the period set the page already caches — no per-merchant request, and the client never re-derives a key the backend owns.
+- Below `sm` the rows are a **stacked list**, not the table: at 390px the usable width is 318px (page `px-4` + card `p-5`), which four money columns cannot share without colliding. The `sm+` table follows the same rules as the category table — `min-w-[440px]`, `whitespace-nowrap`, `overflow-x-auto`, a `sticky left-0` first column and `tabular-nums` amounts.
+- Merchant keys render as **text** and are built from `[a-z ]` only, so nothing a user types can survive into markup.
 
 Every chart click lands in one modal, `components/TransactionDrilldownModal.js` — month bars, donut slices, category bars, category rows and Spending Mix segments all use it. Thin segments (a 3% slice, a narrow mix band) are not the only affordance: the donut legend, the category list rows and the mix legend rows are buttons that open the same drill-down.
 

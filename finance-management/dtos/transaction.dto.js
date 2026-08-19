@@ -175,6 +175,33 @@ class SeedCategoryResponseDTO {
     }
 }
 
+/**
+ * Merchants Response DTO
+ *
+ * `key` is a derived merchant key, safe to render as text: it is built from
+ * [a-z ] only, so no user markup survives into it.
+ */
+class MerchantsResponseDTO {
+    constructor(result, meta = {}) {
+        this.merchants = (result.merchants || []).map(m => ({
+            key: m.key,
+            total: m.total,
+            count: m.count,
+            share: m.share,
+            avg: m.avg,
+            category: m.category,
+            lastDate: m.lastDate,
+            txIds: m.txIds,
+        }));
+        this.oneOff = result.oneOff;
+        this.total = result.total;
+        this.merchantCount = result.merchantCount;
+        this.year = meta.year;
+        this.month = meta.month;
+        this.limit = meta.limit;
+    }
+}
+
 module.exports = {
     AddTransactionRequestDTO,
     TransactionResponseDTO,
@@ -187,5 +214,6 @@ module.exports = {
     GetByDateResponseDTO,
     DeleteTransactionResponseDTO,
     SeedCategoryResponseDTO,
+    MerchantsResponseDTO,
     BaseResponseDTO
 };
