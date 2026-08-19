@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
-import { getAnalytics, getTransactions, getRangeTransactions, listAllCategories } from '@/lib/api';
+import { getAnalytics, getRangeTransactions, listAllCategories } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
@@ -13,7 +13,8 @@ import AnalyticsFilterBar from '@/components/AnalyticsFilterBar';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 import {
   parseView, viewToSearch, hasActiveFilters, applyFilters, buildCategoryRows,
-  buildMonthlyTotals, buildPeriodStats, periodBounds, isFilteredEmpty, EMPTY_FILTERS,
+  buildMonthlyTotals, buildPeriodStats, periodBounds, isFilteredEmpty, monthIndex,
+  savingsRateOf, EMPTY_FILTERS,
 } from '@/lib/analyticsFilters';
 
 const DonutChart = dynamic(() => import('@/components/charts/DonutChart'), { ssr: false });
@@ -140,8 +141,10 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
 
   const grandTotal  = categories.reduce((s, c) => s + c.total, 0);
   const pieData     = categories.slice(0, 12).map(c => ({ name: c.category, value: c.total }));
+  // Full name only — the chart elides the axis tick. Truncating here too would
+  // hand a clipped string to the drill-down, which then matches nothing.
   const barData     = categories.slice(0, 10).map(c => ({
-    name:  c.category.length > 20 ? c.category.slice(0, 20) + '…' : c.category,
+    name:  c.category,
     full:  c.category,
     Value: showAvg ? c.avgMonthly : c.total,
   }));
@@ -392,7 +395,9 @@ function AnalyticsPageInner() {
   useEffect(() => { setPeriodTxns(null); }, [periodKey]);
 
   useEffect(() => {
-    if (tab === 'Range' || !filtersActive) return;
+    // Clearing a filter mid-fetch must land the spinner — the in-flight `.then`
+    // is cancelled and will never turn it off itself.
+    if (tab === 'Range' || !filtersActive) { setTxnsLoading(false); return; }
     let cancelled = false;
     setTxnsLoading(true);
     loadPeriodTxns().then(txns => {
@@ -472,10 +477,25 @@ function AnalyticsPageInner() {
     [filtersActive, periodTxns, filters, groupOf, groupPending],
   );
 
-  const kind           = filters.type === 'income' ? 'income' : 'expense';
+  // Filtered numbers are only ready once `filteredTxns` exists; until then the
+  // page must show the skeleton, not the unfiltered server payload under chips.
+  const filteredView   = !!filteredTxns;
+  const filterPending  = filtersActive && !filteredView;
+
+  // A group/category/amount filter can leave income only — deriving the chart
+  // kind from `filters.type` alone would render an empty expense breakdown.
+  const kind = useMemo(() => {
+    if (filters.type) return filters.type;
+    if (filteredTxns?.length && !filteredTxns.some(t => t.type === 'expense')) return 'income';
+    return 'expense';
+  }, [filters.type, filteredTxns]);
+
   const viewCategories = filteredTxns ? buildCategoryRows(filteredTxns, kind) : data?.categories;
   const viewMonthly    = filteredTxns ? buildMonthlyTotals(filteredTxns)      : data?.monthly;
   const viewStats      = filteredTxns ? buildPeriodStats(filteredTxns)        : data?.monthStats;
+
+  // Filtered figures keep their own label so a subset is never read as the period.
+  const flabel = (base) => (filteredView ? `${base} (filtered)` : base);
 
   const monthlyBars = viewMonthly?.map(m => ({
     name:    MONTH_LABELS[m.month - 1],
@@ -484,7 +504,7 @@ function AnalyticsPageInner() {
   })) ?? [];
 
   const ms          = viewStats;
-  const savingsRate = ms && ms.income > 0 ? Math.round(((ms.income - ms.expense) / ms.income) * 100) : 0;
+  const savingsRate = savingsRateOf(ms, filters);
   const yearTotals  = {
     income:  viewMonthly?.reduce((s, m) => s + m.income,  0) ?? 0,
     expense: viewMonthly?.reduce((s, m) => s + m.expense, 0) ?? 0,
@@ -514,14 +534,13 @@ function AnalyticsPageInner() {
     const txns = periodTxns ?? await loadPeriodTxns();
     if (!periodTxns) setPeriodTxns(txns);
     const lower = cat.toLowerCase();
-    const kindNow = filters.type === 'income' ? 'income' : 'expense';
     setDrilldownTxns(
       applyFilters(txns, filters, groupOf ?? {})
-        .filter(t => t.type === kindNow && String(t.category ?? '').toLowerCase() === lower)
+        .filter(t => t.type === kind && String(t.category ?? '').toLowerCase() === lower)
         .sort((a, b) => new Date(b.time) - new Date(a.time)),
     );
     setLoadingDrilldown(false);
-  }, [periodTxns, loadPeriodTxns, filters, groupOf, periodLabel]);
+  }, [periodTxns, loadPeriodTxns, filters, groupOf, periodLabel, kind]);
 
   // Yearly bar click → that month's transactions
   const handleBarClick = async (label) => {
@@ -532,13 +551,14 @@ function AnalyticsPageInner() {
     setDrilldownTxns([]);
     setLoadingDrilldown(true);
     try {
-      if (filtersActive) {
-        const txns = periodTxns ?? await loadPeriodTxns();
-        setDrilldownTxns(applyFilters(txns, filters, groupOf ?? {}).filter(t => new Date(t.time).getMonth() === mIdx));
-      } else {
-        const res = await getTransactions({ month: monthStr, limit: 200 });
-        setDrilldownTxns(res.data?.transactions ?? []);
-      }
+      // Both paths read the same uncapped period set, so the count in the modal
+      // does not change just because a filter is on.
+      const txns = periodTxns ?? await loadPeriodTxns();
+      if (!periodTxns) setPeriodTxns(txns);
+      const inMonth = (filtersActive ? applyFilters(txns, filters, groupOf ?? {}) : txns)
+        .filter(t => monthIndex(t) === mIdx)
+        .sort((a, b) => new Date(b.time) - new Date(a.time));
+      setDrilldownTxns(inMonth);
     } catch {
       setDrilldownTxns([]);
     } finally {
@@ -639,7 +659,7 @@ function AnalyticsPageInner() {
 
           {tab === 'Range' ? (
             <RangeReport />
-          ) : loading ? (
+          ) : loading || filterPending ? (
             <div className="space-y-5">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[0,1,2,3].map(i => (
@@ -672,17 +692,18 @@ function AnalyticsPageInner() {
                 <div className="space-y-5">
                   {/* Summary cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <SummaryCard label="Income"  value={formatAmount(ms?.income  ?? 0)} color="emerald" />
-                    <SummaryCard label="Expense" value={formatAmount(ms?.expense ?? 0)} color="rose" />
+                    <SummaryCard label={flabel('Income')}  value={formatAmount(ms?.income  ?? 0)} color="emerald" />
+                    <SummaryCard label={flabel('Expense')} value={formatAmount(ms?.expense ?? 0)} color="rose" />
                     <SummaryCard
-                      label="Net"
+                      label={flabel('Net')}
                       value={formatAmount((ms?.income ?? 0) - (ms?.expense ?? 0))}
                       color={(ms?.income ?? 0) >= (ms?.expense ?? 0) ? 'emerald' : 'rose'}
                     />
                     <SummaryCard
                       label="Savings rate"
-                      value={ms?.income ? `${savingsRate}%` : '—'}
-                      color={savingsRate >= 0 ? 'teal' : 'rose'}
+                      value={savingsRate == null ? '—' : `${savingsRate}%`}
+                      color={savingsRate == null || savingsRate >= 0 ? 'teal' : 'rose'}
+                      tip={filteredView ? SUPPRESSED_RATE_TIP : undefined}
                     />
                   </div>
 
@@ -748,15 +769,15 @@ function AnalyticsPageInner() {
               {tab === 'Yearly' && (
                 <div className="space-y-5">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <SummaryCard label="Total Income"  value={formatAmount(yearTotals.income)}  color="emerald" />
-                    <SummaryCard label="Total Expense" value={formatAmount(yearTotals.expense)} color="rose" />
+                    <SummaryCard label={flabel('Total Income')}  value={formatAmount(yearTotals.income)}  color="emerald" />
+                    <SummaryCard label={flabel('Total Expense')} value={formatAmount(yearTotals.expense)} color="rose" />
                     <SummaryCard
-                      label="Net"
+                      label={flabel('Net')}
                       value={formatAmount(yearTotals.income - yearTotals.expense)}
                       color={yearTotals.income >= yearTotals.expense ? 'emerald' : 'rose'}
                     />
                     <SummaryCard
-                      label="Avg monthly expense"
+                      label={flabel('Avg monthly expense')}
                       value={formatAmount(Math.round(yearTotals.expense / 12))}
                       color="teal"
                     />
@@ -858,7 +879,7 @@ function AnalyticsPageInner() {
           subtitle={drilldown.subtitle}
           transactions={drilldownTxns}
           loading={loadingDrilldown}
-          emptyText="No transactions match here."
+          emptyText={filtersActive ? 'No transactions match these filters.' : 'No transactions here.'}
           onClose={() => setDrilldown(null)}
           footer={drilldownDashboardHref && (
             <button
@@ -906,14 +927,18 @@ const SUMMARY_TIPS = {
   'Avg monthly expense': 'Your total expenses divided by 12 — a rough benchmark for how much you spend each month.',
 };
 
-function SummaryCard({ label, value, color }) {
+const FILTERED_NOTE = ' Counts only the transactions matching the active filters, not the whole period.';
+const SUPPRESSED_RATE_TIP = 'Hidden while filters are active. A savings rate over a filtered slice is not your savings rate — filter out expenses and it would always read 100%.';
+
+function SummaryCard({ label, value, color, tip }) {
   const cls = { emerald: 'text-emerald-700', rose: 'text-rose-600', teal: 'text-teal-700' }[color] ?? 'text-gray-800';
-  const tip = SUMMARY_TIPS[label];
+  const base = label.replace(/ \(filtered\)$/, '');
+  const text = tip ?? (SUMMARY_TIPS[base] ? SUMMARY_TIPS[base] + (base === label ? '' : FILTERED_NOTE) : null);
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
       <div className="flex items-center gap-1.5 mb-1">
         <p className="text-xs text-gray-500">{label}</p>
-        {tip && <Tooltip text={tip} />}
+        {text && <Tooltip text={text} />}
       </div>
       <p className={`text-lg font-bold ${cls}`}>{value}</p>
     </div>

@@ -21,6 +21,13 @@ const HBarTooltip = ({ active, payload, label }) => {
   );
 };
 
+// Truncation lives here, not in the caller's datum — a clipped `name` would
+// travel into the click handler and match nothing.
+const elide = (v) => {
+  const s = String(v ?? '');
+  return s.length > 20 ? `${s.slice(0, 20)}…` : s;
+};
+
 export default function HBarChart({ data, color = '#6366f1', onBarClick }) {
   // `full` carries the untruncated label — the axis name may be elided with "…".
   const handleBar = onBarClick
@@ -38,7 +45,7 @@ export default function HBarChart({ data, color = '#6366f1', onBarClick }) {
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
         <XAxis type="number" tickFormatter={formatK} tick={{ fontSize: 11 }} />
-        <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+        <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} tickFormatter={elide} />
         <Tooltip content={<HBarTooltip />} />
         <Bar dataKey="Value" fill={color} radius={[0, 4, 4, 0]} maxBarSize={20} onClick={handleBar} />
       </BarChart>

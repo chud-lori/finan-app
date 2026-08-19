@@ -3,7 +3,7 @@ import {
   parseFilters, filterParams, hasActiveFilters, activeChips, clearChip,
   makePredicate, applyFilters, buildCategoryRows, buildMonthlyTotals,
   buildPeriodStats, isFilteredEmpty, periodBounds, parseView, viewToSearch,
-  EMPTY_FILTERS,
+  monthKey, savingsRateOf, EMPTY_FILTERS,
 } from './analyticsFilters';
 
 const sp = (obj) => new URLSearchParams(obj);
@@ -26,6 +26,13 @@ describe('analyticsFilters — URL round-trip', () => {
     expect(parsed.type).to.equal('');
     expect(parsed.min).to.equal('');
     expect(parsed.max).to.equal('');
+  });
+
+  it('does not treat a zero minimum as an active filter', () => {
+    expect(parseFilters(sp({ min: '0' }))).to.deep.equal(EMPTY_FILTERS);
+    expect(filterParams({ ...EMPTY_FILTERS, min: '0' })).to.deep.equal({});
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, min: '0' })).to.equal(false);
+    expect(activeChips({ ...EMPTY_FILTERS, min: '0' })).to.deep.equal([]);
   });
 
   it('normalises category case so the URL and the predicate agree', () => {
@@ -134,6 +141,54 @@ describe('analyticsFilters — empty state and chips', () => {
   it('clearing the amount chip clears both bounds', () => {
     expect(clearChip({ ...EMPTY_FILTERS, min: '10', max: '20' }, 'amount')).to.deep.equal(EMPTY_FILTERS);
     expect(clearChip({ ...EMPTY_FILTERS, group: 'social' }, 'group').group).to.equal('');
+  });
+});
+
+// The server buckets every row by its own `transaction_timezone`; the client
+// re-aggregation has to agree or the same month reads two different totals.
+describe('analyticsFilters — timezone bucketing', () => {
+  // 2024-04-01T02:00Z is 2024-03-31 22:00 in New York → March.
+  const inNewYork = { category: 'food', type: 'expense', amount: 150_000, time: '2024-04-01T02:00:00Z', transaction_timezone: 'America/New_York' };
+  // 2024-03-31T21:00Z is 2024-04-01 04:00 in Jakarta → April.
+  const inJakarta = { category: 'food', type: 'expense', amount: 150_000, time: '2024-03-31T21:00:00Z', transaction_timezone: 'Asia/Jakarta' };
+
+  it('buckets a month in the transaction own zone, not the browser zone', () => {
+    expect(monthKey(inNewYork)).to.equal('2024-03');
+    expect(monthKey(inJakarta)).to.equal('2024-04');
+  });
+
+  it('puts the yearly bars in the month the transaction zone saw', () => {
+    expect(buildMonthlyTotals([inNewYork])[2].expense).to.equal(150_000); // March
+    expect(buildMonthlyTotals([inJakarta])[3].expense).to.equal(150_000); // April
+  });
+
+  it('counts active months per zone, so avg monthly is not doubled', () => {
+    const [row] = buildCategoryRows([inNewYork, inJakarta], 'expense');
+    expect(row).to.include({ total: 300_000, activeMonths: 2, avgMonthly: 150_000 });
+  });
+
+  it('falls back to the browser zone on a missing or unknown zone', () => {
+    expect(monthKey({ time: '2024-06-15T12:00:00Z' })).to.equal('2024-06');
+    expect(monthKey({ time: '2024-06-15T12:00:00Z', transaction_timezone: 'Mars/Olympus' })).to.equal('2024-06');
+    expect(monthKey({ time: 'not a date' })).to.equal('');
+  });
+});
+
+describe('analyticsFilters — savings rate honesty', () => {
+  it('reports the rate for the untouched period', () => {
+    expect(savingsRateOf({ income: 10_000, expense: 8_000 }, EMPTY_FILTERS)).to.equal(20);
+  });
+
+  it('refuses a rate for a filtered subset instead of reading 100%', () => {
+    const incomeOnly = { income: 10_000, expense: 0 };
+    expect(savingsRateOf(incomeOnly, { ...EMPTY_FILTERS, type: 'income' })).to.equal(null);
+    expect(savingsRateOf(incomeOnly, { ...EMPTY_FILTERS, min: '5000' })).to.equal(null);
+    expect(savingsRateOf(incomeOnly, { ...EMPTY_FILTERS, category: 'salary' })).to.equal(null);
+  });
+
+  it('has no rate without income', () => {
+    expect(savingsRateOf({ income: 0, expense: 500 }, EMPTY_FILTERS)).to.equal(null);
+    expect(savingsRateOf(null, EMPTY_FILTERS)).to.equal(null);
   });
 });
 

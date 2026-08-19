@@ -21,6 +21,12 @@ const cleanNum = (v) => {
   return Number.isFinite(n) && n >= 0 ? String(n) : '';
 };
 
+// "at least 0" excludes nothing, so it must not flip the page into filtered mode.
+const cleanMin = (v) => {
+  const s = cleanNum(v);
+  return s && Number(s) > 0 ? s : '';
+};
+
 export function parseFilters(sp) {
   const group = read(sp, PARAM.group).toLowerCase();
   const type  = read(sp, PARAM.type).toLowerCase();
@@ -28,7 +34,7 @@ export function parseFilters(sp) {
     category: read(sp, PARAM.category).trim().toLowerCase(),
     group:    FILTER_GROUPS.includes(group) ? group : '',
     type:     FILTER_TYPES.includes(type) ? type : '',
-    min:      cleanNum(read(sp, PARAM.min)),
+    min:      cleanMin(read(sp, PARAM.min)),
     max:      cleanNum(read(sp, PARAM.max)),
   };
 }
@@ -40,7 +46,7 @@ export function filterParams(filters) {
   if (f.category) out[PARAM.category] = String(f.category).trim().toLowerCase();
   if (FILTER_GROUPS.includes(f.group)) out[PARAM.group] = f.group;
   if (FILTER_TYPES.includes(f.type))   out[PARAM.type]  = f.type;
-  if (cleanNum(f.min)) out[PARAM.min] = cleanNum(f.min);
+  if (cleanMin(f.min)) out[PARAM.min] = cleanMin(f.min);
   if (cleanNum(f.max)) out[PARAM.max] = cleanNum(f.max);
   return out;
 }
@@ -53,7 +59,7 @@ export function activeChips(filters, fmt = (n) => String(n)) {
   if (f.category) chips.push({ key: 'category', label: 'Category', value: f.category });
   if (f.group)    chips.push({ key: 'group',    label: 'Group',    value: f.group });
   if (f.type)     chips.push({ key: 'type',     label: 'Type',     value: f.type });
-  const min = cleanNum(f.min), max = cleanNum(f.max);
+  const min = cleanMin(f.min), max = cleanNum(f.max);
   if (min && max)   chips.push({ key: 'amount', label: 'Amount', value: `${fmt(Number(min))} – ${fmt(Number(max))}` });
   else if (min)     chips.push({ key: 'amount', label: 'Amount', value: `≥ ${fmt(Number(min))}` });
   else if (max)     chips.push({ key: 'amount', label: 'Amount', value: `≤ ${fmt(Number(max))}` });
@@ -68,7 +74,7 @@ export function clearChip(filters, key) {
 
 export function makePredicate(filters, groupOf = {}) {
   const f   = { ...EMPTY_FILTERS, ...(filters || {}) };
-  const min = cleanNum(f.min) === '' ? null : Number(cleanNum(f.min));
+  const min = cleanMin(f.min) === '' ? null : Number(cleanMin(f.min));
   const max = cleanNum(f.max) === '' ? null : Number(cleanNum(f.max));
   const cat = String(f.category || '').trim().toLowerCase();
   const grp = FILTER_GROUPS.includes(f.group) ? f.group : '';
@@ -90,9 +96,36 @@ export function makePredicate(filters, groupOf = {}) {
 export const applyFilters = (txns, filters, groupOf) =>
   (txns || []).filter(makePredicate(filters, groupOf));
 
-const monthKey = (t) => {
+const fmtCache = new Map();
+const monthFormatter = (tz) => {
+  const key = tz || '';
+  if (fmtCache.has(key)) return fmtCache.get(key);
+  const opts = { year: 'numeric', month: '2-digit' };
+  let f;
+  try {
+    f = new Intl.DateTimeFormat('en-US', tz ? { ...opts, timeZone: tz } : opts);
+  } catch {
+    f = new Intl.DateTimeFormat('en-US', opts); // unknown zone → browser zone
+  }
+  fmtCache.set(key, f);
+  return f;
+};
+
+// 'YYYY-MM' in the transaction's own recorded zone, matching how the analytics
+// endpoint buckets. The browser zone would move a late-night charge a month.
+export const monthKey = (t) => {
   const d = new Date(t?.time);
-  return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  if (Number.isNaN(d.getTime())) return '';
+  const p = Object.fromEntries(
+    monthFormatter(t?.transaction_timezone).formatToParts(d).map(x => [x.type, x.value]),
+  );
+  return p.year && p.month ? `${p.year}-${p.month}` : '';
+};
+
+// 0-indexed month, or -1 when the time is unusable.
+export const monthIndex = (t) => {
+  const mk = monthKey(t);
+  return mk ? Number(mk.slice(5, 7)) - 1 : -1;
 };
 
 // Same row shape the analytics endpoint returns, so the charts stay agnostic
@@ -122,11 +155,11 @@ export function buildCategoryRows(txns, kind = 'expense') {
 export function buildMonthlyTotals(txns) {
   const rows = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, income: 0, expense: 0 }));
   (txns || []).forEach(t => {
-    const d = new Date(t?.time);
-    if (Number.isNaN(d.getTime())) return;
+    const m = monthIndex(t);
+    if (m < 0) return;
     const amt = Number(t.amount) || 0;
-    if (t.type === 'income') rows[d.getMonth()].income += amt;
-    else rows[d.getMonth()].expense += amt;
+    if (t.type === 'income') rows[m].income += amt;
+    else rows[m].expense += amt;
   });
   return rows.map(r => ({ ...r, income: Math.round(r.income), expense: Math.round(r.expense) }));
 }
@@ -138,6 +171,14 @@ export function buildPeriodStats(txns) {
     if (t?.type === 'income') income += amt; else expense += amt;
   });
   return { income: Math.round(income), expense: Math.round(expense) };
+}
+
+// null = do not render a number. A rate over a filtered subset is arithmetically
+// true and semantically false: "type = income" would always read 100%.
+export function savingsRateOf(stats, filters) {
+  if (hasActiveFilters(filters)) return null;
+  if (!stats || !(stats.income > 0)) return null;
+  return Math.round(((stats.income - stats.expense) / stats.income) * 100);
 }
 
 // A filtered view with nothing left is an explicit empty state, not a blank chart.
