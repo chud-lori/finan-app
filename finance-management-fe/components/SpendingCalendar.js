@@ -85,7 +85,7 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
   if (loading) {
     return (
       <div className="space-y-3">
-        <div className="w-full max-w-xl">
+        <div className="w-full max-w-3xl mx-auto">
           {header}
           <div className="grid grid-cols-7 gap-1.5">
             {Array.from({ length: 42 }, (_, i) => (
@@ -117,19 +117,19 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
 
   return (
     <div className="space-y-3">
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-3xl mx-auto">
         {header}
 
         <div className="grid grid-cols-7 gap-1.5">
           {cells.map((cell, i) => {
-            if (!cell) return <div key={`pad-${i}`} className="h-11" aria-hidden="true" />;
+            if (!cell) return <div key={`pad-${i}`} className="h-11 lg:h-14" aria-hidden="true" />;
 
             const amount  = byDay[cell.key] ?? 0;
             const level   = intensityLevel(amount, max);
             const dayTxns = txnsByDay[cell.key] ?? [];
             const label   = `${cell.day} ${MONTH_LABELS[month - 1]} ${year}`;
 
-            const base = 'h-11 rounded-lg flex items-start justify-end px-1.5 pt-1 text-xs tabular-nums transition-all';
+            const base = 'h-11 lg:h-14 rounded-lg flex items-start justify-end px-1.5 pt-1 text-xs tabular-nums transition-all';
             const tone = level === 0
               ? 'bg-gray-50 border border-gray-100 text-gray-400'
               : level === 4
@@ -154,7 +154,7 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 flex-wrap max-w-xl">
+      <div className="flex items-center justify-between gap-3 flex-wrap max-w-3xl mx-auto">
         <p className="text-xs text-gray-500">
           {total > 0
             ? <>Busiest day <span className="font-semibold text-gray-700">{Number(busiest[0].slice(-2))} {MONTH_LABELS[month - 1]}</span> · <span className="tabular-nums">{formatAmount(max)}</span> · {activeDays} spending {activeDays === 1 ? 'day' : 'days'}</>
