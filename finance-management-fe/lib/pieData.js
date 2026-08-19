@@ -16,7 +16,7 @@ export function buildPieData(categories, max = 12) {
   const rest   = rows.slice(max);
   const restTotal = rest.reduce((s, r) => s + r.value, 0);
   if (restTotal > 0) {
-    slices.push({ name: `Other (${rest.length})`, value: restTotal, other: true });
+    slices.push({ name: `Other (${rest.length})`, value: restTotal, other: true, members: rest.map(r => r.name) });
   }
 
   const total = slices.reduce((s, r) => s + r.value, 0);

@@ -145,10 +145,14 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
   const pieData     = buildPieData(categories);
   const pieColors   = pieData.map((d, i) => (d.other ? '#9ca3af' : PIE_COLORS[i % PIE_COLORS.length]));
 
-  // buildPieData folds the tail into a synthetic "Other (n)" slice whose name is
-  // no category, so it stays inert — clicking it would open an empty drill-down.
+  // "Other (n)" is a roll-up, not a category — it drills into every category it folds in.
   const onSliceClick = onCategoryClick
-    ? (name) => { if (!pieData.find(d => d.name === name)?.other) onCategoryClick(name); }
+    ? (name) => {
+        const slice = pieData.find(d => d.name === name);
+        if (!slice) return;
+        if (slice.other) onCategoryClick(slice.members ?? [], slice.name);
+        else onCategoryClick(name);
+      }
     : undefined;
 
   // Full name only — the chart elides the axis tick. Truncating here too would
@@ -195,16 +199,6 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
               const share = grandTotal > 0 && (
                 <span className="text-gray-400 tabular-nums flex-shrink-0">{d.pct}%</span>
               );
-              // The "Other (n)" roll-up is not a category — same row, no dead click.
-              if (d.other) {
-                return (
-                  <div key={d.name} title={d.name} className="flex items-center gap-1.5 text-xs text-gray-600 max-w-full">
-                    {dot}
-                    <span className="truncate min-w-0">{d.name}</span>
-                    {share}
-                  </div>
-                );
-              }
               return (
                 <button
                   key={d.name}
@@ -555,18 +549,26 @@ function AnalyticsPageInner() {
   }, [data, periodTxns]);
 
   // Donut slice / category bar / list row → that category's transactions for the period.
-  const handleCategoryClick = useCallback(async (rawCat) => {
-    const cat = String(rawCat ?? '').trim();
-    if (!cat) return;
-    setDrilldown({ title: `Transactions — ${cat}`, subtitle: periodLabel, category: cat });
+  // `rawCat` is one category, or the list a roll-up slice stands for (with its label).
+  const handleCategoryClick = useCallback(async (rawCat, rollupLabel) => {
+    const names = (Array.isArray(rawCat) ? rawCat : [rawCat])
+      .map(c => String(c ?? '').trim().toLowerCase())
+      .filter(Boolean);
+    if (!names.length) return;
+    const wanted = new Set(names);
+    // A roll-up has no single category, so it gets no "open in dashboard" link.
+    setDrilldown({
+      title:    `Transactions — ${rollupLabel ?? rawCat}`,
+      subtitle: periodLabel,
+      category: rollupLabel ? null : String(rawCat).trim(),
+    });
     setDrilldownTxns([]);
     setLoadingDrilldown(true);
     const txns = periodTxns ?? await loadPeriodTxns();
     if (!periodTxns) setPeriodTxns(txns);
-    const lower = cat.toLowerCase();
     setDrilldownTxns(
       applyFilters(txns, filters, groupOf ?? {})
-        .filter(t => t.type === kind && String(t.category ?? '').toLowerCase() === lower)
+        .filter(t => t.type === kind && wanted.has(String(t.category ?? '').toLowerCase()))
         .sort((a, b) => new Date(b.time) - new Date(a.time)),
     );
     setLoadingDrilldown(false);
