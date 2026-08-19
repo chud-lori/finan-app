@@ -12,8 +12,8 @@ const HBarTooltip = ({ active, payload, label }) => {
   const formatAmount = useFormatAmount();
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-sm min-w-[160px]">
-      <p className="font-semibold text-gray-700 mb-1">{label}</p>
+    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-sm min-w-[160px] max-w-[220px]">
+      <p className="font-semibold text-gray-700 mb-1 break-words">{label}</p>
       {payload.map(p => (
         <p key={p.name} style={{ color: p.color }}>{p.name}: {formatAmount(p.value)}</p>
       ))}
@@ -21,13 +21,17 @@ const HBarTooltip = ({ active, payload, label }) => {
   );
 };
 
+// Axis labels ellipsis at a fixed budget so they can't run under the bars; the
+// tooltip carries the full category name.
+const truncTick = (v) => (typeof v === 'string' && v.length > 16 ? `${v.slice(0, 15)}…` : v);
+
 export default function HBarChart({ data, color = '#6366f1' }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart layout="vertical" data={data} margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
         <XAxis type="number" tickFormatter={formatK} tick={{ fontSize: 11 }} />
-        <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+        <YAxis type="category" dataKey="name" width={104} tickFormatter={truncTick} tick={{ fontSize: 11 }} />
         <Tooltip content={<HBarTooltip />} />
         <Bar dataKey="Value" fill={color} radius={[0, 4, 4, 0]} maxBarSize={20} />
       </BarChart>

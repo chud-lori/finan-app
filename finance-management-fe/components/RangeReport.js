@@ -37,9 +37,9 @@ function CategoryBreakdown({ transactions }) {
           const pct = Math.round((amt / total) * 100);
           return (
             <div key={cat}>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-gray-700 dark:text-slate-300 font-medium capitalize">{toTitleCase(cat)}</span>
-                <span className="text-gray-500 dark:text-slate-400">{formatAmount(amt)} <span className="text-gray-400">({pct}%)</span></span>
+              <div className="flex items-baseline justify-between gap-2 text-xs mb-1">
+                <span className="text-gray-700 dark:text-slate-300 font-medium capitalize truncate min-w-0" title={toTitleCase(cat)}>{toTitleCase(cat)}</span>
+                <span className="text-gray-500 dark:text-slate-400 tabular-nums whitespace-nowrap shrink-0">{formatAmount(amt)} <span className="text-gray-400">({pct}%)</span></span>
               </div>
               <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
                 <div className={`h-1.5 rounded-full ${COLORS[i % COLORS.length]}`} style={{ width: `${pct}%` }} />
@@ -132,12 +132,12 @@ export default function RangeReport() {
           <div className="flex-1">
             <label className="block text-xs font-medium text-gray-600 dark:text-slate-300 mb-1.5">From</label>
             <input type="date" value={start} onChange={e => { setStart(e.target.value); setActive(null); }}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white dark:bg-slate-800" />
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-slate-600 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white dark:bg-slate-800" />
           </div>
           <div className="flex-1">
             <label className="block text-xs font-medium text-gray-600 dark:text-slate-300 mb-1.5">To</label>
             <input type="date" value={end} onChange={e => { setEnd(e.target.value); setActive(null); }}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white dark:bg-slate-800" />
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-slate-600 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white dark:bg-slate-800" />
           </div>
           <button type="submit" disabled={loading}
             className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 whitespace-nowrap flex items-center justify-center gap-2">
