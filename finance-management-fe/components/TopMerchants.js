@@ -9,7 +9,7 @@ import Tooltip from '@/components/Tooltip';
 // never a bank feed or a lookup. Single-transaction merchants are rolled up so
 // the list shows repeat spend instead of a tail of one-offs.
 
-const HELP = 'Merchants come from your own transaction descriptions — no bank or third-party lookup. Money moved into savings categories is not counted as spending. Share is of this period’s total spending.';
+const HELP = 'Merchants come from your own transaction descriptions — no bank or third-party lookup. Money moved into savings categories is not counted as spending, so shares are of what you actually spent, not of the period’s whole outflow.';
 
 const dayLabel = (isoDate) => {
   if (!isoDate) return null;
@@ -150,7 +150,7 @@ export default function TopMerchants({ year, month, onMerchantClick }) {
                   <th className="py-2 pl-3 text-right font-medium whitespace-nowrap">
                     <span className="inline-flex items-center gap-1 justify-end">
                       Share
-                      <Tooltip text="What percentage of this period's total spending went to this merchant." position="top" align="right" fixed />
+                      <Tooltip text="Share of this period's spending, savings transfers excluded." position="top" align="right" fixed />
                     </span>
                   </th>
                 </tr>

@@ -1,6 +1,6 @@
 const { expect } = require('chai');
 const { topMerchants } = require('../services/ml/merchants');
-const { merchantKey, deriveStopwords } = require('../helpers/merchantKey');
+const { merchantKey } = require('../helpers/merchantKey');
 
 // n expenses at one merchant, one per day back from 2026-08-20.
 const buys = (description, category, count, amount, startDay = 20) => {
@@ -18,6 +18,35 @@ const buys = (description, category, count, amount, startDay = 20) => {
 
 describe('helpers/merchantKey', () => {
     describe('merchantKey', () => {
+        it('folds a verb prefix into the same merchant', () => {
+            const opt = { stripFiller: true };
+            expect(merchantKey('beli kopi kenangan', opt)).to.equal('kopi kenangan');
+            expect(merchantKey('kopi kenangan', opt)).to.equal('kopi kenangan');
+            expect(merchantKey('top up gopay', opt)).to.equal('gopay');
+        });
+
+        it('keeps a dominant merchant however its detail varies', () => {
+            const opt = { stripFiller: true };
+            // The old corpus rule deleted this merchant: on >30% of a month's rows,
+            // written with many different dishes, it looked exactly like filler.
+            ['grabfood ayam geprek', 'grabfood nasi padang', 'grabfood mie ayam'].forEach(d => {
+                expect(merchantKey(d, opt).startsWith('grabfood')).to.equal(true);
+            });
+            expect(merchantKey('grabfood', opt)).to.equal('grabfood');
+        });
+
+        it('buckets a description with no latin letters instead of dropping it', () => {
+            const opt = { stripFiller: true };
+            expect(merchantKey('1234', opt)).to.equal('1234');
+            expect(merchantKey('!!!', opt)).to.not.equal('');
+        });
+
+        it('keys the same however large the surrounding corpus is', () => {
+            const opt = { stripFiller: true };
+            expect(merchantKey('kopi kenangan', opt)).to.equal(merchantKey('kopi kenangan', opt));
+            expect(merchantKey('beli kopi kenangan', opt)).to.equal('kopi kenangan');
+        });
+
         it('lowercases, drops digits and punctuation, keeps the first three tokens', () => {
             expect(merchantKey('KOPI Kenangan #12 (Grand)')).to.equal('kopi kenangan grand');
             expect(merchantKey('  ')).to.equal('');
@@ -30,44 +59,6 @@ describe('helpers/merchantKey', () => {
             expect(merchantKey('spotify premium')).to.equal('spotify premium');
         });
 
-        it('strips corpus stopwords before taking the three tokens', () => {
-            const stop = new Set(['beli', 'di']);
-            expect(merchantKey('beli kopi kenangan', stop)).to.equal('kopi kenangan');
-            expect(merchantKey('kopi kenangan', stop)).to.equal('kopi kenangan');
-            expect(merchantKey('beli di kopi kenangan grand', stop)).to.equal('kopi kenangan grand');
-        });
-
-        it('keeps a bucket for an all-filler description', () => {
-            expect(merchantKey('beli beli', new Set(['beli']))).to.equal('beli beli');
-        });
-    });
-
-    describe('deriveStopwords', () => {
-        it('flags tokens written on more than 30% of descriptions', () => {
-            const docs = [
-                'beli kopi', 'beli nasi', 'beli pulsa', 'beli bensin',
-                'kopi kenangan', 'nasi warteg', 'pulsa xl', 'bensin motor',
-            ];
-            const stop = deriveStopwords(docs);
-            expect([...stop]).to.deep.equal(['beli']);
-        });
-
-        it('is bilingual by construction — it learns whatever the user writes', () => {
-            const docs = [
-                'bayar listrik', 'bayar wifi', 'bayar kos', 'bayar pulsa',
-                'paid netflix', 'paid gym', 'listrik pln', 'wifi rumah',
-            ];
-            expect([...deriveStopwords(docs)].sort()).to.deep.equal(['bayar']);
-        });
-
-        it('leaves a small corpus alone — document frequency there is noise', () => {
-            const docs = ['beli kopi', 'beli nasi', 'beli pulsa'];
-            expect(deriveStopwords(docs).size).to.equal(0);
-        });
-
-        it('ignores non-array input', () => {
-            expect(deriveStopwords(null).size).to.equal(0);
-        });
     });
 });
 
@@ -129,18 +120,6 @@ describe('services/ml/merchants — topMerchants', () => {
     });
 
     describe('normalisation', () => {
-        it('folds a verb prefix into the merchant once it is corpus filler', () => {
-            const txs = [
-                ...buys('beli kopi kenangan', 'coffee', 3, 25000),
-                ...buys('kopi kenangan', 'coffee', 2, 25000, 15),
-                ...buys('beli nasi warteg', 'food', 2, 15000, 12),
-                ...buys('beli pulsa', 'bill', 2, 50000, 8),
-            ];
-            const { merchants } = topMerchants(txs);
-            const kopi = merchants.find(m => m.key === 'kopi kenangan');
-            expect(kopi.count).to.equal(5);
-            expect(merchants.some(m => m.key === 'beli kopi kenangan')).to.equal(false);
-        });
 
         it('never merges two merchants that differ after the strip', () => {
             const txs = [
@@ -153,16 +132,6 @@ describe('services/ml/merchants — topMerchants', () => {
             const totals = merchants.map(m => m.total).sort((a, b) => a - b);
             expect(totals).to.deep.equal([50000, 57000, 60000, 100000]);
             expect(new Set(merchants.map(m => m.key)).size).to.equal(4);
-        });
-
-        it('keeps a dominant merchant intact — its own name is not filler', () => {
-            const txs = [
-                ...buys('Kopi Kenangan', 'coffee', 6, 25000),
-                ...buys('beli nasi warteg', 'food', 2, 15000, 12),
-                ...buys('beli pulsa', 'bill', 2, 50000, 9),
-            ];
-            const { merchants } = topMerchants(txs);
-            expect(merchants.find(m => m.key === 'kopi kenangan').count).to.equal(6);
         });
     });
 

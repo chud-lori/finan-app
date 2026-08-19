@@ -1046,7 +1046,7 @@ const getMerchants = async (req, res) => {
             amount:      t.amount,
             category:    t.category,
             description: t.description,
-            date:        moment(t.time).tz(userTz).format('YYYY-MM-DD'),
+            date:        moment(t.time).tz(t.transaction_timezone || userTz).format('YYYY-MM-DD'),
             type:        'expense',
         })), { savingsCategories: savingsNames, limit });
 

@@ -23,11 +23,6 @@
 // useful, so they are surfaced separately as `frequent` — never as a
 // subscription, and never with bill alerts attached.
 
-// Merchant grouping is shared with merchant analytics — one definition, so the
-// two surfaces can never disagree about what a merchant is. Bucketing is exact:
-// "Spotify", "SPOTIFY ID" and "spotify premium" are THREE keys, not one. The
-// fragments that produces are filtered out here by the occurrence + cadence
-// gates, which a ranked merchant list does not have.
 const { merchantKey } = require('../../helpers/merchantKey');
 
 const MIN_OCCURRENCES = 3;      // fewer than 3 dated charges can't establish a rhythm

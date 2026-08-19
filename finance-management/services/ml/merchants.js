@@ -1,14 +1,9 @@
 // Top merchants for a period. Pure in-process aggregation — one pass over the
 // period's expenses, nothing stored, nothing leaves the database.
 //
-// Merchant identity is the shared merchantKey, the same bucket recurring
-// detection uses. Two differences from recurring:
-//   - the corpus stopword strip is applied here (a ranked list has no cadence
-//     gate to hide "beli X" / "X" fragments behind);
-//   - single-transaction merchants are collapsed into one roll-up row, so the
-//     list surfaces repeat spend instead of a long tail of one-offs.
-
-const { merchantKey, deriveStopwords } = require('../../helpers/merchantKey');
+// Same merchantKey as recurring detection, but keyed with filler stripped —
+// recurring keys raw, so the two surfaces can bucket a verb-prefixed row differently.
+const { merchantKey } = require('../../helpers/merchantKey');
 
 const DEFAULT_LIMIT = 12;
 const MAX_LIMIT = 50;
@@ -51,12 +46,9 @@ const topMerchants = (transactions, opts = {}) => {
     !savings.has(String(t.category || '').toLowerCase().trim()));
   if (spend.length === 0) return empty;
 
-  const stopwords = deriveStopwords(spend.map(t => t.description));
-
   const groups = new Map();
   for (const tx of spend) {
-    const key = merchantKey(tx.description, stopwords);
-    if (!key) continue;
+    const key = merchantKey(tx.description, { stripFiller: true }) || 'no description';
     let g = groups.get(key);
     if (!g) {
       g = { key, total: 0, count: 0, txIds: [], categories: new Map(), lastDate: null };
