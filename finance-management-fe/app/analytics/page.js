@@ -12,6 +12,7 @@ import RangeReport from '@/components/RangeReport';
 import AnalyticsFilterBar from '@/components/AnalyticsFilterBar';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 import SpendingCalendar from '@/components/SpendingCalendar';
+import MoneyFlow from '@/components/MoneyFlow';
 import { buildPieData } from '@/lib/pieData';
 import {
   parseView, viewToSearch, hasActiveFilters, applyFilters, buildCategoryRows,
@@ -750,6 +751,24 @@ function AnalyticsPageInner() {
                   {/* "So What?" insight — only when there's expense data */}
                   {viewCategories?.length > 0 && kind === 'expense' && (
                     <SoWhatInsight categories={viewCategories} onCategoryClick={handleCategoryClick} />
+                  )}
+
+                  {/* Whole-period only: over a filtered subset the surplus is
+                       whatever the filter left behind, not what you kept. Same
+                       reason the savings rate is suppressed. */}
+                  {!filtersActive && (
+                    <ChartCard
+                      title={`Money flow — ${MONTH_LABELS[month - 1]} ${year}`}
+                      hint="Income → group → category. Tap a category to see its transactions"
+                    >
+                      <MoneyFlow
+                        categories={data?.categories}
+                        income={ms?.income}
+                        expense={ms?.expense}
+                        periodLabel={`${MONTH_LABELS[month - 1]} ${year}`}
+                        onCategoryClick={handleCategoryClick}
+                      />
+                    </ChartCard>
                   )}
 
                   <ChartCard
