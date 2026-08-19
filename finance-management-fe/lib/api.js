@@ -145,7 +145,7 @@ export const updateTransaction = (id, patch) =>
   apiFetch(`/api/transaction/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
 
 export const getRangeTransactions = (start, end) =>
-  apiFetch(`/api/transaction/range/${start}/${end}`);
+  apiFetch(`/api/transaction/range/${start}/${end}?tz=${encodeURIComponent(browserTz())}`);
 
 export const getRecommendation = (monthly, spend) =>
   apiFetch(`/api/transaction/recommendation/${monthly}/${spend}?tz=${encodeURIComponent(browserTz())}`);

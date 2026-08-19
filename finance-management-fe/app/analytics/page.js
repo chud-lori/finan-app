@@ -9,6 +9,7 @@ import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 import RangeReport from '@/components/RangeReport';
+import SpendingCalendar from '@/components/SpendingCalendar';
 
 const DonutChart = dynamic(() => import('@/components/charts/DonutChart'), { ssr: false });
 const HBarChart  = dynamic(() => import('@/components/charts/HBarChart'),  { ssr: false });
@@ -310,10 +311,8 @@ export default function AnalyticsPage() {
   const [compData,    setCompData]      = useState(null);
   const [loadingComp, setLoadingComp]   = useState(false);
 
-  // Month transaction modal (yearly tab bar click)
-  const [monthModal,       setMonthModal]       = useState(null); // { label, monthStr } e.g. { label: 'Jan 2024', monthStr: '2024-01' }
-  const [monthTxns,        setMonthTxns]        = useState([]);
-  const [loadingMonthTxns, setLoadingMonthTxns] = useState(false);
+  // One drill-down modal, shared by the yearly bar click and the calendar day tap.
+  const [txnModal, setTxnModal] = useState(null); // { title, txns, loading }
 
   const load = useCallback(async () => {
     // Range mode does its own fetching inside <RangeReport/>.
@@ -390,18 +389,19 @@ export default function AnalyticsPage() {
     const mIdx = MONTH_LABELS.indexOf(label);
     if (mIdx === -1) return;
     const monthStr = `${year}-${String(mIdx + 1).padStart(2, '0')}`;
-    setMonthModal({ label: `${label} ${year}`, monthStr });
-    setMonthTxns([]);
-    setLoadingMonthTxns(true);
+    const title    = `Transactions — ${label} ${year}`;
+    setTxnModal({ title, txns: [], loading: true });
     try {
-      const res = await getTransactions({ month: monthStr, limit: 200 });
-      setMonthTxns(res.data?.transactions ?? []);
+      const res = await getTransactions({ month: monthStr, limit: 100 });
+      setTxnModal({ title, txns: res.data?.transactions ?? [], loading: false });
     } catch {
-      setMonthTxns([]);
-    } finally {
-      setLoadingMonthTxns(false);
+      setTxnModal({ title, txns: [], loading: false });
     }
   };
+
+  // Calendar day tap → the day's transactions are already loaded by the calendar
+  const handleDayClick = ({ label, txns }) =>
+    setTxnModal({ title: `Transactions — ${label}`, txns, loading: false });
 
   return (
     <AuthGuard>
@@ -526,6 +526,13 @@ export default function AnalyticsPage() {
                   {data?.categories?.length > 0 && (
                     <SoWhatInsight categories={data.categories} onCategoryClick={handleCategoryClick} />
                   )}
+
+                  <ChartCard
+                    title={`Spending calendar — ${MONTH_LABELS[month - 1]} ${year}`}
+                    hint="Tap a day to see its transactions"
+                  >
+                    <SpendingCalendar year={year} month={month} onDayClick={handleDayClick} />
+                  </ChartCard>
 
                   {/* Comparison toolbar */}
                   {data?.categories?.length > 0 && (
@@ -679,67 +686,74 @@ export default function AnalyticsPage() {
         </main>
       </div>
 
-      {/* Month transaction modal */}
-      {monthModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-          onClick={() => setMonthModal(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="font-semibold text-gray-900">Transactions — {monthModal.label}</h3>
-                {!loadingMonthTxns && (
-                  <p className="text-xs text-gray-400 mt-0.5">{monthTxns.length} transaction{monthTxns.length !== 1 ? 's' : ''}</p>
-                )}
-              </div>
-              <button onClick={() => setMonthModal(null)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 px-5 py-2">
-              {loadingMonthTxns ? (
-                <div className="space-y-3 py-3">
-                  {[0,1,2,3,4].map(i => (
-                    <div key={i} className="flex gap-3 items-center">
-                      <SkeletonLine className="h-4 flex-1" />
-                      <SkeletonLine className="h-4 w-20 flex-shrink-0" />
-                    </div>
-                  ))}
-                </div>
-              ) : monthTxns.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">No transactions this month.</p>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {monthTxns.map(tx => (
-                    <div key={tx._id} className="py-3 flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{tx.description || tx.category}</p>
-                        <p className="text-xs text-gray-500 capitalize">
-                          {tx.category} · {new Date(tx.time).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                        </p>
-                      </div>
-                      <span className={`text-sm font-semibold shrink-0 ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {tx.type === 'income' ? '+' : '−'}{formatAmount(tx.amount)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Drill-down transaction modal — shared by the yearly bars and the calendar */}
+      {txnModal && (
+        <TxnListModal modal={txnModal} onClose={() => setTxnModal(null)} formatAmount={formatAmount} />
       )}
     </AuthGuard>
   );
 }
 
 // ─── Reusable UI pieces ───────────────────────────────────────────────────────
+function TxnListModal({ modal, onClose, formatAmount }) {
+  const { title, txns, loading } = modal;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-semibold text-gray-900">{title}</h3>
+            {!loading && (
+              <p className="text-xs text-gray-400 mt-0.5">{txns.length} transaction{txns.length !== 1 ? 's' : ''}</p>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg" aria-label="Close">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-5 py-2">
+          {loading ? (
+            <div className="space-y-3 py-3">
+              {[0,1,2,3,4].map(i => (
+                <div key={i} className="flex gap-3 items-center">
+                  <SkeletonLine className="h-4 flex-1" />
+                  <SkeletonLine className="h-4 w-20 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+          ) : txns.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-10">No transactions in this period.</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {txns.map(tx => (
+                <div key={tx.id ?? tx._id} className="py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{tx.description || tx.category}</p>
+                    <p className="text-xs text-gray-500 capitalize">
+                      {tx.category} · {new Date(tx.time).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    </p>
+                  </div>
+                  <span className={`text-sm font-semibold shrink-0 tabular-nums ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {tx.type === 'income' ? '+' : '−'}{formatAmount(tx.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChartCard({ title, hint, children }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">

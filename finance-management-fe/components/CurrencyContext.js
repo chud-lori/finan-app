@@ -6,6 +6,7 @@ import { getProfile } from '@/lib/api';
 const CurrencyContext = createContext({
   currency: 'IDR',
   numberFormat: 'dot',
+  weekStartsOn: 'monday',
   formatAmount: (v) => formatCurrency(v, 'IDR', 'dot'),
   refreshCurrency: () => {},
   clearCurrency: () => {},
@@ -14,6 +15,7 @@ const CurrencyContext = createContext({
 export function CurrencyProvider({ children }) {
   const [currency,     setCurrency]     = useState('IDR');
   const [numberFormat, setNumberFormat] = useState('dot');
+  const [weekStartsOn, setWeekStartsOn] = useState('monday');
 
   const refresh = useCallback(async () => {
     // Only fetch if a user session is likely active (username is stored on login, cleared on logout)
@@ -24,8 +26,10 @@ export function CurrencyProvider({ children }) {
       const prefs = res.data?.preferences;
       const cur = prefs?.currency;
       const fmt = prefs?.numberFormat;
+      const wk  = prefs?.weekStartsOn;
       if (cur) { setCurrency(cur); localStorage.setItem('currency', cur); }
       if (fmt) { setNumberFormat(fmt); localStorage.setItem('numberFormat', fmt); }
+      if (wk)  { setWeekStartsOn(wk); localStorage.setItem('weekStartsOn', wk); }
     } catch {}
   }, []);
 
@@ -36,6 +40,8 @@ export function CurrencyProvider({ children }) {
       if (savedCur) setCurrency(savedCur);
       const savedFmt = localStorage.getItem('numberFormat');
       if (savedFmt) setNumberFormat(savedFmt);
+      const savedWk = localStorage.getItem('weekStartsOn');
+      if (savedWk) setWeekStartsOn(savedWk);
     } catch {}
     // Then validate/refresh from API
     refresh();
@@ -44,9 +50,11 @@ export function CurrencyProvider({ children }) {
   const clear = useCallback(() => {
     setCurrency('IDR');
     setNumberFormat('dot');
+    setWeekStartsOn('monday');
     try {
       localStorage.removeItem('currency');
       localStorage.removeItem('numberFormat');
+      localStorage.removeItem('weekStartsOn');
     } catch {}
   }, []);
 
@@ -56,7 +64,7 @@ export function CurrencyProvider({ children }) {
   );
 
   return (
-    <CurrencyContext.Provider value={{ currency, numberFormat, formatAmount, refreshCurrency: refresh, clearCurrency: clear }}>
+    <CurrencyContext.Provider value={{ currency, numberFormat, weekStartsOn, formatAmount, refreshCurrency: refresh, clearCurrency: clear }}>
       {children}
     </CurrencyContext.Provider>
   );
