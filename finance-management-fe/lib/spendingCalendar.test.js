@@ -241,15 +241,11 @@ describe('monthFetchRange — the fetch window covers every zone', () => {
 
 describe('resolveCalendarState — never guesses at the savings exclusion', () => {
   const range = (transactions) => ({ status: 'fulfilled', value: { data: { transactions } } });
-  const groups = (list) => ({ status: 'fulfilled', value: { data: { groups: list } } });
+  const savingsNames = (names) => ({ status: 'fulfilled', value: names });
   const failed = (message) => ({ status: 'rejected', reason: new Error(message) });
 
   it('passes both payloads through when they land', () => {
-    const state = resolveCalendarState(
-      range([tx({ id: 'x' })]),
-      groups([{ group: 'essential', categories: [{ name: 'food' }] },
-              { group: 'savings',   categories: [{ name: 'Reksa Dana' }, { name: 'emas' }] }]),
-    );
+    const state = resolveCalendarState(range([tx({ id: 'x' })]), savingsNames(['Reksa Dana', 'emas']));
     expect(state.error).to.equal('');
     expect(state.txns).to.have.lengthOf(1);
     expect(state.savings).to.deep.equal(['Reksa Dana', 'emas']);
@@ -265,14 +261,14 @@ describe('resolveCalendarState — never guesses at the savings exclusion', () =
   });
 
   it('clears the previous month savings list when the range fetch fails', () => {
-    const state = resolveCalendarState(failed('Network error'), groups([{ group: 'savings', categories: [{ name: 'emas' }] }]));
+    const state = resolveCalendarState(failed('Network error'), savingsNames(['emas']));
     expect(state.error).to.equal('Network error');
     expect(state.txns).to.deep.equal([]);
     expect(state.savings).to.deep.equal([]);
   });
 
   it('treats a missing savings group as an empty list, not an error', () => {
-    const state = resolveCalendarState(range([]), groups([{ group: 'essential', categories: [] }]));
+    const state = resolveCalendarState(range([]), savingsNames([]));
     expect(state.error).to.equal('');
     expect(state.savings).to.deep.equal([]);
   });

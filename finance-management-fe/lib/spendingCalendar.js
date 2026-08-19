@@ -110,11 +110,9 @@ export const resolveCalendarState = (rangeResult, groupResult) => {
       error: 'Could not load your savings categories — daily totals would count transfers to savings as spending.',
     };
   }
-  const groups  = groupResult.value?.data?.groups ?? [];
-  const savings = groups.find((g) => g.group === 'savings');
   return {
     txns:    rangeResult.value?.data?.transactions ?? [],
-    savings: (savings?.categories ?? []).map((c) => c.name),
+    savings: Array.isArray(groupResult.value) ? groupResult.value : [],
     error:   '',
   };
 };

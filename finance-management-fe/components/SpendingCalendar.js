@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getGroupSummary, getRangeTransactions } from '@/lib/api';
+import { getRangeTransactions } from '@/lib/api';
+import { fetchSavingsCategories } from '@/lib/savingsCategories';
 import { useCurrency } from '@/components/CurrencyContext';
 import Tooltip from '@/components/Tooltip';
 import {
@@ -42,7 +43,7 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
     setError('');
 
     const { start, end } = monthFetchRange(year, month);
-    Promise.allSettled([getRangeTransactions(start, end), getGroupSummary(yearMonth)])
+    Promise.allSettled([getRangeTransactions(start, end), fetchSavingsCategories()])
       .then(([rangeRes, groupRes]) => {
         if (cancelled) return;
         const next = resolveCalendarState(rangeRes, groupRes);
