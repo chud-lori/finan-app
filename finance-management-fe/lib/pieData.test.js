@@ -47,3 +47,18 @@ describe('pieData — buildPieData', () => {
     expect(buildPieData([{ category: 'a', total: 0 }])).to.deep.equal([{ name: 'a', value: 0, pct: 0 }]);
   });
 });
+
+describe('buildPieData — Other roll-up members', () => {
+  const cats = Array.from({ length: 20 }, (_, i) => ({ category: `c${i}`, total: 100 - i }));
+
+  it('carries the names it folds in so the slice can drill down', () => {
+    const other = buildPieData(cats).find(d => d.other);
+    expect(other).to.exist;
+    expect(other.members).to.have.lengthOf(8);
+    expect(other.members).to.deep.equal(cats.slice(12).map(c => c.category));
+  });
+
+  it('leaves no roll-up when nothing is folded in', () => {
+    expect(buildPieData(cats.slice(0, 12)).some(d => d.other)).to.equal(false);
+  });
+});
