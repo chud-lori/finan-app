@@ -165,6 +165,15 @@ export const getAnalytics = (year, month = null) => {
   return apiFetch(`/api/transaction/analytics?${qs}`);
 };
 
+// Top merchants for a period. Merchants are derived from description text on
+// read, so the period is the only thing to pass.
+export const getMerchants = (year, month = null, limit = null) => {
+  const qs = new URLSearchParams({ year, tz: browserTz() });
+  if (month) qs.set('month', month);
+  if (limit) qs.set('limit', limit);
+  return apiFetch(`/api/transaction/merchants?${qs}`);
+};
+
 export const getAnomalies = () =>
   apiFetch(`/api/transaction/anomalies?tz=${encodeURIComponent(browserTz())}`);
 
