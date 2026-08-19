@@ -634,7 +634,7 @@ function GroupBreakdown({ data, onReclassify, reclassifying, onMoveCategory, mov
                             disabled={!!movingCategory}
                             onClick={(e) => e.stopPropagation()}
                             title="Move to group"
-                            className="text-base sm:text-[10px] max-w-[6.5rem] sm:max-w-none border border-gray-200 dark:border-slate-700 rounded-md px-1 py-0.5 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 cursor-pointer hover:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-40 shrink-0"
+                            className="text-base sm:text-[10px] sm:leading-none max-w-[6.5rem] sm:max-w-none border border-gray-200 dark:border-slate-700 rounded-md px-1 py-0.5 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 cursor-pointer hover:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-40 shrink-0"
                           >
                             {GROUP_OPTIONS.map(opt => (
                               <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>

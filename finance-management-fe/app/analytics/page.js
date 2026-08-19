@@ -9,6 +9,7 @@ import { useFormatAmount } from '@/components/CurrencyContext';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 import RangeReport from '@/components/RangeReport';
+import { buildPieData } from '@/lib/pieData';
 
 const DonutChart = dynamic(() => import('@/components/charts/DonutChart'), { ssr: false });
 const HBarChart  = dynamic(() => import('@/components/charts/HBarChart'),  { ssr: false });
@@ -114,7 +115,8 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
   }
 
   const grandTotal  = categories.reduce((s, c) => s + c.total, 0);
-  const pieData     = categories.slice(0, 12).map(c => ({ name: c.category, value: c.total }));
+  const pieData     = buildPieData(categories);
+  const pieColors   = pieData.map((d, i) => (d.other ? '#9ca3af' : PIE_COLORS[i % PIE_COLORS.length]));
   // Full name here — HBarChart ellipsises the axis tick and the tooltip shows the rest.
   const barData     = categories.slice(0, 10).map(c => ({
     name:  c.category,
@@ -147,16 +149,16 @@ function CategorySection({ categories, showAvg, compareMode, compCategories, onC
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Spending breakdown">
-          <DonutChart data={pieData} colors={PIE_COLORS} />
+          <DonutChart data={pieData} colors={pieColors} />
           {/* Legend wraps and carries the share — a 1% slice is unreadable in the
               donut but still legible here. */}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
             {pieData.map((d, i) => (
               <div key={d.name} title={d.name} className="flex items-center gap-1.5 text-xs text-gray-600 max-w-full">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: pieColors[i] }} />
                 <span className="truncate min-w-0">{d.name}</span>
                 {grandTotal > 0 && (
-                  <span className="text-gray-400 tabular-nums flex-shrink-0">{Math.round((d.value / grandTotal) * 100)}%</span>
+                  <span className="text-gray-400 tabular-nums flex-shrink-0">{d.pct}%</span>
                 )}
               </div>
             ))}
