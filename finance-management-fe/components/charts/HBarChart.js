@@ -21,15 +21,26 @@ const HBarTooltip = ({ active, payload, label }) => {
   );
 };
 
-export default function HBarChart({ data, color = '#6366f1' }) {
+export default function HBarChart({ data, color = '#6366f1', onBarClick }) {
+  // `full` carries the untruncated label — the axis name may be elided with "…".
+  const handleBar = onBarClick
+    ? (entry) => {
+        const label = entry?.full ?? entry?.payload?.full ?? entry?.name ?? entry?.payload?.name;
+        if (label) onBarClick(label);
+      }
+    : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <BarChart layout="vertical" data={data} margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+      <BarChart
+        layout="vertical" data={data} margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+        style={onBarClick ? { cursor: 'pointer' } : undefined}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
         <XAxis type="number" tickFormatter={formatK} tick={{ fontSize: 11 }} />
         <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
         <Tooltip content={<HBarTooltip />} />
-        <Bar dataKey="Value" fill={color} radius={[0, 4, 4, 0]} maxBarSize={20} />
+        <Bar dataKey="Value" fill={color} radius={[0, 4, 4, 0]} maxBarSize={20} onClick={handleBar} />
       </BarChart>
     </ResponsiveContainer>
   );

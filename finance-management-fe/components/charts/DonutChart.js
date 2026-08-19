@@ -14,11 +14,20 @@ const PieTooltip = ({ active, payload }) => {
   );
 };
 
-export default function DonutChart({ data, colors }) {
+export default function DonutChart({ data, colors, onSliceClick }) {
+  const handleClick = onSliceClick
+    ? (d) => { const name = d?.name ?? d?.payload?.name; if (name) onSliceClick(name); }
+    : undefined;
+
   return (
     <div className="flex justify-center">
       <PieChart width={260} height={260}>
-        <Pie data={data} cx={130} cy={120} innerRadius={68} outerRadius={116} paddingAngle={2} dataKey="value" stroke="none">
+        <Pie
+          data={data} cx={130} cy={120} innerRadius={68} outerRadius={116} paddingAngle={2}
+          dataKey="value" stroke="none"
+          onClick={handleClick}
+          style={onSliceClick ? { cursor: 'pointer' } : undefined}
+        >
           {data.map((_, i) => (
             <Cell key={i} fill={colors[i % colors.length]} />
           ))}
