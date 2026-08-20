@@ -1,8 +1,4 @@
-// Top merchants for a period. Pure in-process aggregation — one pass over the
-// period's expenses, nothing stored, nothing leaves the database.
-//
-// Same merchantKey as recurring detection, but keyed with filler stripped —
-// recurring keys raw, so the two surfaces can bucket a verb-prefixed row differently.
+// One pass over the period's expenses, nothing stored. Keys strip filler; recurring keys raw.
 const { merchantKey } = require('../../helpers/merchantKey');
 
 const DEFAULT_LIMIT = 12;
@@ -20,11 +16,7 @@ const dominantCategory = (counts) => {
   return best;
 };
 
-/**
- * @param {Array<{id, amount, category, description, date:'YYYY-MM-DD'}>} transactions
- * @param {{ limit?: number, savingsCategories?: Set<string>|string[] }} [opts]
- * @returns {{ merchants: Array, oneOff: Object|null, total: number, merchantCount: number }}
- */
+// transactions: { id, amount, category, description, date:'YYYY-MM-DD' }
 const topMerchants = (transactions, opts = {}) => {
   const empty = { merchants: [], oneOff: null, total: 0, merchantCount: 0 };
   if (!Array.isArray(transactions) || transactions.length === 0) return empty;
@@ -34,8 +26,7 @@ const topMerchants = (transactions, opts = {}) => {
     ? Math.min(Math.floor(requested), MAX_LIMIT)
     : DEFAULT_LIMIT;
 
-  // Savings-group outflow is money moved, not money spent — it never belongs in
-  // a merchant spend total.
+  // Savings outflow is money moved, not spent.
   const savings = opts.savingsCategories instanceof Set
     ? opts.savingsCategories
     : new Set(opts.savingsCategories || []);
@@ -62,8 +53,7 @@ const topMerchants = (transactions, opts = {}) => {
     if (tx.date && (!g.lastDate || tx.date > g.lastDate)) g.lastDate = tx.date;
   }
 
-  // Share is against the period's whole non-savings spend, not against the
-  // ranked rows — a merchant's 12% must stay 12% whatever the list is cut to.
+  // Share is of the whole non-savings spend, so a row's % survives cutting the list.
   const total = Math.round(spend.reduce((s, t) => s + Number(t.amount), 0));
 
   const repeat = [];
