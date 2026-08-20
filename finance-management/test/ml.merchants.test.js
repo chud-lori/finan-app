@@ -20,8 +20,8 @@ describe('helpers/merchantKey', () => {
     describe('merchantKey', () => {
         it('folds a verb prefix into the same merchant', () => {
             const opt = { stripFiller: true };
-            expect(merchantKey('beli kopi kenangan', opt)).to.equal('kopi kenangan');
-            expect(merchantKey('kopi kenangan', opt)).to.equal('kopi kenangan');
+            expect(merchantKey('beli shop alpha', opt)).to.equal('shop alpha');
+            expect(merchantKey('shop alpha', opt)).to.equal('shop alpha');
             expect(merchantKey('top up gopay', opt)).to.equal('gopay');
         });
 
@@ -29,23 +29,23 @@ describe('helpers/merchantKey', () => {
             const opt = { stripFiller: true };
             // The old corpus rule deleted this merchant: on >30% of a month's rows,
             // written with many different dishes, it looked exactly like filler.
-            ['grabfood ayam geprek', 'grabfood nasi padang', 'grabfood mie ayam'].forEach(d => {
-                expect(merchantKey(d, opt).startsWith('grabfood')).to.equal(true);
+            ['vendorbeta item one', 'vendorbeta item two', 'vendorbeta item three'].forEach(d => {
+                expect(merchantKey(d, opt).startsWith('vendorbeta')).to.equal(true);
             });
-            expect(merchantKey('grabfood', opt)).to.equal('grabfood');
+            expect(merchantKey('vendorbeta', opt)).to.equal('vendorbeta');
         });
 
         it('drops a trailing quantity instead of keeping its unit as a name token', () => {
             const opt = { stripFiller: true };
-            expect(merchantKey('token listrik 100k', opt)).to.equal('token listrik');
-            expect(merchantKey('pulsa 50rb', opt)).to.equal('pulsa');
-            expect(merchantKey('kopi 2x', opt)).to.equal('kopi');
-            expect(merchantKey('galon 19l', opt)).to.equal('galon');
+            expect(merchantKey('widget alpha 100k', opt)).to.equal('widget alpha');
+            expect(merchantKey('widget 50rb', opt)).to.equal('widget');
+            expect(merchantKey('widget 2x', opt)).to.equal('widget');
+            expect(merchantKey('widget 19l', opt)).to.equal('widget');
         });
 
         it('groups the same merchant however the quantity is written', () => {
             const opt = { stripFiller: true };
-            const keys = ['token listrik 100k', 'token listrik 50k', 'token listrik']
+            const keys = ['widget alpha 100k', 'widget alpha 50k', 'widget alpha']
                 .map(d => merchantKey(d, opt));
             expect(new Set(keys).size).to.equal(1);
         });
@@ -62,12 +62,12 @@ describe('helpers/merchantKey', () => {
 
         it('keys the same however large the surrounding corpus is', () => {
             const opt = { stripFiller: true };
-            expect(merchantKey('kopi kenangan', opt)).to.equal(merchantKey('kopi kenangan', opt));
-            expect(merchantKey('beli kopi kenangan', opt)).to.equal('kopi kenangan');
+            expect(merchantKey('shop alpha', opt)).to.equal(merchantKey('shop alpha', opt));
+            expect(merchantKey('beli shop alpha', opt)).to.equal('shop alpha');
         });
 
         it('lowercases, drops digits and punctuation, keeps the first three tokens', () => {
-            expect(merchantKey('KOPI Kenangan #12 (Grand)')).to.equal('kopi kenangan grand');
+            expect(merchantKey('SHOP Alpha #12 (Grand)')).to.equal('shop alpha grand');
             expect(merchantKey('  ')).to.equal('');
             expect(merchantKey(null)).to.equal('');
         });
@@ -108,15 +108,15 @@ describe('services/ml/merchants — topMerchants', () => {
     describe('ranking', () => {
         it('ranks by total and reports count, share and the dominant category', () => {
             const txs = [
-                ...buys('Kopi Kenangan', 'coffee', 4, 25000),   // 100000
-                ...buys('GrabFood', 'food', 2, 60000, 10),      // 120000
+                ...buys('Shop Alpha', 'coffee', 4, 25000),   // 100000
+                ...buys('Vendor Beta', 'food', 2, 60000, 10),      // 120000
             ];
             const { merchants, total, merchantCount } = topMerchants(txs);
             expect(total).to.equal(220000);
             expect(merchantCount).to.equal(2);
-            expect(merchants.map(m => m.key)).to.deep.equal(['grabfood', 'kopi kenangan']);
+            expect(merchants.map(m => m.key)).to.deep.equal(['vendor beta', 'shop alpha']);
             expect(merchants[0]).to.include({
-                key: 'grabfood', total: 120000, count: 2, avg: 60000,
+                key: 'vendor beta', total: 120000, count: 2, avg: 60000,
                 category: 'food', share: 54.5, lastDate: '2026-08-10',
             });
             expect(merchants[1].share).to.equal(45.5);
@@ -133,8 +133,8 @@ describe('services/ml/merchants — topMerchants', () => {
         });
 
         it('carries the transaction ids so a row can drill into its own transactions', () => {
-            const { merchants } = topMerchants(buys('GrabFood', 'food', 3, 50000));
-            expect(merchants[0].txIds).to.deep.equal(['GrabFood-0', 'GrabFood-1', 'GrabFood-2']);
+            const { merchants } = topMerchants(buys('Vendor Beta', 'food', 3, 50000));
+            expect(merchants[0].txIds).to.deep.equal(['Vendor Beta-0', 'Vendor Beta-1', 'Vendor Beta-2']);
         });
     });
 
@@ -142,10 +142,10 @@ describe('services/ml/merchants — topMerchants', () => {
 
         it('never merges two merchants that differ after the strip', () => {
             const txs = [
-                ...buys('beli nasi ayam warteg', 'food', 3, 20000),
-                ...buys('beli nasi ayam indomaret', 'food', 3, 19000, 15),
-                ...buys('beli kopi', 'coffee', 2, 25000, 10),
-                ...buys('beli pulsa', 'bill', 2, 50000, 6),
+                ...buys('beli item one stall', 'food', 3, 20000),
+                ...buys('beli item one shop', 'food', 3, 19000, 15),
+                ...buys('beli item two', 'coffee', 2, 25000, 10),
+                ...buys('beli widget', 'bill', 2, 50000, 6),
             ];
             const { merchants } = topMerchants(txs);
             const totals = merchants.map(m => m.total).sort((a, b) => a - b);
@@ -158,10 +158,10 @@ describe('services/ml/merchants — topMerchants', () => {
         it('leaves savings-group outflow out of the list and the total', () => {
             const txs = [
                 ...buys('Reksa Dana Bibit', 'reksa dana', 3, 1000000),
-                ...buys('GrabFood', 'food', 3, 50000, 15),
+                ...buys('Vendor Beta', 'food', 3, 50000, 15),
             ];
             const { merchants, total } = topMerchants(txs, { savingsCategories: ['reksa dana'] });
-            expect(merchants.map(m => m.key)).to.deep.equal(['grabfood']);
+            expect(merchants.map(m => m.key)).to.deep.equal(['vendor beta']);
             expect(total).to.equal(150000);
             expect(merchants[0].share).to.equal(100);
         });
@@ -169,7 +169,7 @@ describe('services/ml/merchants — topMerchants', () => {
         it('matches savings categories case-insensitively', () => {
             const txs = [
                 ...buys('Bibit', 'Reksa Dana', 3, 1000000),
-                ...buys('GrabFood', 'food', 3, 50000, 15),
+                ...buys('Vendor Beta', 'food', 3, 50000, 15),
             ];
             const { total } = topMerchants(txs, { savingsCategories: new Set(['reksa dana']) });
             expect(total).to.equal(150000);
@@ -179,12 +179,12 @@ describe('services/ml/merchants — topMerchants', () => {
     describe('one-off collapse', () => {
         it('collapses single-transaction merchants into one roll-up row', () => {
             const txs = [
-                ...buys('GrabFood', 'food', 3, 50000),
+                ...buys('Vendor Beta', 'food', 3, 50000),
                 ...buys('Airport lounge', 'travel', 1, 200000, 12),
                 ...buys('New headphones', 'gadget', 1, 800000, 11),
             ];
             const { merchants, oneOff, total } = topMerchants(txs);
-            expect(merchants.map(m => m.key)).to.deep.equal(['grabfood']);
+            expect(merchants.map(m => m.key)).to.deep.equal(['vendor beta']);
             expect(oneOff.count).to.equal(2);
             expect(oneOff.total).to.equal(1000000);
             expect(oneOff.share).to.equal(87);
@@ -193,7 +193,7 @@ describe('services/ml/merchants — topMerchants', () => {
         });
 
         it('has no roll-up when every merchant repeats', () => {
-            const txs = [...buys('GrabFood', 'food', 2, 50000), ...buys('GrabRide', 'transport', 2, 20000, 15)];
+            const txs = [...buys('Vendor Beta', 'food', 2, 50000), ...buys('GrabRide', 'transport', 2, 20000, 15)];
             expect(topMerchants(txs).oneOff).to.equal(null);
         });
 

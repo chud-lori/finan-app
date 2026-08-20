@@ -1146,7 +1146,7 @@ const getAnomalies = async (req, res) => {
 
                 // gotcha#566: the ratio test runs on a SINGLE transaction, but the
                 // gate is picked from MONTHLY-TOTAL volatility. Low-frequency lumpy
-                // categories (social "traktir"/gifts, one big irregular hit a month)
+                // categories (social/gifts, one big irregular hit a month)
                 // read as tame/unknown, so a normal 2–3x treat cried wolf. Two
                 // structured lumpiness signals promote such a category to the
                 // flexible gate — but never a genuinely flat 'fixed' category, whose

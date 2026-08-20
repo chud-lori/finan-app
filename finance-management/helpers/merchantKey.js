@@ -2,17 +2,14 @@
 
 const KEY_TOKENS = 3;
 
-// Leading verbs and prepositions the user writes around a merchant name, EN + ID.
-// Fixed on purpose: deriving filler from corpus frequency cannot tell a name from
-// a verb on a small period, and it made a month and a year disagree.
+// Fixed list, not corpus-derived: frequency cannot tell a merchant name from a verb.
 const FILLER = new Set([
   'beli', 'bayar', 'byr', 'buat', 'untuk', 'utk', 'ke', 'di', 'dari', 'dengan', 'dgn',
   'top', 'up', 'isi', 'ulang', 'transfer', 'tf', 'langganan', 'bulanan',
   'buy', 'pay', 'paid', 'for', 'to', 'from', 'at', 'the', 'a',
 ]);
 
-// A trailing quantity is not part of the name. Drop it whole before digits are
-// stripped, or "token listrik 100k" keeps a stray "k" as a name token.
+// Drop a trailing quantity whole — stripping digits first leaves its unit as a name token.
 const QUANTITY = /^(?:\d+[a-z]{0,4}|[a-z]{0,2}\d+)$/;
 
 const tokenize = (desc) => String(desc || '')
@@ -25,12 +22,10 @@ const tokenize = (desc) => String(desc || '')
   .map((t) => t.replace(/[0-9]+/g, ''))
   .filter(Boolean);
 
-// A description with no Latin letters (CJK, emoji, digits only) still has to bucket
-// somewhere, or its spend vanishes from the list while staying in the total.
+// No-Latin descriptions still need a bucket, or their spend leaves the list but not the total.
 const nonLatinKey = (desc) => String(desc || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 40);
 
-// Bucketing is EXACT — "spotify" and "spotify premium" stay two merchants. A false
-// split only splits a row; a false merge corrupts a total.
+// Exact bucketing: a false split only splits a row, a false merge corrupts a total.
 const merchantKey = (desc, { stripFiller = false } = {}) => {
   const tokens = tokenize(desc);
   if (!tokens.length) return nonLatinKey(desc);
