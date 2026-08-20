@@ -33,6 +33,7 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [peek, setPeek] = useState(null);
 
   const yearMonth = `${year}-${pad(month)}`;
   const labels    = useMemo(() => weekdayLabels(weekStartsOn), [weekStartsOn]);
@@ -140,11 +141,14 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
               <button
                 key={cell.key}
                 type="button"
-                onClick={() => onDayClick?.({ key: cell.key, label, txns: dayTxns })}
+                onClick={() => onDayClick?.({ key: cell.key, label, txns: dayTxns, total: amount })}
+                onMouseEnter={() => setPeek({ label, amount, count: dayTxns.length })}
+                onMouseLeave={() => setPeek(null)}
+                onFocus={() => setPeek({ label, amount, count: dayTxns.length })}
+                onBlur={() => setPeek(null)}
                 style={level > 0 ? { background: LEVEL_BG[level] } : undefined}
                 className={`${base} ${tone}${ring} hover:ring-2 hover:ring-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer`}
                 aria-label={`${label} — ${amount > 0 ? `spent ${formatAmount(amount)}` : 'no spending'}`}
-                title={amount > 0 ? formatAmount(amount) : 'No spending'}
               >
                 {cell.day}
               </button>
@@ -155,9 +159,11 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
 
       <div className="flex items-center justify-between gap-3 flex-wrap max-w-3xl mx-auto">
         <p className="text-xs text-gray-500">
-          {total > 0
+          {peek
+            ? <><span className="font-semibold text-gray-700">{peek.label}</span> · <span className="tabular-nums">{peek.amount > 0 ? formatAmount(peek.amount) : 'No spending'}</span>{peek.count > 0 ? ` · ${peek.count} transaction${peek.count === 1 ? '' : 's'}` : ''}</>
+            : total > 0
             ? <>Busiest day <span className="font-semibold text-gray-700">{Number(busiest[0].slice(-2))} {MONTH_LABELS[month - 1]}</span> · <span className="tabular-nums">{formatAmount(max)}</span> · {activeDays} spending {activeDays === 1 ? 'day' : 'days'}</>
-            : <>No spending recorded in {MONTH_LABELS[month - 1]} {year} — days fill in as you add transactions.</>}
+              : <>No spending recorded in {MONTH_LABELS[month - 1]} {year} — days fill in as you add transactions.</>}
         </p>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] text-gray-400">Less</span>
