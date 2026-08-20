@@ -620,8 +620,8 @@ function AnalyticsPageInner() {
 
   // Calendar day tap → the calendar already carries the day's rows, so this
   // opens the same modal without a fetch.
-  const handleDayClick = ({ label, txns }) => {
-    setDrilldown({ title: `Transactions — ${label}` });
+  const handleDayClick = ({ label, txns, total }) => {
+    setDrilldown({ title: `Transactions — ${label}`, subtitle: total > 0 ? formatAmount(total) : 'No spending' });
     setDrilldownTxns(txns ?? []);
     setLoadingDrilldown(false);
   };

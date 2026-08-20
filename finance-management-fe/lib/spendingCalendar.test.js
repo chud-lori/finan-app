@@ -273,3 +273,23 @@ describe('resolveCalendarState — never guesses at the savings exclusion', () =
     expect(state.savings).to.deep.equal([]);
   });
 });
+
+describe('day readout — the number a phone can reach without hover', () => {
+  it('reports a day total that matches the rows the drill-down will show', () => {
+    const txns = [
+      tx({ amount: 16_000, time: '2026-08-06T05:00:00.000Z' }),
+      tx({ amount: 43_100, time: '2026-08-06T09:00:00.000Z' }),
+      tx({ amount: 900, category: 'reksa dana', time: '2026-08-06T10:00:00.000Z' }),
+    ];
+    const { byDay } = buildDailySpend(txns, { yearMonth: '2026-08', savingsCategories: ['reksa dana'] });
+    const rows = groupTransactionsByDay(txns)['2026-08-06'];
+    // Savings stays out of the headline total but still shows in the day's list.
+    expect(byDay['2026-08-06']).to.equal(59_100);
+    expect(rows).to.have.lengthOf(3);
+  });
+
+  it('has a total for a day with no spending', () => {
+    const { byDay } = buildDailySpend([], { yearMonth: '2026-08' });
+    expect(byDay['2026-08-06'] ?? 0).to.equal(0);
+  });
+});
