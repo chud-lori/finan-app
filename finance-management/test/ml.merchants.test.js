@@ -35,6 +35,25 @@ describe('helpers/merchantKey', () => {
             expect(merchantKey('grabfood', opt)).to.equal('grabfood');
         });
 
+        it('drops a trailing quantity instead of keeping its unit as a name token', () => {
+            const opt = { stripFiller: true };
+            expect(merchantKey('token listrik 100k', opt)).to.equal('token listrik');
+            expect(merchantKey('pulsa 50rb', opt)).to.equal('pulsa');
+            expect(merchantKey('kopi 2x', opt)).to.equal('kopi');
+            expect(merchantKey('galon 19l', opt)).to.equal('galon');
+        });
+
+        it('groups the same merchant however the quantity is written', () => {
+            const opt = { stripFiller: true };
+            const keys = ['token listrik 100k', 'token listrik 50k', 'token listrik']
+                .map(d => merchantKey(d, opt));
+            expect(new Set(keys).size).to.equal(1);
+        });
+
+        it('keeps a name that looks like a quantity rather than losing the row', () => {
+            expect(merchantKey('3m', { stripFiller: true })).to.equal('3m');
+        });
+
         it('buckets a description with no latin letters instead of dropping it', () => {
             const opt = { stripFiller: true };
             expect(merchantKey('1234', opt)).to.equal('1234');

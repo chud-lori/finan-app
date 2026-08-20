@@ -11,13 +11,18 @@ const FILLER = new Set([
   'buy', 'pay', 'paid', 'for', 'to', 'from', 'at', 'the', 'a',
 ]);
 
+// A trailing quantity is not part of the name. Drop it whole before digits are
+// stripped, or "token listrik 100k" keeps a stray "k" as a name token.
+const QUANTITY = /^(?:\d+[a-z]{0,4}|[a-z]{0,2}\d+)$/;
+
 const tokenize = (desc) => String(desc || '')
   .toLowerCase()
-  .replace(/[0-9]+/g, ' ')
-  .replace(/[^a-z\s]/g, ' ')
+  .replace(/[^a-z0-9\s]/g, ' ')
   .replace(/\s+/g, ' ')
   .trim()
   .split(' ')
+  .filter((t) => t && !QUANTITY.test(t))
+  .map((t) => t.replace(/[0-9]+/g, ''))
   .filter(Boolean);
 
 // A description with no Latin letters (CJK, emoji, digits only) still has to bucket
