@@ -71,7 +71,7 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   })();
 
-  const busiest = max > 0
+  const topDay = max > 0
     ? Object.entries(byDay).reduce((best, e) => (e[1] > best[1] ? e : best))
     : null;
 
@@ -162,7 +162,7 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
           {peek
             ? <><span className="font-semibold text-gray-700">{peek.label}</span> · <span className="tabular-nums">{peek.amount > 0 ? formatAmount(peek.amount) : 'No spending'}</span>{peek.count > 0 ? ` · ${peek.count} transaction${peek.count === 1 ? '' : 's'}` : ''}</>
             : total > 0
-            ? <>Busiest day <span className="font-semibold text-gray-700">{Number(busiest[0].slice(-2))} {MONTH_LABELS[month - 1]}</span> · <span className="tabular-nums">{formatAmount(max)}</span> · {activeDays} spending {activeDays === 1 ? 'day' : 'days'}</>
+            ? <>Highest spend <span className="font-semibold text-gray-700">{Number(topDay[0].slice(-2))} {MONTH_LABELS[month - 1]}</span> · <span className="tabular-nums">{formatAmount(max)}</span> · {activeDays} spending {activeDays === 1 ? 'day' : 'days'}</>
               : <>No spending recorded in {MONTH_LABELS[month - 1]} {year} — days fill in as you add transactions.</>}
         </p>
         <div className="flex items-center gap-1.5">
@@ -173,7 +173,7 @@ export default function SpendingCalendar({ year, month, onDayClick }) {
           ))}
           <span className="text-[10px] text-gray-400">More</span>
           <Tooltip
-            text="Shade is relative to your own busiest day this month, not a fixed amount. Money moved into savings categories is not counted as spending. Tap a day to see its transactions."
+            text="Shade is relative to your own highest-spending day this month, not a fixed amount. Money moved into savings categories is not counted as spending. Tap a day to see its transactions."
             align="right"
             fixed
           />
