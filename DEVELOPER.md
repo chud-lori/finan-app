@@ -864,14 +864,19 @@ Each `topCategories` entry carries `volatility` and `cv`. The frontend `buildIns
 
 **"Where It's Going" row presentation (`components/CategorySpendRow.js` + `lib/categorySpendRow.js`).** The row never shows a percentage change without the two currency totals it was measured from — a large ratio on a near-zero baseline (the low base effect) is arithmetically right and informationally useless. `describeCategorySpend(topCategoriesEntry)` is the pure decision function:
 
+**The comparability gate is the whole design.** `delta` is only a plain ratio of the two totals for `fixed` categories; every other class is measured against the previous month *pro-rated to the elapsed fraction*. So on day 3 of 30 a category at 150,000 against a previous month of 1,000,000 carries `delta = +50` — a rise, next to two totals that fell. The row therefore never trusts `delta` on its own: `totalsAreComparable({ current, previous, delta })` re-derives the ratio from the two totals it is about to print and only accepts `delta` when the two agree to within a point of rounding. That is a property of the numbers rather than a proxy through `volatility`, so a completed past month reads correctly for every class.
+
 | Output | Rule |
 |--------|------|
-| `comparison` | `{ previousTotal, currentTotal }` in currency, rendered as `before → after` — real posted totals, never a derived difference. Suppressed when `delta === 0` (on pace is the default state and gets no ink) and when the money that moved is below `MATERIALITY_FLOOR` of the month's spend |
-| `isSinglePurchase` | `count <= 1` and `volatility` is neither `fixed` nor `semi` — one transaction with no regular history is a purchase, not a trend. The row drops the trend colour and hatches its share bar. A `fixed` category posting its one monthly charge is explicitly not this |
-| `trend` | `up`/`down` only when there is a `comparison` on screen, `delta` is non-null and the row is not a single purchase. When the backend declines to judge an irregular category (`delta === null`) the row still shows the two totals, in neutral grey — figures without a verdict, never an unexplained blank |
-| `percent` | `delta` only when `volatility === 'fixed'` — the one class the backend compares posted-vs-posted, so the ratio matches the two totals on screen. Every other class is pro-rated to the elapsed month fraction, which those totals do not describe |
+| `comparison` | `{ previousTotal, currentTotal, periodsAlign }` in currency, rendered as `before → after` — real posted totals, never a derived difference. Suppressed when `delta === 0` and when `moneyAtStake` is below `MATERIALITY_FLOOR` of the month's spend. When the money that moved cannot be measured, `moneyAtStake` is `null` and the floor abstains rather than gating on an inflated figure. `periodsAlign: false` makes the row spell the periods out (`… last month → … so far`) so a 30-day figure is never silently placed beside a 3-day one |
+| `isSinglePurchase` | `count === 1` **and** `volatility === 'flexible'` — the only class that asserts an irregular history. `unknown` (fewer than 3 active months) is not enough to call a row a one-off, or a brand-new user would see every row hatched, rent included. The row drops the trend colour and hatches its share bar |
+| `isOnPace` | `delta === 0` against a real baseline. The row says `On pace` and shows no figures — confirmation that a large committed cost behaved, without a bare transaction count standing in for it |
+| `trend` | `up`/`down` only when a `comparison` is on screen, `periodsAlign`, and the row is not a single purchase. Otherwise the two totals still render, in neutral grey — figures without a verdict, never an unexplained blank and never a colour the totals contradict |
+| `percent` | the same gate as `trend`. A percentage never appears without the two totals it was measured from |
 
-The percentage is rendered through `formatChange` from `lib/insightFeed.js`, the same formatter the insight feed uses, so the two surfaces can never phrase the same `delta` differently. Unit-tested in `lib/categorySpendRow.test.js`.
+`formatOccurrenceLabel(count, volatility)` counts *purchases* for a flexible category and *charges* for a `fixed`/`semi` one, and says nothing at all about a recurring commitment that posted once — "One purchase" under a rent row is both wrong vocabulary and a count masquerading as the story.
+
+`totalsAreComparable`, `moneyAtStake`, `MATERIALITY_FLOOR` and `formatChange` live in `lib/insightFeed.js` so the row and the insight feed cannot define them twice and disagree. Unit-tested in `lib/categorySpendRow.test.js`.
 
 Returns top 10 results sorted by anomaly score, each with `severity` (high/medium/low), `multiple` (Nx vs category average), and a plain-English `label`.
 

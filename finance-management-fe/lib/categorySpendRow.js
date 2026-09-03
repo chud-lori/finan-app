@@ -1,38 +1,46 @@
-export const RECURRING_VOLATILITY = ['fixed', 'semi'];
-export const STABLE_BASELINE_VOLATILITY = 'fixed';
+import { MATERIALITY_FLOOR, moneyAtStake, totalsAreComparable } from '@/lib/insightFeed';
+
+const RECURRING_VOLATILITY = ['fixed', 'semi'];
+const IRREGULAR_VOLATILITY = 'flexible';
 
 const toAmount = (value) => (Number.isFinite(value) ? value : 0);
 
 const restsOnOneTransaction = (count, volatility) =>
-  count <= 1 && !RECURRING_VOLATILITY.includes(volatility);
+  count === 1 && volatility === IRREGULAR_VOLATILITY;
 
-const percentDescribesTheseTotals = (volatility) => volatility === STABLE_BASELINE_VOLATILITY;
-
-export const describeCategorySpend = (category, { monthTotal = 0, materialityFloor = 0 } = {}) => {
+export const describeCategorySpend = (category, { monthTotal = 0 } = {}) => {
   const count = Number.isFinite(category?.count) ? category.count : 0;
   const currentTotal = toAmount(category?.total);
   const previousTotal = toAmount(category?.prevTotal);
   const delta = Number.isFinite(category?.delta) ? category.delta : null;
-  const volatility = category?.volatility;
 
-  const isSinglePurchase = restsOnOneTransaction(count, volatility);
+  const change = { current: currentTotal, previous: previousTotal, delta };
+  const periodsAlign = totalsAreComparable(change);
+  const stake = moneyAtStake(change);
+
+  const isSinglePurchase = restsOnOneTransaction(count, category?.volatility);
   const onPace = delta === 0;
-  const moneyMoved = Math.abs(currentTotal - previousTotal);
-  const isMaterial = monthTotal > 0 ? moneyMoved / monthTotal >= materialityFloor : true;
+  const belowFloor = stake !== null && monthTotal > 0 && stake / monthTotal < MATERIALITY_FLOOR;
 
-  const comparison = previousTotal > 0 && !onPace && isMaterial ? { previousTotal, currentTotal } : null;
-  const isJudgeable = comparison !== null && delta !== null && !isSinglePurchase;
+  const comparison = previousTotal > 0 && !onPace && !belowFloor
+    ? { previousTotal, currentTotal, periodsAlign }
+    : null;
+  const isJudgeable = comparison !== null && periodsAlign && !isSinglePurchase;
 
   return {
     count,
     isSinglePurchase,
+    isOnPace: onPace && previousTotal > 0,
     trend: isJudgeable ? (delta > 0 ? 'up' : 'down') : null,
     comparison,
-    percent: isJudgeable && percentDescribesTheseTotals(volatility) ? delta : null,
+    percent: isJudgeable ? delta : null,
   };
 };
 
-export const formatOccurrenceLabel = (count) => {
+export const formatOccurrenceLabel = (count, volatility) => {
   if (!Number.isFinite(count) || count <= 0) return null;
-  return count === 1 ? 'One purchase' : `${count} purchases`;
+  const recurring = RECURRING_VOLATILITY.includes(volatility);
+  if (recurring && count === 1) return null;
+  if (count === 1) return 'One purchase';
+  return `${count} ${recurring ? 'charges' : 'purchases'}`;
 };

@@ -1,7 +1,7 @@
 'use client';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { describeCategorySpend, formatOccurrenceLabel } from '@/lib/categorySpendRow';
-import { formatChange, MATERIALITY_FLOOR } from '@/lib/insightFeed';
+import { formatChange } from '@/lib/insightFeed';
 
 const HABIT_BAR = 'bg-teal-400';
 const ONE_OFF_BAR = { backgroundImage: 'repeating-linear-gradient(45deg, #5eead4 0 3px, #ccfbf1 3px 6px)' };
@@ -10,8 +10,8 @@ const TREND_TONE = { up: 'text-rose-600', down: 'text-emerald-600' };
 
 export default function CategorySpendRow({ rank, name, category, maxPct, monthTotal }) {
   const formatAmount = useFormatAmount();
-  const { isSinglePurchase, trend, comparison, percent } = describeCategorySpend(category, { monthTotal, materialityFloor: MATERIALITY_FLOOR });
-  const occurrences = formatOccurrenceLabel(category.count);
+  const { isSinglePurchase, isOnPace, trend, comparison, percent } = describeCategorySpend(category, { monthTotal });
+  const occurrences = formatOccurrenceLabel(category.count, category.volatility);
   const comparisonTone = trend ? TREND_TONE[trend] : 'text-gray-600';
 
   return (
@@ -32,13 +32,16 @@ export default function CategorySpendRow({ rank, name, category, maxPct, monthTo
           style={{ width: `${(category.pct / maxPct) * 100}%`, ...(isSinglePurchase ? ONE_OFF_BAR : null) }}
         />
       </div>
-      {(occurrences || comparison) && (
+      {(occurrences || comparison || isOnPace) && (
         <p className="mt-1.5 text-xs leading-snug text-gray-500">
           {occurrences && <span className={isSinglePurchase ? 'font-semibold text-gray-600' : undefined}>{occurrences}</span>}
-          {occurrences && comparison && ' · '}
+          {occurrences && (comparison || isOnPace) && ' · '}
+          {isOnPace && 'On pace'}
           {comparison && (
             <span className={`tabular-nums font-semibold ${comparisonTone}`}>
-              {formatAmount(comparison.previousTotal)} &rarr; {formatAmount(comparison.currentTotal)}
+              {formatAmount(comparison.previousTotal)}{!comparison.periodsAlign && ' last month'}
+              {' '}&rarr;{' '}
+              {formatAmount(comparison.currentTotal)}{!comparison.periodsAlign && ' so far'}
               {percent !== null && ` (${formatChange(percent)})`}
             </span>
           )}

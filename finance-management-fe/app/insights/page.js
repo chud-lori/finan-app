@@ -1254,7 +1254,7 @@ export default function InsightsPage() {
               id="where-its-going"
               title="🧠 Where It's Going"
               subtitle="Top categories driving your spending this month"
-              tooltip="Your top expense categories sorted by total. % change shows vs last month."
+              tooltip="Your top expense categories sorted by total. Changes are shown in money against last month — a percentage only when the two totals compare directly."
               loading={loading.explain}
               error={errors.explain}
             >
