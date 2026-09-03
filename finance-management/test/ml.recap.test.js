@@ -76,6 +76,18 @@ describe('services/ml/recap — buildRecap', () => {
       expect(nw.value).to.equal(55_000_000);
       expect(nw.baseline).to.equal(50_000_000);
       expect(nw.delta).to.equal(undefined);
+      expect(nw.floor).to.equal(1_100_000); // judged against net worth, not against a month of spend
+    });
+
+    it('reads a shrinking debt as an improvement even though no percentage can be quoted', () => {
+      const r = buildRecap({
+        month: '2026-07', monthLabel: 'July 2026',
+        current: baseCurrent, prior: basePrior,
+        netWorth: { current: -5_000_000, prior: -10_000_000 },
+      });
+      const nw = r.tiles.find((t) => t.key === 'netWorth');
+      expect(nw.tone).to.equal('positive');
+      expect(nw.baseline).to.equal(-10_000_000);
     });
 
     it('keeps raw currency out of the narrative (multi-currency safe)', () => {

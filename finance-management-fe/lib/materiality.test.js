@@ -58,6 +58,14 @@ describe('materiality — describeChange', () => {
     expect(c.percent).to.equal(-20);
   });
 
+  it('withholds the percentage when the baseline is negative, keeping only the money', () => {
+    const c = describeChange({ current: -5_000_000, baseline: -10_000_000, floor });
+    expect(c.material).to.equal(true);
+    expect(c.change).to.equal(5_000_000);
+    expect(c.direction).to.equal('up');
+    expect(c.percent).to.equal(null);
+  });
+
   it('is not comparable without a baseline', () => {
     const c = describeChange({ current: 4_000_000, baseline: null, floor });
     expect(c.material).to.equal(false);

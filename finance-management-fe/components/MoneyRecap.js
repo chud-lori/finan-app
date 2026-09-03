@@ -15,14 +15,14 @@ const TONE = {
 };
 
 const CHANGE_TONE = {
-  positive: 'text-emerald-500',
-  negative: 'text-rose-500',
+  positive: 'text-emerald-600',
+  negative: 'text-rose-600',
   neutral: 'text-gray-400',
 };
 
-function Tile({ tile, floor, formatAmount }) {
+function Tile({ tile, recapFloor, formatAmount }) {
   const tone = TONE[tile.tone] || TONE.neutral;
-  const change = describeChange({ current: tile.value, baseline: tile.baseline, floor });
+  const change = describeChange({ current: tile.value, baseline: tile.baseline, floor: tile.floor ?? recapFloor });
   const restsOnOnePurchase = tile.count === 1;
   const showPercent = change.percent != null && !restsOnOnePurchase;
 
@@ -125,7 +125,7 @@ export default function MoneyRecap() {
 
       {/* Stat tiles — the FE formats currency here */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {data.tiles.map((t) => <Tile key={t.key} tile={t} floor={data.materialityFloor || 0} formatAmount={formatAmount} />)}
+        {data.tiles.map((t) => <Tile key={t.key} tile={t} recapFloor={data.materialityFloor || 0} formatAmount={formatAmount} />)}
       </div>
     </div>
   );

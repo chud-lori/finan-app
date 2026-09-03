@@ -17,6 +17,6 @@ export const describeChange = ({ current, baseline, floor = 0 }) => {
     from: comparable ? from : null,
     to: comparable ? to : null,
     direction: !material ? 'flat' : change > 0 ? 'up' : 'down',
-    percent: material && isMaterial(from, floor) ? Math.round((change / from) * 100) : null,
+    percent: material && from > 0 && isMaterial(from, floor) ? Math.round((change / from) * 100) : null,
   };
 };

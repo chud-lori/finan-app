@@ -140,7 +140,14 @@ const buildRecap = (input = {}) => {
     tiles.push({ key: 'topMover', label: 'Biggest increase', text: cap(mover.category), value: mover.to, baseline: mover.from, count: mover.count, format: 'currency', tone: 'negative' });
   }
   if (netWorth.current != null) {
-    tiles.push({ key: 'netWorth', label: 'Net worth', value: round(netWorth.current), format: 'currency', baseline: netWorth.prior == null ? null : round(netWorth.prior), tone: nwDelta == null ? 'neutral' : nwDelta >= 0 ? 'positive' : 'negative' });
+    const nwPrior = netWorth.prior == null ? null : round(netWorth.prior);
+    const nwChange = nwPrior == null ? null : round(netWorth.current) - nwPrior;
+    tiles.push({
+      key: 'netWorth', label: 'Net worth', value: round(netWorth.current), format: 'currency',
+      baseline: nwPrior,
+      floor: materialityFloor(netWorth.current, netWorth.prior),
+      tone: nwChange == null ? 'neutral' : nwChange >= 0 ? 'positive' : 'negative',
+    });
   }
   if (health && health.score != null) {
     tiles.push({ key: 'health', label: 'Health score', value: health.score, format: 'number', max: 100, tone: 'neutral' });
