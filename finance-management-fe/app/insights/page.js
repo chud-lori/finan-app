@@ -10,6 +10,7 @@ import Tooltip from '@/components/Tooltip';
 import MoneyRecap from '@/components/MoneyRecap';
 import PaydayRunway from '@/components/PaydayRunway';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
+import CategorySpendRow from '@/components/CategorySpendRow';
 
 
 const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -388,30 +389,7 @@ function ExplainCard({ data }) {
       <p className="text-sm text-gray-500 dark:text-slate-400 mb-5 italic leading-relaxed">&ldquo;{data.summary}&rdquo;</p>
       <div className="space-y-4">
         {data.topCategories.map((c, i) => (
-          <div key={c.category}>
-            <div className="flex items-start justify-between mb-1.5 gap-3">
-              <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
-                <span className="text-xs font-bold text-gray-300 flex-shrink-0">#{i + 1}</span>
-                <span className="text-sm font-semibold text-gray-800 dark:text-slate-200 truncate">{cap(c.category)}</span>
-                {c.count > 0 && <span className="text-xs text-gray-400 flex-shrink-0">{c.count}×</span>}
-                {c.delta !== null && (
-                  <span className={`inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                    c.delta > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
-                  }`}>
-                    {c.delta > 0 ? '+' : ''}{c.delta}%
-                    <Tooltip text={`${c.delta > 0 ? 'More' : 'Less'} than last month on ${cap(c.category)}.`} align="left" fixed />
-                  </span>
-                )}
-              </div>
-              <div className="text-right flex-shrink-0 tabular-nums leading-tight">
-                <p className="text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{formatAmount(c.total)}</p>
-                <p className="text-xs text-gray-400">({c.pct}%)</p>
-              </div>
-            </div>
-            <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-              <div className="h-1.5 rounded-full bg-teal-400 transition-all duration-500" style={{ width: `${(c.pct / maxPct) * 100}%` }} />
-            </div>
-          </div>
+          <CategorySpendRow key={c.category} rank={i + 1} name={cap(c.category)} category={c} maxPct={maxPct} />
         ))}
       </div>
       <div className="mt-5 pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between">

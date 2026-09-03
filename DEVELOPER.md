@@ -862,6 +862,17 @@ Each `topCategories` entry carries `volatility` and `cv`. The frontend `buildIns
 
 `volatilityBreakdown` also carries `categories: { fixed, semi, flexible, unknown }` — the category names in each class. The Spending Mix bar uses it to drill from a segment into the transactions behind it without a second aggregation endpoint. Also additive; a cached pre-upgrade payload just renders the bar as non-clickable.
 
+**"Where It's Going" row presentation (`components/CategorySpendRow.js` + `lib/categorySpendRow.js`).** The row never shows a percentage change without the two currency totals it was measured from — a large ratio on a near-zero baseline (the low base effect) is arithmetically right and informationally useless. `describeCategorySpend(topCategoriesEntry)` is the pure decision function:
+
+| Output | Rule |
+|--------|------|
+| `isSinglePurchase` | `count <= 1` and `volatility` is neither `fixed` nor `semi` — one transaction with no regular history is a purchase, not a trend. The row drops the trend colour and hatches its share bar |
+| `trend` | `up`/`down` only when `delta` is non-null, non-zero and the row is not a single purchase. Unchanged is the default state and gets no ink |
+| `comparison` | `{ previousTotal, currentTotal }` in currency, rendered as `before → after` — real posted totals, never a derived difference |
+| `percent` | `delta` only when `volatility === 'fixed'` (the one class the backend compares posted-vs-posted, so the ratio matches the two totals on screen) and `abs(delta) < 200` |
+
+Unit-tested in `lib/categorySpendRow.test.js`.
+
 Returns top 10 results sorted by anomaly score, each with `severity` (high/medium/low), `multiple` (Nx vs category average), and a plain-English `label`.
 
 **Severity thresholds:** `multiple ≥ 3` or `score ≥ 0.7` → high; `multiple ≥ 1.8` → medium; else low.
