@@ -18,7 +18,7 @@ const Preference = require('../models/preference.model');
 const Budget = require('../models/budget.model');
 const MLInsight = require('../models/mlinsight.model');
 const { classifyCategories } = require('../helpers/categoryClassifier');
-const { classifyVolatility } = require('../helpers/spendingVolatility');
+const { classifyVolatility, LUMPY_TX_PER_MONTH } = require('../helpers/spendingVolatility');
 const { seasonalContext } = require('../helpers/seasonalRadar');
 const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
 const { seedDefaultCategories, DEFAULT_UTILITY_CATEGORY_NAMES } = require('../helpers/seedDefaultCategories');
@@ -1124,7 +1124,6 @@ const getAnomalies = async (req, res) => {
         // 'unknown' is raised 2→3: too little history should not fire at a low bar
         // (gotcha#566 — sparse lumpy categories were mis-gated as 'unknown').
         const RATIO_GATE = { fixed: 1.5, semi: 2, flexible: 4, unknown: 3 };
-        const LUMPY_TX_PER_MONTH = 2; // few, big, irregular hits a month → inherently lumpy
 
         const anomalies = [];
         currentTxns.forEach(t => {
@@ -1193,6 +1192,8 @@ const getAnomalies = async (req, res) => {
     }
 };
 
+const ROLLING_WINDOW_DAYS = 30;
+
 const getExplainability = async (req, res) => {
     try {
         const userTz = validTz(req.query.tz);
@@ -1250,13 +1251,23 @@ const getExplainability = async (req, res) => {
             histByCat[t.category].count++;
         });
 
-        // How far through the current month we are, for a pace-fair comparison.
-        // A past-month view (monthParam set) is always complete → fraction 1.
-        const currentYm   = now.format('YYYY-MM');
-        const isCurrent   = !monthParam || monthParam === currentYm;
-        const daysInMon   = moment(periodStart).daysInMonth();
-        const daysElapsed = isCurrent ? Math.min(now.date(), daysInMon) : daysInMon;
-        const fraction    = daysElapsed / daysInMon;
+        const currentYm = now.format('YYYY-MM');
+        const isCurrent = !monthParam || monthParam === currentYm;
+
+        // Two equal-length COMPLETE windows: pro-rating a partial month turns ordinary front-loaded spending into a four-figure percentage on day 3.
+        const asOf         = now.toDate();
+        const rollingStart = now.clone().subtract(ROLLING_WINDOW_DAYS, 'days').toDate();
+        const priorStart   = now.clone().subtract(ROLLING_WINDOW_DAYS * 2, 'days').toDate();
+        const rollingByCat = {};
+        const rollingTotals = { current: 0, prior: 0 };
+        [...historyTxns, ...currentTxns].forEach(t => {
+            const when = new Date(t.time);
+            if (when > asOf || when < priorStart) return;
+            const window = when >= rollingStart ? 'current' : 'prior';
+            if (!rollingByCat[t.category]) rollingByCat[t.category] = { current: 0, prior: 0 };
+            rollingByCat[t.category][window] += t.amount;
+            rollingTotals[window] += t.amount;
+        });
 
         const topCategories = Object.entries(catMap)
             .sort((a, b) => b[1].total - a[1].total)
@@ -1271,26 +1282,26 @@ const getExplainability = async (req, res) => {
                 const prevTotal = hist?.months[prevYm] || 0;
                 const pct       = totalExpense > 0 ? Math.round((v.total / totalExpense) * 100) : 0;
 
-                // Delta framing depends on the category class:
-                //  - fixed (rent): posts as a lump, so compare posted-vs-posted with
-                //    no pro-rating; null until this month's charge exists.
-                //  - everything else (food): accrues daily, so compare against the
-                //    previous month pro-rated to the same elapsed fraction. Without
-                //    this an 8-days-in month reads as "down ~75%" against a full
-                //    month — the false "great progress" this replaces.
-                let delta = null;
-                if (volatility === 'fixed') {
-                    delta = prevTotal > 0 && v.total > 0
-                        ? Math.round(((v.total - prevTotal) / prevTotal) * 100)
-                        : null;
-                } else {
-                    const baseline = prevTotal * fraction;
-                    delta = baseline > 0
-                        ? Math.round(((v.total - baseline) / baseline) * 100)
-                        : null;
-                }
+                const lumpy = volatility !== 'fixed' && txPerMonth !== null && txPerMonth <= LUMPY_TX_PER_MONTH;
 
-                return { category: cat, total: Math.round(v.total), count: v.count, pct, prevTotal: Math.round(prevTotal), delta, volatility, cv };
+                // A rolling window holds 0, 1 or 2 instances of a once-a-month charge depending on the day, so committed costs stay on calendar months.
+                const rolling = isCurrent && volatility !== 'fixed';
+                const roll    = rollingByCat[cat] || { current: 0, prior: 0 };
+                const windowKind  = rolling ? 'rolling-30d' : 'calendar-month';
+                const windowTotal = rolling ? roll.current : v.total;
+                const priorWindow = rolling ? roll.prior : prevTotal;
+
+                const baseline = !lumpy && priorWindow > 0 && windowTotal > 0 ? priorWindow : null;
+                const delta = baseline
+                    ? Math.round(((windowTotal - baseline) / baseline) * 100)
+                    : null;
+
+                return {
+                    category: cat, total: Math.round(v.total), count: v.count, pct,
+                    prevTotal: Math.round(prevTotal), windowKind, windowTotal: Math.round(windowTotal),
+                    baseline: baseline === null ? null : Math.round(baseline),
+                    baselineMonths: activeMonths, delta, lumpy, volatility, cv,
+                };
             });
 
         // Every current category's total bucketed by volatility class (not just topCategories).
@@ -1316,7 +1327,9 @@ const getExplainability = async (req, res) => {
             ? `Your spending is mainly driven by: ${top3Names}`
             : 'No spending data for this period';
 
-        const explainResponse = BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalExpense), summary, topCategories, volatilityBreakdown });
+        const rollingWindow = { days: ROLLING_WINDOW_DAYS, currentTotal: Math.round(rollingTotals.current), priorTotal: Math.round(rollingTotals.prior) };
+
+        const explainResponse = BaseResponseDTO.success('Explainability analysis complete', { totalOutcome: Math.round(totalExpense), summary, topCategories, volatilityBreakdown, rolling: rollingWindow });
         cache.set(req.user.id, 'explain', cacheParams, explainResponse);
         res.status(200).json(explainResponse);
     } catch (error) {

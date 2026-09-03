@@ -12,6 +12,7 @@ const MIN_MONTHS            = 3;    // fewer active months than this → can't j
 const CV_FIXED             = 0.15; // CV at or below → amounts barely move month to month
 const CV_FLEXIBLE          = 0.35; // CV at or above → amounts swing
 const MAX_FIXED_TX_PER_MONTH = 1.5; // a committed charge posts ~once/month; food is many
+const LUMPY_TX_PER_MONTH     = 2;   // few, big, irregular hits a month → inherently lumpy
 
 const classifyVolatility = (monthlyTotals, txPerMonth) => {
   const series = (monthlyTotals || []).filter(x => Number.isFinite(x) && x > 0);
@@ -34,4 +35,4 @@ const classifyVolatility = (monthlyTotals, txPerMonth) => {
   return { volatility, cv: Math.round(cv * 1000) / 1000 };
 };
 
-module.exports = { classifyVolatility, MIN_MONTHS, CV_FIXED, CV_FLEXIBLE, MAX_FIXED_TX_PER_MONTH };
+module.exports = { classifyVolatility, MIN_MONTHS, CV_FIXED, CV_FLEXIBLE, MAX_FIXED_TX_PER_MONTH, LUMPY_TX_PER_MONTH };

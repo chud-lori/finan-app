@@ -171,6 +171,7 @@ finan-app/                          ← monorepo root
     │   ├── analyticsFilters.js     ← pure filter predicate, URL encode/decode, client-side chart re-aggregation
     │   ├── spendingCalendar.js     ← pure day bucketing / grid / intensity math for SpendingCalendar
     │   ├── moneyFlow.js            ← pure money-flow aggregation + SVG geometry for MoneyFlow
+    │   ├── insightFeed.js          ← pure insight composer, materiality floor, ranking, shared change formatter
     │   └── format.js               ← formatCurrency(), date helpers
     └── e2e/
         ├── public-pages.spec.js
@@ -854,11 +855,16 @@ The rule-based insight feed ("What your data is saying") weights each category b
 
 Thresholds are tunable defaults, **not** tuned on production data. Unit-tested in `test/spendingVolatility.test.js`.
 
-**Pace-corrected delta.** `getExplainability` no longer compares a partial current month against a *full* previous month (which made every accruing category read "down ~75% — great progress" early in the month). Instead:
-- `fixed` categories are compared **posted-vs-posted** (no pro-rating — you don't pro-rate a rent payment); `delta` is `null` until this month's charge exists.
-- everything else is compared against the previous month **pro-rated to the elapsed fraction** of the current month, so on-pace spending reads ≈ 0%.
+**Two complete windows, never a partial one.** `getExplainability` used to compare the month *so far* against the previous month pro-rated to the elapsed fraction (`baseline = prevTotal × daysElapsed / daysInMonth`). Pro-rating assumes spending accrues uniformly across the month; real spending is front-loaded (income lands at month start), so dividing by a fraction of `0.1` on day 3 multiplied ordinary clustering by ten. A category with byte-identical behaviour for six months read **+275% "a place you can trim"** for the first ~20 days of every month, and the mirror image ("down X% — great progress") fired just as often. The estimator, not the wording, was the defect. The comparison is now:
+- **non-`fixed`, current month → rolling 30 days vs the 30 days before** (`windowKind: 'rolling-30d'`). Both windows are complete and equal-length, so there is no `fraction` to divide by and front-loading cancels out.
+- **`fixed` categories, and any completed past month (`?month=`) → calendar month vs previous calendar month** (`windowKind: 'calendar-month'`). A rolling window holds 0, 1 or 2 instances of a once-a-month charge depending on the day of the month, which would reintroduce the same false alarm for exactly the categories that post as a single lump; `delta` is `null` until this month's charge exists.
+- **lumpy** categories get **no delta at all**, in either window. A category the user buys from once every few months has no usual level to run above — last month's single purchase is not a baseline, it is just whatever they happened to buy then. `lumpy = volatility !== 'fixed' && txPerMonth <= LUMPY_TX_PER_MONTH`, and both `baseline` and `delta` come back `null`.
 
-Each `topCategories` entry carries `volatility` and `cv`. The frontend `buildInsights` branches on `volatility`: it suppresses the "high dependency" warning for fixed costs (stating them neutrally), treats a fixed-cost change as an informational "new baseline?" at a low threshold, and reserves the actionable "you can trim this" / "great progress" framing for flexible categories at higher thresholds. The field is additive, so cached pre-upgrade payloads degrade to the prior behaviour. Covered by `test/explain.integration.test.js`.
+Residual, accepted: a rolling window is phase-sensitive for sparse categories — one posting 3–4 transactions a month can hold n or n±1 events depending on the day, i.e. up to ~±33%. That is bounded and small next to the unbounded `1/fraction` blow-up it replaces, and the categories where it bites hardest are the ones the lumpy gate already silences.
+
+`LUMPY_TX_PER_MONTH` (= 2) is exported from `helpers/spendingVolatility.js` and imported by `getAnomalies`, `getExplainability` and `services/ml/anomaly.js` — **one definition of "lumpy" for the whole app**. Three copies of the same threshold is how a detector and its explanation drift apart.
+
+Each `topCategories` entry carries `volatility`, `cv`, `lumpy`, `windowKind`, `windowTotal` (the current window's spend — **this is what `delta` and the money-at-stake figure are measured on**, not the calendar-month `total` shown beside it), `baseline` (the prior window, `null` when there is none) and `baselineMonths`. The response root also carries `rolling: { days, currentTotal, priorTotal }` — whole-user spend in each window, which is what the frontend's materiality floor takes its share of. The frontend `buildInsights` branches on `volatility`: it suppresses the "high dependency" warning for fixed costs (stating them neutrally), treats a fixed-cost change as an informational "new baseline?" at a low threshold, and reserves the actionable "you can trim this" / "great progress" framing for flexible categories at higher thresholds. A lumpy category that is a meaningful share of the month on a *single* transaction gets a plain informational line ("all from one purchase — a one-off, not a new habit") instead of an alert. The fields are additive, so cached pre-upgrade payloads degrade to the prior behaviour. Covered by `test/explain.integration.test.js`.
 
 `volatilityBreakdown` also carries `categories: { fixed, semi, flexible, unknown }` — the category names in each class. The Spending Mix bar uses it to drill from a segment into the transactions behind it without a second aggregation endpoint. Also additive; a cached pre-upgrade payload just renders the bar as non-clickable.
 
@@ -1269,6 +1275,7 @@ PLAYWRIGHT_BASE_URL=https://your-domain.com npm run test:e2e
 | File | What it covers |
 |------|---------------|
 | `lib/spendingCalendar.test.js` | Spending-calendar day bucketing (per-transaction timezone), month-boundary fetch window across east/west zones, weekday alignment for both `weekStartsOn` values, savings-group exclusion and its failure path, intensity scaling |
+| `lib/insightFeed.test.js` | Insight ranking by money at stake vs severity, the materiality floor, the no-pace rule for lumpy categories, currency-led change formatting, and dedupe against both Spending Alerts payload shapes |
 | `public-pages.spec.js` | Landing, auth pages, legal pages, auth guard redirects — 30 tests desktop + mobile |
 | `auth-flow.spec.js` | Login, dashboard, add transaction, analytics, logout-all (skipped without credentials) |
 
@@ -1307,7 +1314,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/transaction/analytics` | 60/min | ✓ | Monthly/yearly analytics; query: `?year=YYYY&month=M`. Each category row carries its `group` |
 | GET | `/api/transaction/merchants` | 60/min | ✓ | Top merchants for a period; query: `?year=YYYY&month=M&limit=N&tz=` (`month` omitted = whole year, `limit` defaults to 12 and is clamped to 50). Returns `{ merchants[], oneOff, total, merchantCount, year, month, limit }`. Merchants are grouped on read by the shared `merchantKey()`, savings-group outflow is excluded, and single-transaction merchants are collapsed into `oneOff` — see Merchant analytics |
 | GET | `/api/transaction/anomalies` | 60/min | ✓ | Rule-based anomaly detection (z-score on rolling average) |
-| GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, pace-corrected `delta`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category, plus `volatilityBreakdown.categories` (names per class) — see Category volatility section |
+| GET | `/api/transaction/explain` | 60/min | ✓ | Top-5 category breakdown with `pct`, `delta` over two complete windows + its `windowKind`/`windowTotal`/`baseline`/`baselineMonths`, `lumpy`, and `volatility`/`cv` (fixed/semi/flexible/unknown) per category, plus `volatilityBreakdown.categories` (names per class) and `rolling` window totals — see Category volatility section |
 | GET | `/api/transaction/recurring` | 60/min | ✓ | Detected subscriptions/bills: `recurring[]` (merchant, cadence, typicalAmount, monthlyEquivalent, nextDue, confidence), `monthlyTotal`, `count`, and `alerts[]` (missing bill / price jump). Only groups clearing the category-blocklist + amount-stability (CV ≤ 0.12, or ≤ 0.35 for flagged utility categories) + monthly-or-longer-precise-cadence gate appear here or raise alerts. Stable sub-monthly repeats come back separately in `frequent[]` / `frequentMonthlyTotal` — no due dates, never alerted. 13-month window; yearly cadences not detected |
 | GET | `/api/transaction/recap` | 30/min | ✓ | Money Recap — rule-based, fully in-process monthly "wrapped". Query: `?month=YYYY-MM` (defaults to the most recent complete month). Returns `{ available, month, monthLabel, narrative[], tiles[] }` stitched from the monthly Snapshot (this month vs prior), Financial Health score, streak, net-worth delta, ML anomaly count and top category mover. `available:false` with a `reason` until there is ≥1 full prior month. Narrative lines are currency-free; raw amounts ride only on `tiles` for the FE to format |
 | GET | `/api/transaction/runway` | 30/min | ✓ | Payday Runway — forward "safe to spend before next income". Infers income cadence from income history, projects the balance to the next expected payday using upcoming recurring bills + a discretionary run-rate, and returns `{ mode:'payday'\|'rolling', nextIncomeDate, daysUntilIncome, expectedIncome, safeToSpend, safeToSpendPerDay, billsBeforeIncome[], billsTotal, runwayDays, runwayDate, status, note }`. Degrades to a rolling-30-day runway when income cadence is unclear. A guide, not a guarantee |
@@ -1529,6 +1536,39 @@ The Analytics *Money flow* card adds **no backend endpoint**. It reuses the payl
 - **Two renderings over one model.** A three-lane flow cannot carry readable labels in the ~318px a phone card has, and scrolling one sideways defeats the point of seeing the whole path — so the hand-rolled SVG renders on `lg+` only, and below that the same split renders as a composition bar. The group/category list is present at every width and is both the drill-down surface and the accessible one (the SVG is `aria-hidden`).
 - **Whole-period only** — the card is hidden while filters are active, for the same reason the savings rate is suppressed: over a subset, "what you kept" is just what the filter left behind.
 - No new dependency. The SVG is ~120 lines of geometry in `layoutMoneyFlow` / `ribbonPath`: a two-stage stacked flow, not an arbitrary DAG. Source nodes sit flush so a ribbon never has to straddle a gap, and leaf labels are pushed down when two thin neighbours would print on top of each other.
+
+### The insight feed is one pure module (`lib/insightFeed.js`)
+
+"What your data is saying" used to be composed inside `app/insights/page.js`: 21 rules, no export, no tests, ranked by `sort((a,b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level])`. Severity was the only key, so an insight about a rounding error outranked one about a month's rent, and a single furniture purchase reached the screen as "running 7998% above your usual pace". The composer now lives in `lib/insightFeed.js` — pure, exported, and the surface every other insight consumer imports rather than reimplements.
+
+**Exported contract**
+
+| Export | Signature | Purpose |
+|---|---|---|
+| `buildInsights` | `(explain, ttz, anomaly, ml, recurring, formatAmount) → Insight[]` | every candidate, unranked and uncut |
+| `insightKey` | `(insight) → 'kind:subject'` | stable identity — `subject` is a lowercased category name or merchant, never prose |
+| `formatChange` | `(topCategoryRow, formatAmount) → Change \| null` | the single delta formatter, shared by the feed and the "Where It's Going" badge |
+| `moneyAtStake` | `(topCategoryRow) → number` | `\|windowTotal − baseline\|`, the one correct sizing of a category move |
+| `MATERIALITY_FLOOR` | `{ shareOfSpend, denominator(explain), of(explain) → number }` | the suppression floor policy, its denominator rule and its resolver |
+| `selectTopInsights` | `(insights, floor, limit = 5) → Insight[]` | filter below the floor, then rank |
+| `listedAlerts` / `biggestAlertIn` | payload → alerts / alert | what Spending Alerts is currently showing |
+
+An `Insight` is `{ key, kind, subject, level, icon, text, anchor, cta, amountAtStake, baseline: { value, kind, periods, txCount } }`. `key` is derived from `kind` + `subject`, **not** from `text` — a dismissal keyed on wording resurrects itself the next time the copy changes.
+
+**Ranking is money first, severity second.** `selectTopInsights` orders by materiality *band* (`floor(log10(amountAtStake / floor))`), then by severity, then by raw amount. Banding rather than raw amount is deliberate: a `danger` and a `warn` about comparable sums should still be ordered by urgency, but a `danger` about a rounding error must never outrank a `warn` about a month's rent.
+
+**The floor is a share of a window that does not shrink.** `MATERIALITY_FLOOR.of(explain)` is `shareOfSpend × denominator(explain)`, where `shareOfSpend = 0.02` and the denominator is `max(rolling.currentTotal, rolling.priorTotal, totalOutcome)`. Three deliberate choices:
+- *Why a share and not an absolute sum* — the app is multi-currency and carries no per-currency magnitude table, so a hardcoded floor is a different policy in every currency: a threshold meant as "about a cup of coffee" in IDR would suppress a user's entire month in USD.
+- *Why not a share of this month's spend* — that is the shape the first cut used, and it fails exactly where noise lives. Early in the month, month-to-date spend is small, so the floor shrinks with it: at Rp 67.800 spent so far, 2% is Rp 1.356 and a Rp 7.800 line sails through. The trailing 30-day window is stable on day 3, currency-neutral, and already computed for the delta — the same window supplies both, so they are not two parameters to tune.
+- *Why 2%* — at the `.slice(0, 5)` budget an insight has to be worth one of five slots; below a fiftieth of a month's spend it cannot change the month. On a Rp 3.200.000 window the floor is Rp 64.000: it hides the "Coffee down 80% — great progress" line built on a single small purchase, and leaves a genuine multi-month uptrend worth ~Rp 285.000 untouched.
+
+`moneyAtStake(category)` is exported alongside it and is the *only* correct way to size a category move: `|windowTotal − baseline|`. Computing it as `|total − prevTotal|` compares month-to-date against a full prior month and reproduces the bug the estimator change removes.
+
+**Currency leads, percentages follow.** `formatChange` returns `badge` (a signed currency delta), `range` (baseline → current window), `against` (which window the comparison is over) and `pctSuffix`, which is **empty unless the category's baseline is stable** (`fixed` or `semi`, i.e. CV below the flexible threshold). A percentage on an unstable baseline is the low-base effect and is never the only number shown. The badge in "Where It's Going" and the feed line are rendered from the same call, so they cannot disagree about the same move.
+
+**One event, one voice.** Before it emits a category move, `buildInsights` checks the alerts the Spending Alerts card is *currently* rendering (`ml.anomalies` when ML is up, `anomaly.anomalies` in fallback — the lookup reads only `category` and `amount`, which both shapes carry). If a single flagged transaction accounts for at least half the move, the feed says nothing; the one-off line that remains links to the alert instead of restating it. Suppression happens before the cut, so a dropped insight promotes the next one rather than leaving four.
+
+Covered by `lib/insightFeed.test.js`.
 
 ### Per-month budget resolution
 
