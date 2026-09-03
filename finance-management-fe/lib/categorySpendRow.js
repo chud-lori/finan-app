@@ -1,6 +1,5 @@
 export const RECURRING_VOLATILITY = ['fixed', 'semi'];
 export const STABLE_BASELINE_VOLATILITY = 'fixed';
-export const MAX_READABLE_PERCENT = 200;
 
 const toAmount = (value) => (Number.isFinite(value) ? value : 0);
 
@@ -9,9 +8,7 @@ const restsOnOneTransaction = (count, volatility) =>
 
 const percentDescribesTheseTotals = (volatility) => volatility === STABLE_BASELINE_VOLATILITY;
 
-const readsAsQuantity = (percent) => Math.abs(percent) < MAX_READABLE_PERCENT;
-
-export const describeCategorySpend = (category) => {
+export const describeCategorySpend = (category, { monthTotal = 0, materialityFloor = 0 } = {}) => {
   const count = Number.isFinite(category?.count) ? category.count : 0;
   const currentTotal = toAmount(category?.total);
   const previousTotal = toAmount(category?.prevTotal);
@@ -19,16 +16,19 @@ export const describeCategorySpend = (category) => {
   const volatility = category?.volatility;
 
   const isSinglePurchase = restsOnOneTransaction(count, volatility);
-  const departsFromLastMonth = delta !== null && delta !== 0 && !isSinglePurchase;
-  const trend = departsFromLastMonth ? (delta > 0 ? 'up' : 'down') : null;
-  const worthShowing = isSinglePurchase || departsFromLastMonth;
+  const onPace = delta === 0;
+  const moneyMoved = Math.abs(currentTotal - previousTotal);
+  const isMaterial = monthTotal > 0 ? moneyMoved / monthTotal >= materialityFloor : true;
+
+  const comparison = previousTotal > 0 && !onPace && isMaterial ? { previousTotal, currentTotal } : null;
+  const isJudgeable = comparison !== null && delta !== null && !isSinglePurchase;
 
   return {
     count,
     isSinglePurchase,
-    trend,
-    comparison: worthShowing && previousTotal > 0 ? { previousTotal, currentTotal } : null,
-    percent: departsFromLastMonth && percentDescribesTheseTotals(volatility) && readsAsQuantity(delta) ? delta : null,
+    trend: isJudgeable ? (delta > 0 ? 'up' : 'down') : null,
+    comparison,
+    percent: isJudgeable && percentDescribesTheseTotals(volatility) ? delta : null,
   };
 };
 

@@ -866,12 +866,12 @@ Each `topCategories` entry carries `volatility` and `cv`. The frontend `buildIns
 
 | Output | Rule |
 |--------|------|
-| `isSinglePurchase` | `count <= 1` and `volatility` is neither `fixed` nor `semi` — one transaction with no regular history is a purchase, not a trend. The row drops the trend colour and hatches its share bar |
-| `trend` | `up`/`down` only when `delta` is non-null, non-zero and the row is not a single purchase. Unchanged is the default state and gets no ink |
-| `comparison` | `{ previousTotal, currentTotal }` in currency, rendered as `before → after` — real posted totals, never a derived difference |
-| `percent` | `delta` only when `volatility === 'fixed'` (the one class the backend compares posted-vs-posted, so the ratio matches the two totals on screen) and `abs(delta) < 200` |
+| `comparison` | `{ previousTotal, currentTotal }` in currency, rendered as `before → after` — real posted totals, never a derived difference. Suppressed when `delta === 0` (on pace is the default state and gets no ink) and when the money that moved is below `MATERIALITY_FLOOR` of the month's spend |
+| `isSinglePurchase` | `count <= 1` and `volatility` is neither `fixed` nor `semi` — one transaction with no regular history is a purchase, not a trend. The row drops the trend colour and hatches its share bar. A `fixed` category posting its one monthly charge is explicitly not this |
+| `trend` | `up`/`down` only when there is a `comparison` on screen, `delta` is non-null and the row is not a single purchase. When the backend declines to judge an irregular category (`delta === null`) the row still shows the two totals, in neutral grey — figures without a verdict, never an unexplained blank |
+| `percent` | `delta` only when `volatility === 'fixed'` — the one class the backend compares posted-vs-posted, so the ratio matches the two totals on screen. Every other class is pro-rated to the elapsed month fraction, which those totals do not describe |
 
-Unit-tested in `lib/categorySpendRow.test.js`.
+The percentage is rendered through `formatChange` from `lib/insightFeed.js`, the same formatter the insight feed uses, so the two surfaces can never phrase the same `delta` differently. Unit-tested in `lib/categorySpendRow.test.js`.
 
 Returns top 10 results sorted by anomaly score, each with `severity` (high/medium/low), `multiple` (Nx vs category average), and a plain-English `label`.
 

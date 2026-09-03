@@ -1,15 +1,16 @@
 'use client';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { describeCategorySpend, formatOccurrenceLabel } from '@/lib/categorySpendRow';
+import { formatChange, MATERIALITY_FLOOR } from '@/lib/insightFeed';
 
 const HABIT_BAR = 'bg-teal-400';
 const ONE_OFF_BAR = { backgroundImage: 'repeating-linear-gradient(45deg, #5eead4 0 3px, #ccfbf1 3px 6px)' };
 
 const TREND_TONE = { up: 'text-rose-600', down: 'text-emerald-600' };
 
-export default function CategorySpendRow({ rank, name, category, maxPct }) {
+export default function CategorySpendRow({ rank, name, category, maxPct, monthTotal }) {
   const formatAmount = useFormatAmount();
-  const { isSinglePurchase, trend, comparison, percent } = describeCategorySpend(category);
+  const { isSinglePurchase, trend, comparison, percent } = describeCategorySpend(category, { monthTotal, materialityFloor: MATERIALITY_FLOOR });
   const occurrences = formatOccurrenceLabel(category.count);
   const comparisonTone = trend ? TREND_TONE[trend] : 'text-gray-600';
 
@@ -38,7 +39,7 @@ export default function CategorySpendRow({ rank, name, category, maxPct }) {
           {comparison && (
             <span className={`tabular-nums font-semibold ${comparisonTone}`}>
               {formatAmount(comparison.previousTotal)} &rarr; {formatAmount(comparison.currentTotal)}
-              {percent !== null && ` (${percent > 0 ? '+' : ''}${percent}%)`}
+              {percent !== null && ` (${formatChange(percent)})`}
             </span>
           )}
         </p>

@@ -389,7 +389,7 @@ function ExplainCard({ data }) {
       <p className="text-sm text-gray-500 dark:text-slate-400 mb-5 italic leading-relaxed">&ldquo;{data.summary}&rdquo;</p>
       <div className="space-y-4">
         {data.topCategories.map((c, i) => (
-          <CategorySpendRow key={c.category} rank={i + 1} name={cap(c.category)} category={c} maxPct={maxPct} />
+          <CategorySpendRow key={c.category} rank={i + 1} name={cap(c.category)} category={c} maxPct={maxPct} monthTotal={data.totalOutcome} />
         ))}
       </div>
       <div className="mt-5 pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between">
