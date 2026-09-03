@@ -303,3 +303,10 @@ body {
   background-attachment: local, local, scroll, scroll;
 }
 .dark .scroll-x-hint { --scroll-surface: #1e293b; }
+
+.bar-one-off {
+  background-image: repeating-linear-gradient(90deg, #5eead4 0 4px, #99f6e4 4px 8px);
+}
+.dark .bar-one-off {
+  background-image: repeating-linear-gradient(90deg, #0d9488 0 4px, #0f766e 4px 8px);
+}

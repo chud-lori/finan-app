@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { describeCategorySpend, formatOccurrenceLabel } from './categorySpendRow';
 
-const MONTH = { monthTotal: 3_000_000 };
+const MONTH = { totalOutcome: 3_000_000 };
 
 const row = (over) => ({ category: 'widget', total: 500_000, prevTotal: 100_000, count: 6, delta: 20, volatility: 'flexible', ...over });
 

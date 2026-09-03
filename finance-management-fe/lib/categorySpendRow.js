@@ -8,7 +8,7 @@ const toAmount = (value) => (Number.isFinite(value) ? value : 0);
 const restsOnOneTransaction = (count, volatility) =>
   count === 1 && volatility === IRREGULAR_VOLATILITY;
 
-export const describeCategorySpend = (category, { monthTotal = 0 } = {}) => {
+export const describeCategorySpend = (category, explain) => {
   const count = Number.isFinite(category?.count) ? category.count : 0;
   const currentTotal = toAmount(category?.total);
   const previousTotal = toAmount(category?.prevTotal);
@@ -20,7 +20,8 @@ export const describeCategorySpend = (category, { monthTotal = 0 } = {}) => {
 
   const isSinglePurchase = restsOnOneTransaction(count, category?.volatility);
   const onPace = delta === 0;
-  const belowFloor = stake !== null && monthTotal > 0 && stake / monthTotal < MATERIALITY_FLOOR;
+  const floor = MATERIALITY_FLOOR.of(explain);
+  const belowFloor = stake !== null && floor > 0 && stake < floor;
 
   const comparison = previousTotal > 0 && !onPace && !belowFloor
     ? { previousTotal, currentTotal, periodsAlign }

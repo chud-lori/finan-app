@@ -1,7 +1,19 @@
 const PERCENT_CEILING = 200;
 const PERCENT_ROUNDING_TOLERANCE = 1;
 
-export const MATERIALITY_FLOOR = 0.02;
+export const MATERIALITY_FLOOR = {
+  shareOfSpend: 0.02,
+  denominator(explain) {
+    return Math.max(
+      explain?.rolling?.currentTotal ?? 0,
+      explain?.rolling?.priorTotal ?? 0,
+      explain?.totalOutcome ?? 0,
+    );
+  },
+  of(explain) {
+    return this.denominator(explain) * this.shareOfSpend;
+  },
+};
 
 export const totalsAreComparable = ({ current, previous, delta }) => {
   if (!Number.isFinite(delta) || !(previous > 0)) return false;
