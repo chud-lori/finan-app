@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import { invalidateSavingsCategories } from '@/lib/savingsCategories';
-import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup, getGroupBudgets, setGroupBudget, getRangeTransactions } from '@/lib/api';
+import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup, getGroupBudgets, setGroupBudget, getRangeTransactions, getInsightDismissals, dismissInsight, restoreInsight } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { capitalizeFirst as cap } from '@/lib/format';
 import { buildInsights, formatChange, MATERIALITY_FLOOR, selectTopInsights } from '@/lib/insightFeed';
@@ -12,6 +12,8 @@ import Tooltip from '@/components/Tooltip';
 import MoneyRecap from '@/components/MoneyRecap';
 import PaydayRunway from '@/components/PaydayRunway';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
+import { InsightDismissButton, InsightDismissGutter, InsightDismissPanel, DismissedInsightsPanel, NoInsightsLeft } from '@/components/InsightDismiss';
+import { withoutDismissed, dismissKeyOf, parseDismissalKey } from '@/lib/insightDismissals';
 
 
 function timeAgo(date) {
@@ -59,8 +61,9 @@ const LEVEL = {
   good:   { dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700', label: 'Good' },
 };
 
-function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
+function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading, dismissals, onDismiss, onRestore }) {
   const formatAmount = useFormatAmount();
+  const [dismissing, setDismissing] = useState(null);
   if (loading) {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6 animate-pulse">
@@ -78,9 +81,14 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
     );
   }
 
-  const insights = buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount);
+  const insights = withoutDismissed(buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount), dismissals);
   const top = selectTopInsights(insights, MATERIALITY_FLOOR.of(explain));
-  if (!top.length) return null;
+  if (!top.length && !dismissals?.length) return null;
+
+  const dismissRow = async (key, reason) => {
+    await onDismiss({ ...parseDismissalKey(key), reason });
+    setDismissing(null);
+  };
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
@@ -94,35 +102,56 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
           const inner = (
             <>
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
-              <p className="text-sm text-gray-700 dark:text-slate-300 flex-1 leading-snug">{ins.text}</p>
+              <p className="text-sm text-gray-700 dark:text-slate-300 flex-1 min-w-0 leading-snug">{ins.text}</p>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.badge}`}>{s.label}</span>
                 {ins.anchor && (
                   <span className="text-xs text-teal-600 dark:text-teal-400 font-medium whitespace-nowrap">
-                    {ins.cta ?? 'See details'} →
+                    <span className="hidden sm:inline">{ins.cta ?? 'See details'} </span>→
                   </span>
                 )}
               </div>
             </>
           );
-          if (ins.anchor) {
-            return (
-              <a
-                key={ins.key}
-                href={`#${ins.anchor}`}
-                className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
-              >
-                {inner}
-              </a>
-            );
-          }
-          return (
-            <div key={ins.key} className="flex items-center gap-3 px-5 py-3.5">
+          const dismissKey = dismissKeyOf(ins);
+          const rowBase = 'flex items-center gap-3 pl-5 pr-1 py-3.5 flex-1 min-w-0';
+          const body = ins.anchor ? (
+            <a
+              href={`#${ins.anchor}`}
+              className={`${rowBase} hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer`}
+            >
               {inner}
+            </a>
+          ) : (
+            <div className={rowBase}>
+              {inner}
+            </div>
+          );
+          return (
+            <div key={ins.key}>
+              <div className="flex items-stretch">
+                {body}
+                {dismissKey ? (
+                  <InsightDismissButton
+                    open={dismissing === dismissKey}
+                    onToggle={() => setDismissing(prev => (prev === dismissKey ? null : dismissKey))}
+                  />
+                ) : (
+                  <InsightDismissGutter />
+                )}
+              </div>
+              {dismissKey && dismissing === dismissKey && (
+                <InsightDismissPanel
+                  onChoose={(reason) => dismissRow(dismissKey, reason)}
+                  onCancel={() => setDismissing(null)}
+                />
+              )}
             </div>
           );
         })}
       </div>
+      {!top.length && <NoInsightsLeft />}
+      <DismissedInsightsPanel dismissals={dismissals} onRestore={onRestore} />
     </div>
   );
 }
@@ -984,6 +1013,7 @@ export default function InsightsPage() {
   const [mixDrill,     setMixDrill]     = useState(null);   // { label, categories }
   const [mixTxns,      setMixTxns]      = useState([]);
   const [mixLoading,   setMixLoading]   = useState(false);
+  const [dismissals,   setDismissals]   = useState([]);
 
   const openMixDrilldown = async (segment) => {
     setMixDrill(segment);
@@ -1046,6 +1076,8 @@ export default function InsightsPage() {
 
     getGroupBudgets().then(res => setGroupBudgets(res.data)).catch(() => {});
 
+    getInsightDismissals().then(res => setDismissals(res.data?.dismissals ?? [])).catch(() => {});
+
     (async () => {
       try {
         const res = await getMLInsights();
@@ -1099,6 +1131,26 @@ export default function InsightsPage() {
     }
   };
 
+  const reloadDismissals = () =>
+    getInsightDismissals()
+      .then(res => setDismissals(res.data?.dismissals ?? []))
+      .catch(() => {});
+
+  const reloadExplain = () =>
+    getExplainability().then(res => setExplain(res.data)).catch(() => {});
+
+  const applyDismissalChange = () => Promise.all([reloadDismissals(), reloadExplain()]);
+
+  const handleDismissInsight = async ({ kind, subject, reason }) => {
+    await dismissInsight({ kind, subject, reason });
+    await applyDismissalChange();
+  };
+
+  const handleRestoreInsight = async (id) => {
+    await restoreInsight(id);
+    await applyDismissalChange();
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -1140,6 +1192,9 @@ export default function InsightsPage() {
           <InsightFeed
             explain={explain} ttz={ttz} anomaly={anomaly} ml={ml} recurring={recurring}
             loading={feedLoading}
+            dismissals={dismissals}
+            onDismiss={handleDismissInsight}
+            onRestore={handleRestoreInsight}
           />
 
           {explain?.volatilityBreakdown && <SpendingMixBar data={explain.volatilityBreakdown} onSegmentClick={openMixDrilldown} />}

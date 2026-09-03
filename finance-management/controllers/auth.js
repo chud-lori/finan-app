@@ -279,6 +279,7 @@ const deleteAccount = async (req, res) => {
             require('../models/netWorth.model'),
             require('../models/netWorthSnapshot.model'),
             require('../models/allocation.model'),
+            require('../models/insightDismissal.model'),
         ];
 
         await Promise.all([
