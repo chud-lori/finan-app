@@ -114,6 +114,22 @@ export default function PaydayRunway() {
         </div>
       )}
 
+      {data.priceChanges?.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2">Price changes</p>
+          <ul className="divide-y divide-gray-100 dark:divide-slate-800">
+            {data.priceChanges.map((c, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 py-2">
+                <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 truncate">{cap(c.merchant)}</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                  <span className="font-normal text-gray-400">{formatAmount(c.from)} → </span>{formatAmount(c.to)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-3">{data.note}</p>
     </div>
   );

@@ -8,6 +8,7 @@ const Allocation = require('../models/allocation.model');
 const NetWorth = require('../models/netWorth.model');
 const { lookAhead } = require('../helpers/seasonalRadar');
 const { detectWindfall } = require('../helpers/windfall');
+const { materialityFloor, isMaterial } = require('../helpers/materiality');
 
 const validTz = (tz) => (tz && moment.tz.zone(tz)) ? tz : 'UTC';
 
@@ -53,6 +54,10 @@ const getSmartRecommendations = async (req, res) => {
         const expense = thisMonthTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
         const savingsRate = income > 0 ? ((income - expense) / income) * 100 : null;
 
+        const totalExpense3     = last3MonthsTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+        const avgMonthlyExpense = totalExpense3 / 3;
+        const floor             = materialityFloor(expense, avgMonthlyExpense);
+
         if (savingsRate !== null && savingsRate >= 25) {
             recs.push({
                 id:   'savings_rate_good',
@@ -62,20 +67,21 @@ const getSmartRecommendations = async (req, res) => {
                 body:  `You're saving ${Math.round(savingsRate)}% of your income — above the recommended 20%. See when you can reach financial independence.`,
                 cta:  { label: 'Try FIRE Calculator', href: '/recommendation?tool=fire' },
             });
-        } else if (savingsRate !== null && income > 0 && expense > income) {
-            const overpct = Math.round(((expense - income) / income) * 100);
+        } else if (savingsRate !== null && income > 0 && expense > income && isMaterial(expense - income, floor)) {
             recs.push({
                 id:   'overspending_month',
                 type: 'warning',
                 icon: '⚠️',
                 title: 'Spending exceeds income this month',
-                body:  `Expenses are ${overpct}% over your income this month. The 50/30/20 rule can help you realign your spending.`,
+                body:  'You\'ve spent more than you earned this month. The 50/30/20 rule can help you realign your spending.',
+                figures: { from: Math.round(income), to: Math.round(expense), fromLabel: 'earned', toLabel: 'spent' },
                 cta:  { label: 'Check 50/30/20 Budget', href: '/recommendation?tool=budget5030' },
             });
         }
 
-        const catAvg  = {};
-        const catThis = {};
+        const catAvg   = {};
+        const catThis  = {};
+        const catCount = {};
         for (const t of last3MonthsTxns) {
             if (t.type !== 'expense') continue;
             catAvg[t.category] = (catAvg[t.category] || 0) + t.amount;
@@ -83,24 +89,33 @@ const getSmartRecommendations = async (req, res) => {
         for (const cat in catAvg) catAvg[cat] /= 3;
         for (const t of thisMonthTxns) {
             if (t.type !== 'expense') continue;
-            catThis[t.category] = (catThis[t.category] || 0) + t.amount;
+            catThis[t.category]  = (catThis[t.category] || 0) + t.amount;
+            catCount[t.category] = (catCount[t.category] || 0) + 1;
         }
 
-        let topCat = null, topRatio = 0;
+        let topCat = null, topExcess = 0;
         for (const cat in catThis) {
             const avg = catAvg[cat];
             if (!avg || avg < 1) continue;
-            const ratio = catThis[cat] / avg;
-            if (ratio > 1.3 && ratio > topRatio) { topRatio = ratio; topCat = cat; }
+            const excess = catThis[cat] - avg;
+            if (catThis[cat] / avg <= 1.3) continue;
+            if (!isMaterial(excess, floor)) continue;
+            if (excess <= topExcess) continue;
+            topExcess = excess; topCat = cat;
         }
         if (topCat) {
-            const pct = Math.round((topRatio - 1) * 100);
+            const restsOnOnePurchase = catCount[topCat] === 1;
             recs.push({
                 id:   `overspend_${topCat}`,
-                type: 'warning',
+                type: restsOnOnePurchase ? 'info' : 'warning',
                 icon: '📊',
-                title: `${topCat} spending up ${pct}% this month`,
-                body:  `You've spent ${pct}% more on ${topCat} than your 3-month average. Small cuts here add up quickly.`,
+                title: restsOnOnePurchase
+                    ? `One ${topCat} purchase drove this month`
+                    : `${topCat} is running above your usual`,
+                body:  restsOnOnePurchase
+                    ? `A single ${topCat} purchase put this month above your 3-month average — a one-off, not a new habit.`
+                    : `You've spent more on ${topCat} than your 3-month average. Small cuts here add up quickly.`,
+                figures: { from: Math.round(catAvg[topCat]), to: Math.round(catThis[topCat]), fromLabel: '3-month average', toLabel: 'this month', count: catCount[topCat] },
                 cta:  { label: 'View Analytics', href: '/analytics' },
             });
         }
@@ -109,14 +124,12 @@ const getSmartRecommendations = async (req, res) => {
         const hasEmergencyGoal = (netWorthDoc?.assets || []).some(a => a.type === 'emergency_fund')
             || goals.some(g => g.kind === 'emergency');
         if (!hasEmergencyGoal) {
-            const totalExp3       = last3MonthsTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-            const avgMonthlyExp   = totalExp3 / 3;
             const balanceAmt      = balance?.amount ?? 0;
-            const monthsCovered   = avgMonthlyExp > 0 ? balanceAmt / avgMonthlyExp : null;
+            const monthsCovered   = avgMonthlyExpense > 0 ? balanceAmt / avgMonthlyExpense : null;
             if (monthsCovered !== null && monthsCovered < 3) {
                 const params = new URLSearchParams({
                     tool:    'emergency',
-                    monthly: String(Math.round(avgMonthlyExp)),
+                    monthly: String(Math.round(avgMonthlyExpense)),
                     saved:   String(Math.max(Math.round(balanceAmt), 0)),
                 });
                 recs.push({
@@ -167,12 +180,14 @@ const getSmartRecommendations = async (req, res) => {
                 const when = ahead.monthsAway === 1 ? 'next month' : `in ${ahead.monthsAway} months`;
                 const params = new URLSearchParams({ tool: 'goal' });
                 let body;
+                let figures = null;
                 if (ahead.coldStart || ahead.suggestedSetAside == null) {
                     body = `${ahead.monthName} tends to be a higher-spending stretch${ahead.label ? ` (${ahead.label})` : ''}. Setting a little aside now softens the hit.`;
                 } else {
                     params.set('desc', `${ahead.monthName} set-aside`);
                     params.set('target', String(ahead.suggestedSetAside));
-                    body = `You usually spend about ${ahead.ratio}× your normal in ${ahead.monthName}. Setting aside ~${Math.round(ahead.suggestedSetAside).toLocaleString()} ${when} keeps ${ahead.label || 'the season'} from denting your budget.`;
+                    body = `You usually spend more than a normal month in ${ahead.monthName}. Putting this aside ${when} keeps ${ahead.label || 'the season'} from denting your budget.`;
+                    figures = { amount: Math.round(ahead.suggestedSetAside), amountLabel: 'suggested set-aside' };
                 }
                 recs.push({
                     id:   'seasonal_lookahead',
@@ -180,6 +195,7 @@ const getSmartRecommendations = async (req, res) => {
                     icon: '🗓️',
                     title: `${ahead.monthName} spike coming — set aside early`,
                     body,
+                    ...(figures ? { figures } : {}),
                     cta:  { label: 'Plan a set-aside goal', href: `/recommendation?${params.toString()}` },
                 });
             }
@@ -194,7 +210,7 @@ const getSmartRecommendations = async (req, res) => {
                 Allocation.exists({ user: userId, source: 'surplus', sourceKey: lastMonthYM }),
             ]);
             const surplus = lastSnap ? Math.round((lastSnap.income || 0) - (lastSnap.expense || 0)) : 0;
-            if (lastSnap && lastSnap.income > 0 && surplus > 0 && !alreadySwept) {
+            if (lastSnap && lastSnap.income > 0 && surplus > 0 && isMaterial(surplus, floor) && !alreadySwept) {
                 // Amount stays in the CTA params — the server never embeds a formatted currency figure.
                 const params = new URLSearchParams({
                     tool:   'goal',
@@ -207,6 +223,7 @@ const getSmartRecommendations = async (req, res) => {
                     icon: '💰',
                     title: 'You had a surplus last month',
                     body:  'You spent less than you earned last month. Sweep some of that surplus into a goal before it blends into this month\'s spending — it stays your money, just earmarked.',
+                    figures: { amount: surplus, amountLabel: 'surplus last month' },
                     cta:  { label: 'Sweep surplus to a goal', href: `/recommendation?${params.toString()}` },
                 });
             }

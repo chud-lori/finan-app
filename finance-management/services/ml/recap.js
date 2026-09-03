@@ -1,5 +1,7 @@
 // Narrative lines must stay currency-free; raw amounts ride only on `tiles`, which the FE formats.
 
+const { materialityFloor, isMaterial } = require('../../helpers/materiality');
+
 const round = (n) => Math.round(n);
 
 const pctChange = (cur, prev) => {
@@ -9,18 +11,23 @@ const pctChange = (cur, prev) => {
 
 const cap = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s);
 
-// Requires a real prior baseline, so a brand-new category can't masquerade as a spike.
-const topMover = (curByCat, priorByCat) => {
+const topMover = (curByCat, priorByCat, floor = 0) => {
   const prior = new Map((priorByCat || []).map((c) => [c.category, c.total]));
   let best = null;
   for (const c of curByCat || []) {
     const prev = prior.get(c.category) || 0;
     if (!(prev > 0)) continue;
-    const delta = c.total - prev;
-    const pct = pctChange(c.total, prev);
-    if (delta > 0 && pct != null && (!best || pct > best.pct)) {
-      best = { category: c.category, pct, from: round(prev), to: round(c.total) };
-    }
+    const change = c.total - prev;
+    if (change <= 0 || !isMaterial(change, floor)) continue;
+    if (best && change <= best.change) continue;
+    best = {
+      category: c.category,
+      change: round(change),
+      from: round(prev),
+      to: round(c.total),
+      count: c.count == null ? null : c.count,
+      pct: isMaterial(prev, floor) ? pctChange(c.total, prev) : null,
+    };
   }
   return best;
 };
@@ -46,14 +53,19 @@ const buildRecap = (input = {}) => {
 
   const income = round(current.income || 0);
   const expense = round(current.expense || 0);
+  const priorExpense = round(prior.expense || 0);
   const net = income - expense;
   const savingsRate = income > 0 ? round((net / income) * 100) : null;
-  const expenseDelta = pctChange(expense, prior.expense || 0);
+
+  const floor = materialityFloor(expense, priorExpense);
+  const spendChange = expense - priorExpense;
+  const spendMoved = isMaterial(spendChange, floor);
+  const spendPct = spendMoved && isMaterial(priorExpense, floor) ? pctChange(expense, priorExpense) : null;
 
   const byCat = [...(current.byCategory || [])].sort((a, b) => b.total - a.total);
   const top = byCat[0] || null;
   const topPct = top && expense > 0 ? round((top.total / expense) * 100) : null;
-  const mover = topMover(current.byCategory, prior.byCategory);
+  const mover = topMover(current.byCategory, prior.byCategory, floor);
 
   const nwDelta = pctChange(netWorth.current, netWorth.prior);
 
@@ -70,10 +82,16 @@ const buildRecap = (input = {}) => {
     narrative.push(`In ${label} you spent more than you earned — worth a closer look next month.`);
   }
 
-  if (expenseDelta != null) {
-    if (expenseDelta > 0) narrative.push(`You spent ${expenseDelta}% more than the month before.`);
-    else if (expenseDelta < 0) narrative.push(`You spent ${Math.abs(expenseDelta)}% less than the month before — nice restraint.`);
-    else narrative.push(`Your spending held steady versus the month before.`);
+  if (!spendMoved) {
+    narrative.push('Your spending held steady versus the month before.');
+  } else if (spendChange > 0) {
+    narrative.push(spendPct != null
+      ? `You spent ${spendPct}% more than the month before.`
+      : 'You spent more than the month before.');
+  } else {
+    narrative.push(spendPct != null
+      ? `You spent ${Math.abs(spendPct)}% less than the month before — nice restraint.`
+      : 'You spent less than the month before — nice restraint.');
   }
 
   if (top && topPct != null) {
@@ -81,7 +99,9 @@ const buildRecap = (input = {}) => {
   }
 
   if (mover) {
-    narrative.push(`${cap(mover.category)} jumped ${mover.pct}% over the previous month.`);
+    narrative.push(mover.count === 1
+      ? `${cap(mover.category)} was your biggest increase — one purchase, not a new habit.`
+      : `${cap(mover.category)} was your biggest increase over the month before.`);
   }
 
   if (streak.current > 1) {
@@ -105,9 +125,8 @@ const buildRecap = (input = {}) => {
     { key: 'net', label: net >= 0 ? 'Net saved' : 'Net shortfall', value: net, format: 'currency', tone: net >= 0 ? 'positive' : 'negative' },
     { key: 'income', label: 'Income', value: income, format: 'currency', tone: 'neutral' },
     {
-      key: 'expense', label: 'Spent', value: expense, format: 'currency',
-      delta: expenseDelta, deltaFormat: 'percent',
-      tone: expenseDelta == null ? 'neutral' : expenseDelta <= 0 ? 'positive' : 'negative',
+      key: 'expense', label: 'Spent', value: expense, format: 'currency', baseline: priorExpense,
+      tone: !spendMoved ? 'neutral' : spendChange < 0 ? 'positive' : 'negative',
     },
   ];
 
@@ -117,8 +136,11 @@ const buildRecap = (input = {}) => {
   if (top && topPct != null) {
     tiles.push({ key: 'topCategory', label: 'Top category', text: cap(top.category), value: topPct, format: 'percent', tone: 'neutral' });
   }
+  if (mover) {
+    tiles.push({ key: 'topMover', label: 'Biggest increase', text: cap(mover.category), value: mover.to, baseline: mover.from, count: mover.count, format: 'currency', tone: 'negative' });
+  }
   if (netWorth.current != null) {
-    tiles.push({ key: 'netWorth', label: 'Net worth', value: round(netWorth.current), format: 'currency', delta: nwDelta, deltaFormat: 'percent', tone: nwDelta == null ? 'neutral' : nwDelta >= 0 ? 'positive' : 'negative' });
+    tiles.push({ key: 'netWorth', label: 'Net worth', value: round(netWorth.current), format: 'currency', baseline: netWorth.prior == null ? null : round(netWorth.prior), tone: nwDelta == null ? 'neutral' : nwDelta >= 0 ? 'positive' : 'negative' });
   }
   if (health && health.score != null) {
     tiles.push({ key: 'health', label: 'Health score', value: health.score, format: 'number', max: 100, tone: 'neutral' });
@@ -129,7 +151,7 @@ const buildRecap = (input = {}) => {
     tiles.push({ key: 'anomalies', label: 'Flagged', value: anomalyCount, format: 'number', tone: anomalyCount > 0 ? 'negative' : 'positive' });
   }
 
-  return { available: true, month, monthLabel, narrative, tiles };
+  return { available: true, month, monthLabel, materialityFloor: round(floor), narrative, tiles };
 };
 
 module.exports = { buildRecap, pctChange, topMover };

@@ -1,5 +1,5 @@
 const { expect } = require('chai');
-const { computeRunway, detectIncomeCadence } = require('../services/ml/runway');
+const { computeRunway, detectIncomeCadence, materialPriceChanges } = require('../services/ml/runway');
 
 // Four monthly paychecks ending 2026-08-01.
 const MONTHLY_INCOME = [
@@ -104,5 +104,33 @@ describe('services/ml/runway — computeRunway', () => {
 
   it('is a guide — always returns the disclaimer note', () => {
     expect(computeRunway({ asOf: '2026-08-15', balance: 0 }).note).to.match(/guide/i);
+  });
+
+  describe('recurring price changes', () => {
+    const changes = [
+      { type: 'price_up', merchant: 'shop alpha', from: 100_000, to: 160_000, pct: 60 },
+      { type: 'price_up', merchant: 'shop beta', from: 15_000, to: 20_000, pct: 33 },
+    ];
+
+    it('surfaces a price rise in money, both figures, and drops the percentage', () => {
+      const out = materialPriceChanges(changes, 1_000_000);
+      expect(out).to.deep.equal([{ merchant: 'shop alpha', from: 100_000, to: 160_000 }]);
+    });
+
+    it('hides a rise too small to matter against the recurring bill total', () => {
+      expect(materialPriceChanges(changes, 10_000_000)).to.deep.equal([]);
+    });
+
+    it('reaches the runway payload, biggest money rise first', () => {
+      const runway = computeRunway({
+        asOf: '2026-08-15', balance: 5_000_000,
+        priceChanges: [...changes].reverse(), recurringMonthlyTotal: 200_000,
+      });
+      expect(runway.priceChanges.map((c) => c.merchant)).to.deep.equal(['shop alpha', 'shop beta']);
+    });
+
+    it('is an empty list when the detector reports nothing', () => {
+      expect(computeRunway({ asOf: '2026-08-15', balance: 0 }).priceChanges).to.deep.equal([]);
+    });
   });
 });

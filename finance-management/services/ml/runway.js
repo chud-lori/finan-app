@@ -1,5 +1,7 @@
 // Unreadable income cadence (variable / gig) degrades to a rolling-30-day runway with no payday horizon.
 
+const { materialityFloor, isMaterial } = require('../../helpers/materiality');
+
 const DAY_MS = 86400000;
 const DEFAULT_HORIZON = 120; // days to simulate forward
 
@@ -59,6 +61,14 @@ const detectIncomeCadence = (incomeEvents, asOf) => {
   };
 };
 
+const materialPriceChanges = (changes, recurringMonthlyTotal) => {
+  const floor = materialityFloor(recurringMonthlyTotal);
+  return (changes || [])
+    .filter((c) => c && Number(c.to) > Number(c.from) && isMaterial(Number(c.to) - Number(c.from), floor))
+    .map((c) => ({ merchant: c.merchant, from: Math.round(Number(c.from)), to: Math.round(Number(c.to)) }))
+    .sort((a, b) => (b.to - b.from) - (a.to - a.from));
+};
+
 const computeRunway = (input = {}) => {
   const asOf = input.asOf || new Date().toISOString().slice(0, 10);
   const balance = Number(input.balance) || 0;
@@ -69,6 +79,8 @@ const computeRunway = (input = {}) => {
     .filter((b) => b && b.dueDate && daysBetween(asOf, b.dueDate) >= 0 && Number(b.amount) > 0)
     .map((b) => ({ merchant: b.merchant, dueDate: b.dueDate, amount: Math.round(Number(b.amount)) }))
     .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+
+  const priceChanges = materialPriceChanges(input.priceChanges, input.recurringMonthlyTotal);
 
   const cad = detectIncomeCadence(input.incomeEvents, asOf);
   const mode = cad.regular ? 'payday' : 'rolling';
@@ -150,6 +162,7 @@ const computeRunway = (input = {}) => {
     discretionaryDaily,
     billsBeforeIncome,
     billsTotal,
+    priceChanges,
     safeToSpend,
     safeToSpendPerDay,
     runwayDays,
@@ -160,4 +173,4 @@ const computeRunway = (input = {}) => {
   };
 };
 
-module.exports = { computeRunway, detectIncomeCadence };
+module.exports = { computeRunway, detectIncomeCadence, materialPriceChanges };

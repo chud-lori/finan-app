@@ -1824,6 +1824,8 @@ const getRunway = async (req, res) => {
             incomeEvents,
             bills,
             discretionaryDaily,
+            priceChanges: recurringResult.alerts.filter(a => a.type === 'price_up'),
+            recurringMonthlyTotal: recurringResult.monthlyTotal,
         });
 
         const response = BaseResponseDTO.success('Payday runway calculated', runway);

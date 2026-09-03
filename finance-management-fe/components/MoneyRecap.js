@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { getRecap } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
+import { describeChange } from '@/lib/materiality';
 import Tooltip from '@/components/Tooltip';
 
 const TONE = {
@@ -13,8 +14,17 @@ const TONE = {
   neutral: 'text-gray-900 dark:text-slate-100',
 };
 
-function Tile({ tile, formatAmount }) {
+const CHANGE_TONE = {
+  positive: 'text-emerald-500',
+  negative: 'text-rose-500',
+  neutral: 'text-gray-400',
+};
+
+function Tile({ tile, floor, formatAmount }) {
   const tone = TONE[tile.tone] || TONE.neutral;
+  const change = describeChange({ current: tile.value, baseline: tile.baseline, floor });
+  const restsOnOnePurchase = tile.count === 1;
+  const showPercent = change.percent != null && !restsOnOnePurchase;
 
   let main;
   if (tile.format === 'currency') main = formatAmount(tile.value);
@@ -29,12 +39,20 @@ function Tile({ tile, formatAmount }) {
       ) : null}
       <div className="flex items-baseline gap-1.5 flex-wrap">
         <p className={`text-lg font-black tabular-nums ${tile.text ? 'text-gray-500 dark:text-slate-400 text-sm' : tone}`}>{main}</p>
-        {tile.delta != null && (
-          <span className={`text-xs font-semibold tabular-nums ${tile.delta > 0 ? 'text-rose-500' : tile.delta < 0 ? 'text-emerald-500' : 'text-gray-400'}`}>
-            {tile.delta > 0 ? '+' : ''}{tile.delta}%
+        {change.material && (
+          <span className={`text-xs font-semibold tabular-nums ${CHANGE_TONE[tile.tone] || CHANGE_TONE.neutral}`}>
+            {change.direction === 'up' ? '+' : '−'}{formatAmount(Math.abs(change.change))}
           </span>
         )}
       </div>
+      {change.material && (
+        <p className="text-[11px] text-gray-400 dark:text-slate-500 tabular-nums">
+          from {formatAmount(change.from)}{showPercent ? ` · ${change.percent > 0 ? '+' : ''}${change.percent}%` : ''}
+        </p>
+      )}
+      {restsOnOnePurchase && (
+        <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">on a single purchase</p>
+      )}
     </div>
   );
 }
@@ -107,7 +125,7 @@ export default function MoneyRecap() {
 
       {/* Stat tiles — the FE formats currency here */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {data.tiles.map((t) => <Tile key={t.key} tile={t} formatAmount={formatAmount} />)}
+        {data.tiles.map((t) => <Tile key={t.key} tile={t} floor={data.materialityFloor || 0} formatAmount={formatAmount} />)}
       </div>
     </div>
   );
