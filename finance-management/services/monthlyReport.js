@@ -93,28 +93,29 @@ const dueRecipients = async (now, { force = false, onlyUser = null } = {}) => {
 };
 
 const sendDueReports = async (now = new Date(), options = {}) => {
-  const { dryRun = false, force = false, onlyUser = null } = options;
+  const { dryRun = false, force = false, onlyUser = null, overrideTo = null } = options;
   let sent = 0;
   for (const { preference, user, yearMonth } of await dueRecipients(now, { force, onlyUser })) {
     const snapshot = await Snapshot.findOne({ user: preference.user, yearMonth }).lean();
     const monthLabel = moment(yearMonth, 'YYYY-MM').format('MMMM YYYY');
 
     try {
+      const recipient = overrideTo || user.email;
       if (dryRun) {
-        logger.info(`[dry run] would send ${hasSomethingToSay(snapshot) ? 'report' : 'blank-month note'} for ${yearMonth} to ${user.email}`);
+        logger.info(`[dry run] would send ${hasSomethingToSay(snapshot) ? 'report' : 'blank-month note'} for ${yearMonth} to ${recipient}`);
       } else if (!hasSomethingToSay(snapshot)) {
-        await sendNothingRecordedEmail(user.email, { monthLabel, appUrl: FE_URL });
+        await sendNothingRecordedEmail(recipient, { monthLabel, appUrl: FE_URL });
       } else {
         const savingsNames = await getSavingsCategoryNames(preference.user);
         const formatAmount = formatterFor(preference);
-        await sendMonthlyReportEmail(user.email, {
+        await sendMonthlyReportEmail(recipient, {
           monthLabel,
           ...buildHeadline(snapshot, savingsNames, formatAmount),
           lines: buildReportLines(snapshot, savingsNames, formatAmount),
           appUrl: FE_URL,
         });
       }
-      if (!dryRun) await EmailReport.create({ user: preference.user, yearMonth });
+      if (!dryRun && !overrideTo) await EmailReport.create({ user: preference.user, yearMonth });
       sent += 1;
     } catch (error) {
       logger.error(`Monthly report failed for ${preference.user}: ${error.message}`);

@@ -489,7 +489,7 @@ export default function ProfilePage() {
   const [identitySaving,  setIdentitySaving]  = useState(false);
   const [identityError,   setIdentityError]   = useState('');
 
-  const [prefs,       setPrefs]       = useState({ currency: 'IDR', timezone: 'Asia/Jakarta', weekStartsOn: 'monday', numberFormat: 'dot', monthlyBudget: 0 });
+  const [prefs,       setPrefs]       = useState({ currency: 'IDR', timezone: 'Asia/Jakarta', weekStartsOn: 'monday', numberFormat: 'dot', monthlyBudget: 0, monthlyEmailReport: false });
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsSaved,  setPrefsSaved]  = useState(false);
   const [prefsError,  setPrefsError]  = useState('');
@@ -898,6 +898,17 @@ export default function ProfilePage() {
                         onChange={v => setPrefs(p => ({ ...p, numberFormat: v }))}
                       />
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Monthly email report
+                      <span className="ml-1 text-gray-400 font-normal">— a summary of last month, on the 1st</span>
+                    </label>
+                    <Toggle
+                      options={[{ val: 'on', label: 'On' }, { val: 'off', label: 'Off' }]}
+                      value={prefs.monthlyEmailReport ? 'on' : 'off'}
+                      onChange={v => setPrefs(p => ({ ...p, monthlyEmailReport: v === 'on' }))}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">

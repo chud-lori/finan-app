@@ -104,8 +104,9 @@ const getProfile = async (req, res) => {
             weekStartsOn:  prefs.weekStartsOn,
             numberFormat:  prefs.numberFormat,
             monthlyBudget: prefs.monthlyBudget ?? 0,
+            monthlyEmailReport: prefs.monthlyEmailReport ?? false,
         } : {
-            currency: 'IDR', timezone: 'Asia/Jakarta', weekStartsOn: 'monday', numberFormat: 'dot', monthlyBudget: 0,
+            currency: 'IDR', timezone: 'Asia/Jakarta', weekStartsOn: 'monday', numberFormat: 'dot', monthlyBudget: 0, monthlyEmailReport: false,
         };
 
         res.status(200).json(BaseResponseDTO.success('Profile retrieved', {
@@ -171,7 +172,7 @@ const updateIdentity = async (req, res) => {
 const updatePreferences = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { currency, timezone, weekStartsOn, numberFormat, monthlyBudget } = req.body;
+        const { currency, timezone, weekStartsOn, numberFormat, monthlyBudget, monthlyEmailReport } = req.body;
 
         const allowed = {};
         if (currency && typeof currency === 'string') {
@@ -182,6 +183,7 @@ const updatePreferences = async (req, res) => {
         if (['monday', 'sunday'].includes(weekStartsOn))   allowed.weekStartsOn = weekStartsOn;
         if (['dot', 'comma'].includes(numberFormat))        allowed.numberFormat = numberFormat;
         if (typeof monthlyBudget === 'number' && monthlyBudget >= 0) allowed.monthlyBudget = Math.round(monthlyBudget);
+        if (typeof monthlyEmailReport === 'boolean') allowed.monthlyEmailReport = monthlyEmailReport;
 
         const prefs = await Preference.findOneAndUpdate(
             { user: userId },
@@ -195,6 +197,7 @@ const updatePreferences = async (req, res) => {
             weekStartsOn:  prefs.weekStartsOn,
             numberFormat:  prefs.numberFormat,
             monthlyBudget: prefs.monthlyBudget ?? 0,
+            monthlyEmailReport: prefs.monthlyEmailReport ?? false,
         }));
     } catch (e) {
         logger.error(`Update preferences error: ${e.message}`);
