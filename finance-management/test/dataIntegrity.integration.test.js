@@ -14,6 +14,7 @@ const Snapshot    = require('../models/snapshot.model');
 const MLInsight   = require('../models/mlinsight.model');
 const NetWorth    = require('../models/netWorth.model');
 const NetWorthSnapshot = require('../models/netWorthSnapshot.model');
+const InsightDismissal = require('../models/insightDismissal.model');
 const User        = require('../models/user.model');
 
 chai.use(chaiHttp);
@@ -140,6 +141,8 @@ describe('Data integrity regressions', () => {
                 assets:      [{ label: 'House', amount: 900000000, type: 'property' }],
                 liabilities: [{ label: 'Mortgage', amount: 400000000, type: 'mortgage' }],
             });
+            await chai.request(server).post('/api/insights/dismissals').set('Cookie', cookie)
+                .send({ kind: 'category-change', subject: 'widgets', reason: 'expected' });
 
             const res = await chai.request(server)
                 .delete('/api/auth/account')
@@ -152,6 +155,7 @@ describe('Data integrity regressions', () => {
                 groupBudget: GroupBudget,
                 preference: Preference, snapshot: Snapshot, mlinsight: MLInsight,
                 networth: NetWorth, networthSnapshot: NetWorthSnapshot,
+                insightDismissal: InsightDismissal,
             })) {
                 leftovers[name] = await Model.countDocuments({ user: userId });
             }
@@ -162,7 +166,7 @@ describe('Data integrity regressions', () => {
                 transaction: 0, category: 0, goal: 0, budget: 0,
                 groupBudget: 0,
                 preference: 0, snapshot: 0, mlinsight: 0,
-                networth: 0, networthSnapshot: 0, balance: 0, user: 0,
+                networth: 0, networthSnapshot: 0, insightDismissal: 0, balance: 0, user: 0,
             });
         });
     });

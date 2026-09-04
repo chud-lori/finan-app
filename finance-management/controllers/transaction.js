@@ -21,6 +21,7 @@ const { classifyCategories } = require('../helpers/categoryClassifier');
 const { classifyVolatility, LUMPY_TX_PER_MONTH } = require('../helpers/spendingVolatility');
 const { seasonalContext } = require('../helpers/seasonalRadar');
 const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
+const { getDismissedSubjects } = require('../helpers/insightDismissals');
 const { seedDefaultCategories, DEFAULT_UTILITY_CATEGORY_NAMES } = require('../helpers/seedDefaultCategories');
 const { track } = require('../helpers/backgroundJobs');
 const nativeMl = require('../services/ml');
@@ -1218,10 +1219,11 @@ const getExplainability = async (req, res) => {
         // enough to reflect the user's current life.
         const historyStart = moment(periodStart).subtract(6, 'month').toDate();
 
-        const [currentTxnsRaw, historyTxnsRaw, savingsNames] = await Promise.all([
+        const [currentTxnsRaw, historyTxnsRaw, savingsNames, changesPaused] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: periodStart, $lte: periodEnd } }).lean(),
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: historyStart, $lt: periodStart } }).lean(),
             getSavingsCategoryNames(req.user.id),
+            getDismissedSubjects(req.user.id, 'category-change'),
         ]);
 
         // Investing / moving cash to a savings-group category is a transfer, not
@@ -1291,7 +1293,8 @@ const getExplainability = async (req, res) => {
                 const windowTotal = rolling ? roll.current : v.total;
                 const priorWindow = rolling ? roll.prior : prevTotal;
 
-                const baseline = !lumpy && priorWindow > 0 && windowTotal > 0 ? priorWindow : null;
+                const changePaused = changesPaused.has(cat.toLowerCase());
+                const baseline = !changePaused && !lumpy && priorWindow > 0 && windowTotal > 0 ? priorWindow : null;
                 const delta = baseline
                     ? Math.round(((windowTotal - baseline) / baseline) * 100)
                     : null;

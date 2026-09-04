@@ -633,6 +633,81 @@ split across several goals). In `userScopedModels`, so `deleteAccount` clears it
 
 ---
 
+### InsightDismissal
+
+```
+Collection: insightdismissals
+```
+
+The user's "that was a one-off, stop telling me" record for the insight feed. It is a
+**typed correction**, the same pattern as `Category.groupOverridden`, `Category.isUtility`
+and `Goal.kind`: a row keyed on an insight *kind* plus its *subject*, matched by indexed
+equality — never a match on the rendered sentence. Hiding one rendered string would be
+worthless, because the same rule re-fires with new numbers next month.
+
+| Field | Type | Constraints | Notes |
+|-------|------|-------------|-------|
+| `user` | ObjectId | ref: User, required | |
+| `kind` | String | required, enum | the six category-scoped `kind`s `lib/insightFeed.js` emits: `category-concentration`, `category-fixed-base`, `category-change`, `category-one-off`, `category-frequency`, `category-top-expense` |
+| `subject` | String | required, ≤120 chars, `sanitizeText` + lowercased + trimmed | the category the insight is about. 120 rather than 64 because category names are user-typed and effectively unbounded (`models/category.model.js` uses `max`, which Mongoose ignores on Strings) — a cap below what a category can be turns the dismiss button into a dead control |
+| `reason` | String | required, enum: `expected \| not_useful` | closed enum, so the reason is never free text to sanitise |
+| `expiresAt` | Date | required, TTL index | when the insight comes back |
+| `createdAt` / `updatedAt` | Date | auto | `updatedAt` is surfaced as `dismissedAt` |
+
+**Indexes:** `{ user: 1, kind: 1, subject: 1 }` unique — re-dismissing the same pair
+updates the row and restarts the clock rather than stacking duplicates.
+`{ expiresAt: 1 }` with `expireAfterSeconds: 0` so expiry needs no cron. In
+`userScopedModels`, so `deleteAccount` clears it.
+
+**Bounded per user.** `MAX_DISMISSALS_PER_USER = 100` caps how many rows one account can
+hold: a POST that would create row 101 returns **409** telling the user to show one again
+first (renewing a row that already exists always succeeds, so the cap can never strand
+someone). Both reads carry the same `.limit()` — the list endpoint and
+`getDismissedSubjects`, which runs on every `GET /api/transaction/explain` at 60/min.
+Without the cap a self-registered account could write tens of thousands of 365-day rows
+and turn two unbounded reads into a memory and response-size amplifier on a 2 GB VPS.
+
+**A dismissal is bounded, never permanent.** `expected` (a one-off) hides the insight for
+**90 days** — a one-off washes out of the six-month baseline within a quarter, so after
+that the category deserves a fresh look. `not_useful` is a judgement about the rule
+itself rather than one event, so it hides for **365 days**. Reads also filter on
+`expiresAt > now`, so expiry is exact rather than waiting on Mongo's TTL sweep.
+
+**Undo is always reachable.** The insight feed card ends with a "N hidden insights"
+disclosure listing every active dismissal, its reason and the date it returns, each with
+a "Show again" button (`DELETE /api/insights/dismissals/:id`). The feed card renders even
+when every insight is hidden, so a dismissal can never become invisible.
+
+**Suppression happens in two places, and they must agree.**
+
+1. *The signal.* `getExplainability` loads the user's active `category-change` subjects
+   (`helpers/insightDismissals.js#getDismissedSubjects`, an indexed equality match — the
+   same shape as `getSavingsCategoryNames`) and returns `baseline: null` / `delta: null`
+   for those categories. That silences the change insight **and** the currency-delta badge
+   in "Where It's Going" in one move, so the same event is never reported in two voices.
+   `total`, `count` and `pct` are untouched — the user hid a comparison, not the numbers.
+   Both mutations call `cache.invalidateUser`, or the 5-minute analytics cache would keep
+   serving the pre-dismissal baseline and the feature would look broken.
+2. *The feed.* Every insight `lib/insightFeed.js#buildInsights` produces already carries a
+   structured `kind`, `subject` and `key`; `lib/insightDismissals.js#withoutDismissed`
+   drops the dismissed ones **before** `selectTopInsights` ranks and slices, so a hidden
+   insight promotes the next one instead of leaving a short list. **The dismissal key is
+   `insightFeed.js#insightKey`, the feed's own function** — if dismissal derived its key
+   any other way, rewording an insight would resurrect everything the user had hidden.
+   This is the general path and the only one for the other five kinds, whose numbers stay
+   in the breakdown table as plain facts.
+
+**Deliberately not dismissible.** Global insights (runway, forecast, missing bill)
+describe a transient condition that resolves itself, and silencing "balance runs out in
+3 days" for months would be a safety hole. Anomaly-driven surfaces (Spending Alerts, the
+`ml_anomaly` dashboard nudge, the recap's "we flagged N unusual purchases") are a
+separate signal with its own 24h `MLInsight` document keyed on `txCountSnapshot`; a
+dismissal does not change the transaction count, so that document would keep serving.
+Making anomalies dismissible therefore requires filtering the cached document at read
+time — not just `cache.invalidateUser` — and is out of scope here.
+
+---
+
 ### Budget
 
 ```
@@ -865,6 +940,14 @@ Residual, accepted: a rolling window is phase-sensitive for sparse categories �
 `LUMPY_TX_PER_MONTH` (= 2) is exported from `helpers/spendingVolatility.js` and imported by `getAnomalies`, `getExplainability` and `services/ml/anomaly.js` — **one definition of "lumpy" for the whole app**. Three copies of the same threshold is how a detector and its explanation drift apart.
 
 Each `topCategories` entry carries `volatility`, `cv`, `lumpy`, `windowKind`, `windowTotal` (the current window's spend — **this is what `delta` and the money-at-stake figure are measured on**, not the calendar-month `total` shown beside it), `baseline` (the prior window, `null` when there is none) and `baselineMonths`. The response root also carries `rolling: { days, currentTotal, priorTotal }` — whole-user spend in each window, which is what the frontend's materiality floor takes its share of. The frontend `buildInsights` branches on `volatility`: it suppresses the "high dependency" warning for fixed costs (stating them neutrally), treats a fixed-cost change as an informational "new baseline?" at a low threshold, and reserves the actionable "you can trim this" / "great progress" framing for flexible categories at higher thresholds. A lumpy category that is a meaningful share of the month on a *single* transaction gets a plain informational line ("all from one purchase — a one-off, not a new habit") instead of an alert. The fields are additive, so cached pre-upgrade payloads degrade to the prior behaviour. Covered by `test/explain.integration.test.js`.
+
+**A dismissed change insight nulls the comparison.** When the user hides a category's
+`category-change` insight (see [InsightDismissal](#insightdismissal)),
+`getExplainability` returns `baseline: null` and `delta: null` for that category until
+the dismissal expires. Nulling the signal rather than filtering the sentence is what
+keeps the feed line and the currency-delta badge in "Where It's Going" from disagreeing,
+and it reuses the `baseline == null` branch `formatChange` already has. `total`, `count`,
+`pct` and `prevTotal` are untouched — the user hid a comparison, not the numbers.
 
 `volatilityBreakdown` also carries `categories: { fixed, semi, flexible, unknown }` — the category names in each class. The Spending Mix bar uses it to drill from a segment into the transactions behind it without a second aggregation endpoint. Also additive; a cached pre-upgrade payload just renders the bar as non-clickable.
 
@@ -1263,6 +1346,7 @@ bun run test:app
 | `transaction.integration.test.js` | CRUD, balance updates, categories, CSV import, analytics |
 | `goal.integration.test.js` | Goal creation, savings calculations, multi-goal |
 | `end-to-end.test.js` | Full user journey, multi-user data isolation, error recovery |
+| `insightDismissal.integration.test.js` | Insight dismissal: typed record, expiry windows, per-user isolation, undo, pace suppression in `/explain` |
 
 Tests run against `mongodb-memory-server` — no real DB connection required. Rate limiting is disabled in `NODE_ENV=test`.
 
@@ -1393,6 +1477,24 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 |--------|------|-----------|------|-------------|
 | GET | `/api/group-budget` | 30/min | ✓ | The four cappable groups, each with `cap`, current-month `spent`, `pct`, `remaining`, `over`; query: `?month=YYYY-MM&tz=IANA`. `hasCaps` is false until the user sets one |
 | PUT | `/api/group-budget/:group` | 30/min | ✓ | Set or clear a soft cap; body: `{ amount }`. `:group` ∈ essential/discretionary/savings/social. `amount ≤ 0`/null clears (deletes the row) |
+
+### Insight dismissals
+
+| Method | Path | Rate limit | Auth | Description |
+|--------|------|-----------|------|-------------|
+| GET | `/api/insights/dismissals` | 60/min | ✓ | Active (unexpired) dismissals: `{ id, kind, subject, reason, dismissedAt, expiresAt }` |
+| POST | `/api/insights/dismissals` | 30/min | ✓ | Hide an insight kind for a subject; body: `{ kind, subject, reason }`. Upserts on `(user, kind, subject)` — re-dismissing restarts the clock. 400 on an unknown kind, reason or over-long subject; 409 once the account holds 100 active dismissals |
+| DELETE | `/api/insights/dismissals/:id` | 30/min | ✓ | Show the insight again. 404 when the id is not the caller's, 400 when it is not an ObjectId |
+
+`kind` is one of the six category-scoped kinds `lib/insightFeed.js` emits
+(`category-concentration`, `category-fixed-base`, `category-change`, `category-one-off`,
+`category-frequency`, `category-top-expense`); `reason` ∈ `expected` (one-off, 90 days)
+or `not_useful` (365 days). Both mutations call `cache.invalidateUser` because
+`GET /api/transaction/explain` returns `baseline: null` for a category whose
+`category-change` insight is dismissed. The frontend surfaces the 409 and any 429 in the
+dismiss panel rather than swallowing it — a dismiss button that does nothing and says
+nothing is indistinguishable from a broken feature. See the
+[InsightDismissal](#insightdismissal) schema for the full rationale.
 
 ### Gamification
 

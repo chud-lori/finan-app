@@ -351,3 +351,17 @@ export const deleteCategoryApi = (categoryId) =>
 
 export const repairCategoryTypes = () =>
   apiFetch('/api/category/repair-types', { method: 'POST' });
+
+// ── Insight dismissals ────────────────────────────────────────────────────────
+
+export const getInsightDismissals = () =>
+  apiFetch('/api/insights/dismissals');
+
+export const dismissInsight = ({ kind, subject, reason }) =>
+  apiFetch('/api/insights/dismissals', {
+    method: 'POST',
+    body: JSON.stringify({ kind, subject, reason }),
+  });
+
+export const restoreInsight = (id) =>
+  apiFetch(`/api/insights/dismissals/${id}`, { method: 'DELETE' });

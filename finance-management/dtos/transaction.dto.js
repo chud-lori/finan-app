@@ -215,5 +215,6 @@ module.exports = {
     DeleteTransactionResponseDTO,
     SeedCategoryResponseDTO,
     MerchantsResponseDTO,
-    BaseResponseDTO
+    BaseResponseDTO,
+    sanitizeText
 };

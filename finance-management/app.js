@@ -113,6 +113,7 @@ const recommendationRoutes = require('./routers/recommendation');
 const categoryRoutes = require('./routers/category');
 const netWorthRoutes = require('./routers/netWorth');
 const groupBudgetRoutes = require('./routers/groupBudget');
+const insightRoutes = require('./routers/insight');
 // Routes
 app.get("/", (req, res) => res.json("HEHHHH"));
 app.get('/health', (_req, res) => {
@@ -137,6 +138,7 @@ app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/category', categoryRoutes);
 app.use('/api/networth', netWorthRoutes);
 app.use('/api/group-budget', groupBudgetRoutes);
+app.use('/api/insights', insightRoutes);
 
 // Must come after all routes.
 Sentry.setupExpressErrorHandler(app);
