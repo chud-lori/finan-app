@@ -1,6 +1,7 @@
 const { Resend } = require('resend');
-const { RESEND_API_KEY, FROM_EMAIL } = require('../config/keys');
+const { RESEND_API_KEY, FROM_EMAIL, REPORT_FROM_EMAIL } = require('../config/keys');
 const logger = require('./logger');
+const { monthlyReportEmail, nothingRecordedEmail } = require('./emailTemplates/monthlyReport');
 
 let _resend = null;
 const getClient = () => {
@@ -9,6 +10,8 @@ const getClient = () => {
   return _resend;
 };
 const FROM = `Finan App <${FROM_EMAIL}>`;
+// Reports send from their own address so a spam mark cannot sink password resets.
+const REPORT_FROM = `Finan App <${REPORT_FROM_EMAIL}>`;
 
 const verifyMailer = () => {
   if (!RESEND_API_KEY) {
@@ -76,4 +79,25 @@ const sendVerificationEmail = async (to, verifyUrl) => {
   }
 };
 
-module.exports = { sendPasswordResetEmail, sendVerificationEmail, verifyMailer };
+
+const sendMonthlyReportEmail = async (to, payload) => {
+  const { subject, html } = monthlyReportEmail(payload);
+  await deliverReport(to, subject, html, 'monthly report');
+};
+
+const sendNothingRecordedEmail = async (to, payload) => {
+  const { subject, html } = nothingRecordedEmail(payload);
+  await deliverReport(to, subject, html, 'blank-month nudge');
+};
+
+const deliverReport = async (to, subject, html, kind) => {
+  try {
+    await getClient().emails.send({ from: REPORT_FROM, to, subject, html });
+    logger.info(`Sent ${kind} to ${to}`);
+  } catch (err) {
+    logger.error(`Failed to send ${kind} to ${to}: ${err.message}`);
+    throw err;
+  }
+};
+
+module.exports = { sendPasswordResetEmail, sendVerificationEmail, sendMonthlyReportEmail, sendNothingRecordedEmail, verifyMailer };

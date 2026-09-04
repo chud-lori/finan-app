@@ -64,6 +64,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Number format** — dot grouping (5.000.000) or comma grouping (5,000,000)
 - **Per-month budget** — set a budget for each month independently; optionally update the global default
 - **Timezone** — transactions recorded and displayed in your local timezone
+- **Monthly email report** — off by default; when on, a summary of the month just ended arrives on the 1st
 
 ---
 

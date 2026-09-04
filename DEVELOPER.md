@@ -809,6 +809,7 @@ Collection: preferences
 | `weekStartsOn` | String | enum: `monday \| sunday` | default `monday` |
 | `numberFormat` | String | enum: `dot \| comma` | `dot` = 5.000.000; `comma` = 5,000,000 |
 | `monthlyBudget` | Number | default 0, min 0 | global default budget; per-month overrides live in Budget collection |
+| `monthlyEmailReport` | Boolean | default `false` | opt-in for the monthly summary email; off unless the user turns it on in Preferences |
 
 ---
 
@@ -1402,6 +1403,26 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/auth/sessions` | — | ✓ | List all active sessions with device info |
 | DELETE | `/api/auth/sessions/:id` | — | ✓ | Revoke a specific session (cannot revoke current) |
 | PATCH | `/api/auth/password` | 5/min per user | ✓ | Change password (deletes all sessions) |
+### Monthly email report
+
+An hourly sweeper (`services/monthlyReport.js`, started in `app.js`) asks whether any opted-in user has no `EmailReport` record for last month. It never checks the clock: the answer flips when the month rolls over, so a restart or a deploy at the wrong moment costs nothing and the next pass picks it up. That also gives backfill — a month missed entirely while the app was down still sends when it comes back.
+
+`EmailReport` is unique on `(user, yearMonth)` and carries **no TTL index**, unlike the token models — it is the idempotency key and must outlive the month. Send happens before the record is written: a duplicate email is recoverable, a silently missing month is not.
+
+Only verified addresses are mailed, and reports send from `REPORT_FROM_EMAIL` (falling back to `FROM_EMAIL`) so that a spam complaint cannot degrade password-reset deliverability. Spend excludes savings-group outflow via `getSavingsCategoryNames`, so the emailed figure cannot disagree with the app.
+
+A month with no activity gets a short note explaining that the app has nothing to summarise, rather than silence.
+
+Templates live in `helpers/emailTemplates/monthlyReport.js`; `helpers/mailer.js` only transports. Manual trigger:
+
+```bash
+docker exec finan-be bun scripts/sendMonthlyReport.js --dry
+docker exec finan-be bun scripts/sendMonthlyReport.js --force --user=<id>
+docker exec finan-be bun scripts/sendMonthlyReport.js --to=you@example.com --force --as-of=2026-10-01
+```
+
+`--to` sends elsewhere and deliberately writes **no** record, so a test cannot consume the real month.
+
 | DELETE | `/api/auth/account` | 3/min | ✓ | Delete account and **every** user-scoped document: transactions, categories, goals, budgets, preferences, snapshots, ML insights, password-reset and email-verification tokens, balance and sessions. Any new user-scoped collection must be added to `userScopedModels` in `deleteAccount`, or the "all data deleted" response becomes a false claim |
 | POST | `/api/auth/forgot-password` | 5/min per IP | — | Send password reset email (always returns 200) |
 | POST | `/api/auth/reset-password` | 10/min per IP | — | Validate token + set new password (deletes all sessions) |
