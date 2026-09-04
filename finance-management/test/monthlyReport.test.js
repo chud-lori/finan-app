@@ -1,43 +1,153 @@
 const { expect } = require('chai');
 const {
-  buildReportLines, buildHeadline, hasSomethingToSay, previousYearMonth, savingsOutflow, formatterFor,
+  buildMoneyCards, buildSummaryLines, buildHeadline, buildBadge, buildCategories, buildComparison,
+  buildGlance, hasSomethingToSay, previousYearMonth, savingsOutflow, formatterFor,
 } = require('../services/monthlyReport');
 
 const fmt = formatterFor({ currency: 'IDR', numberFormat: 'dot' });
 const snapshot = (over = {}) => ({ income: 10_000_000, expense: 4_000_000, byCategory: [], ...over });
 
 describe('monthly report — what the email says', () => {
+  const cardValue = (cards, label) => cards.find(c => c.label === label)?.value;
+  const lineValue = (lines, label) => lines.find(l => l.label === label)?.value;
+
   it('reports spend with savings transfers taken out', () => {
     const snap = snapshot({
       expense: 4_000_000,
       byCategory: [{ category: 'shop alpha', total: 1_000_000 }, { category: 'reksadana', total: 3_000_000 }],
     });
-    const lines = buildReportLines(snap, new Set(['reksadana']), fmt);
-    const value = (label) => lines.find(l => l.label === label)?.value;
+    const savings = new Set(['reksadana']);
 
-    expect(value('Money out')).to.equal('IDR 1.000.000');
-    expect(value('Moved to savings')).to.equal('IDR 3.000.000');
-    expect(value('Savings rate')).to.equal('90%');
+    expect(cardValue(buildMoneyCards(snap, savings, fmt), 'Money out')).to.equal('IDR 1.000.000');
+    expect(lineValue(buildSummaryLines(snap, savings, fmt), 'Moved to savings')).to.equal('IDR 3.000.000');
+    expect(lineValue(buildSummaryLines(snap, savings, fmt), 'Savings rate')).to.equal('90%');
   });
 
   it('omits the savings line when nothing was moved', () => {
-    const lines = buildReportLines(snapshot(), new Set(), fmt);
-    expect(lines.some(l => l.label === 'Moved to savings')).to.equal(false);
+    expect(buildSummaryLines(snapshot(), new Set(), fmt).some(l => l.label === 'Moved to savings')).to.equal(false);
   });
 
   it('states no savings rate when there was no income', () => {
-    const lines = buildReportLines(snapshot({ income: 0 }), new Set(), fmt);
-    expect(lines.some(l => l.label === 'Savings rate')).to.equal(false);
+    expect(buildSummaryLines(snapshot({ income: 0 }), new Set(), fmt).some(l => l.label === 'Savings rate')).to.equal(false);
   });
 
   it('never reports negative spend when savings exceed recorded expense', () => {
     const snap = snapshot({ expense: 1_000_000, byCategory: [{ category: 'emas', total: 3_000_000 }] });
-    expect(buildReportLines(snap, new Set(['emas']), fmt).find(l => l.label === 'Money out').value).to.equal('IDR 0');
+    expect(cardValue(buildMoneyCards(snap, new Set(['emas']), fmt), 'Money out')).to.equal('IDR 0');
   });
 
   it('matches savings categories regardless of case', () => {
     const snap = snapshot({ byCategory: [{ category: 'Reksa Dana', total: 2_000_000 }] });
     expect(savingsOutflow(snap, new Set(['reksa dana']))).to.equal(2_000_000);
+  });
+});
+
+describe('monthly report — where the money went', () => {
+  const savings = new Set(['reksadana']);
+  const spread = snapshot({
+    expense: 10_000_000,
+    byCategory: [
+      { category: 'category one', total: 4_000_000 },
+      { category: 'category two', total: 2_000_000 },
+      { category: 'category three', total: 1_500_000 },
+      { category: 'category four', total: 1_000_000 },
+      { category: 'category five', total: 800_000 },
+      { category: 'category six', total: 500_000 },
+      { category: 'category seven', total: 200_000 },
+    ],
+  });
+
+  it('ranks by money and gives the largest a full bar', () => {
+    const { categories } = buildCategories(spread, savings, fmt);
+    expect(categories[0].name).to.equal('Category One');
+    expect(categories[0].barPct).to.equal(100);
+    expect(categories[0].share).to.equal(40);
+  });
+
+  it('rolls the tail into one muted row rather than listing everything', () => {
+    const { categories } = buildCategories(spread, savings, fmt);
+    const tail = categories[categories.length - 1];
+    expect(tail.muted).to.equal(true);
+    expect(tail.name).to.equal('2 smaller categories');
+    expect(tail.value).to.equal('IDR 700.000');
+  });
+
+  it('leaves savings out of the breakdown, matching money out', () => {
+    const snap = snapshot({
+      expense: 5_000_000,
+      byCategory: [{ category: 'reksadana', total: 3_000_000 }, { category: 'category one', total: 2_000_000 }],
+    });
+    const { categories } = buildCategories(snap, savings, fmt);
+    expect(categories.map(c => c.name)).to.deep.equal(['Category One']);
+  });
+
+  it('says nothing when there is no spend to break down', () => {
+    expect(buildCategories(snapshot({ expense: 0, byCategory: [] }), savings, fmt).categories).to.deep.equal([]);
+  });
+});
+
+describe('monthly report — versus the month before', () => {
+  const savings = new Set();
+  const prior = snapshot({ income: 10_000_000, expense: 5_000_000, byCategory: [{ category: 'category one', total: 5_000_000 }] });
+
+  it('leads with the money, not the percentage', () => {
+    const current = snapshot({ expense: 8_000_000, byCategory: [{ category: 'category one', total: 8_000_000 }] });
+    const [first] = buildComparison(current, prior, savings, fmt, 'July');
+    expect(first).to.match(/^You spent IDR 3\.000\.000 more than in July/);
+  });
+
+  it('calls an immaterial move level instead of inventing a trend', () => {
+    const current = snapshot({ expense: 5_010_000, byCategory: [{ category: 'category one', total: 5_010_000 }] });
+    expect(buildComparison(current, prior, savings, fmt, 'July')[0]).to.equal('Your spending was level with July.');
+  });
+
+  it('has nothing to compare without a prior month', () => {
+    expect(buildComparison(snapshot(), null, savings, fmt, 'July')).to.deep.equal([]);
+  });
+
+  it('names a one-off purchase as a one-off, not a habit', () => {
+    const current = snapshot({
+      expense: 9_000_000,
+      byCategory: [{ category: 'category one', total: 5_000_000 }, { category: 'category two', total: 4_000_000 }],
+    });
+    const withPrior = { ...prior, byCategory: [{ category: 'category one', total: 5_000_000 }, { category: 'category two', total: 200_000, count: 1 }] };
+    const current1 = { ...current, byCategory: [{ category: 'category one', total: 5_000_000 }, { category: 'category two', total: 4_000_000, count: 1 }] };
+    expect(buildComparison(current1, withPrior, savings, fmt, 'July').join(' ')).to.match(/single purchase rather than a new habit/);
+  });
+
+  it('gives the headline chip a direction and a tone', () => {
+    const cheaper = snapshot({ expense: 3_000_000, byCategory: [{ category: 'category one', total: 3_000_000 }] });
+    expect(buildBadge(cheaper, prior, savings, fmt, 'July')).to.include({ tone: 'positive' });
+    const dearer = snapshot({ expense: 9_000_000, byCategory: [{ category: 'category one', total: 9_000_000 }] });
+    expect(buildBadge(dearer, prior, savings, fmt, 'July')).to.include({ tone: 'negative' });
+    expect(buildBadge(snapshot(), null, savings, fmt, 'July')).to.equal(null);
+  });
+});
+
+describe('monthly report — the month at a glance', () => {
+  it('drops a tile it has no reading for rather than showing a zero', () => {
+    const cells = buildGlance({
+      snapshot: snapshot({ txCount: 0 }),
+      netWorth: { current: null, prior: null },
+      streak: { current: 0, longest: 0 },
+      anomalyCount: 0,
+      formatAmount: fmt,
+    });
+    expect(cells).to.deep.equal([]);
+  });
+
+  it('reports a net-worth move in money, and calls a small one flat', () => {
+    const glance = (current, prior) => buildGlance({
+      snapshot: snapshot({ txCount: 12 }),
+      netWorth: { current, prior },
+      streak: { current: 0, longest: 0 },
+      anomalyCount: null,
+      formatAmount: fmt,
+    }).find(c => c.label === 'Net worth');
+
+    expect(glance(60_000_000, 50_000_000).hint).to.equal('Up IDR 10.000.000 on the month');
+    expect(glance(50_100_000, 50_000_000).hint).to.equal('Broadly flat on the month');
+    expect(glance(50_000_000, null).hint).to.equal('First reading on record');
   });
 });
 
@@ -147,9 +257,20 @@ describe('monthly report — a month with nothing in it', () => {
     expect(nudge.html).to.contain('https://example.test/add');
   });
 
-  it('names the value in one line and the next step in another', () => {
-    expect(nudge.html).to.match(/where your money went, what is a habit, and what is worth trimming/i);
-    expect(nudge.html).to.match(/one entry is enough to begin/i);
+  it('names what the entries buy the reader, then the next step', () => {
+    expect(nudge.html).to.match(/Every category ranked by money/i);
+    expect(nudge.html).to.match(/Repeating payments get spotted/i);
+    expect(nudge.html).to.match(/Log the next thing you buy/i);
+  });
+
+  it('recalls the last month that had entries, when there was one', () => {
+    const withHistory = nothingRecordedEmail({
+      monthLabel: 'August 2026',
+      appUrl: 'https://example.test',
+      lastActive: { monthLabel: 'June 2026', cards: [{ label: 'Money in', value: 'IDR 9.000.000', tone: 'positive' }] },
+    });
+    expect(withHistory.html).to.contain('June 2026');
+    expect(withHistory.html).to.contain('IDR 9.000.000');
   });
 
   it('leaves no unfilled placeholder', () => {
@@ -164,18 +285,24 @@ describe('monthly report — the email on a phone', () => {
     headlineLabel: 'You kept',
     headline: 'IDR 12.500.000',
     caption: 'caption',
-    lines: [{ label: 'Money in', value: 'IDR 12.500.000' }],
+    cards: [{ label: 'Money in', value: 'IDR 12.500.000', tone: 'positive' }, { label: 'Money out', value: 'IDR 4.000.000', tone: 'negative' }],
+    lines: [{ label: 'Savings rate', value: '68%' }],
     appUrl: 'https://example.test',
   }).html;
 
   it('shrinks the headline on a narrow screen so a large figure cannot overflow', () => {
-    expect(html).to.contain('max-width:420px');
+    expect(html).to.contain('max-width:440px');
     expect(html).to.contain('class="hero"');
-    expect(html).to.match(/font-size:28px ?!important/);
+    expect(html).to.match(/font-size:30px ?!important/);
   });
 
   it('keeps a readable size on a wide screen', () => {
-    expect(html).to.contain('font-size:34px');
+    expect(html).to.contain('font-size:36px');
+  });
+
+  it('drops side-by-side cards into one column on a phone', () => {
+    expect(html).to.contain('class="stack"');
+    expect(html).to.match(/\.stack td \{ display:block ?!important/);
   });
 
   it('gives the layout room to breathe by trimming padding, not content', () => {
