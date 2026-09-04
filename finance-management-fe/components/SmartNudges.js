@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { getSmartRecommendations } from '@/lib/api';
+import { useFormatAmount } from '@/components/CurrencyContext';
 
 const TYPE = {
   warning: {
@@ -36,7 +37,33 @@ const TYPE = {
 
 const INTERVAL_MS = 6000;
 
+function NudgeFigures({ figures, formatAmount }) {
+  if (figures.amount != null) {
+    return (
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-2 tabular-nums">
+        <span className="text-sm font-bold text-gray-900">{formatAmount(figures.amount)}</span>
+        <span className="text-xs text-gray-500">{figures.amountLabel}</span>
+      </div>
+    );
+  }
+
+  if (figures.from == null || figures.to == null) return null;
+
+  const change = figures.to - figures.from;
+  return (
+    <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 tabular-nums">
+      <span className="text-sm font-bold text-gray-900">
+        {change >= 0 ? '+' : '−'}{formatAmount(Math.abs(change))}
+      </span>
+      <span className="text-xs text-gray-500">
+        {figures.fromLabel} {formatAmount(figures.from)} · {figures.toLabel} {formatAmount(figures.to)}
+      </span>
+    </div>
+  );
+}
+
 export default function SmartNudges() {
+  const formatAmount = useFormatAmount();
   const [recs,    setRecs]    = useState([]);
   const [idx,     setIdx]     = useState(0);
   const [loading, setLoading] = useState(true);
@@ -131,6 +158,7 @@ export default function SmartNudges() {
                   <p className="text-sm font-semibold text-gray-900 truncate">{rec.title}</p>
                 </div>
                 <p className="text-xs text-gray-500 leading-relaxed">{rec.body}</p>
+                {rec.figures && <NudgeFigures figures={rec.figures} formatAmount={formatAmount} />}
                 {rec.cta && (
                   <Link href={rec.cta.href}
                     className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold text-teal-600 hover:text-teal-700 transition-colors">

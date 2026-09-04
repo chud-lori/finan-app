@@ -37,7 +37,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Spending explainability** — shows which categories drive your spending the most, with month-over-month changes stated in money rather than percentages, and one-off purchases marked as such
 - **Time-to-zero runway** — estimates when your balance hits zero if current spending continues
 - **Money Recap** — a monthly in-app "wrapped": a plain-language narrative plus stat tiles (net saved, spend vs last month, top category, streak, net-worth change) stitched entirely from your own numbers, no AI
-- **Payday Runway** — forward safe-to-spend before your next expected income: detects your income cadence, projects the balance forward using upcoming bills and your everyday spending pace, and flags the day the balance would run out (degrades to a rolling 30-day view for variable income)
+- **Payday Runway** — forward safe-to-spend before your next expected income: detects your income cadence, projects the balance forward using upcoming bills and your everyday spending pace, flags the day the balance would run out (degrades to a rolling 30-day view for variable income), and lists any recurring bill whose price went up — what it was, what it is now
 - **Category management** — rename categories (updates all transactions automatically) or delete unused ones; 28 default categories pre-loaded for every new account
 
 ### Plan
