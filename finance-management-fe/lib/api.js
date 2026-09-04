@@ -32,7 +32,8 @@ const handleResponse = async (res) => {
           p.startsWith('/verify-email') || p.startsWith('/auth/');
         if (!isPublic) {
           try { localStorage.removeItem('username'); } catch {}
-          window.location.href = '/login';
+          const next = `${p}${window.location.search}`;
+          window.location.href = `/login?next=${encodeURIComponent(next)}`;
         }
       }
     }
