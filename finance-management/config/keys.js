@@ -23,5 +23,6 @@ module.exports = {
   FE_URL: process.env.FE_URL || 'http://localhost:3000',
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   FROM_EMAIL:     process.env.FROM_EMAIL || 'noreply@lori.my.id',
+  REPORT_FROM_EMAIL: process.env.REPORT_FROM_EMAIL || process.env.FROM_EMAIL || 'noreply@lori.my.id',
 
 };

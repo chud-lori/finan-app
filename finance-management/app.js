@@ -56,6 +56,7 @@ const csrfGuard = require('./middleware/csrfGuard');
 const {PORT: port, HOST: host, FE_URL} = require("./config/keys");
 const logger = require("./helpers/logger");
 const { verifyMailer } = require('./helpers/mailer');
+const { startMonthlyReportSweeper } = require('./services/monthlyReport');
 const mongoose = require('mongoose');
 
 const app = express();
@@ -159,7 +160,10 @@ const start = async () => {
         logger.info(`App started on ${baseUrl}`);
         logger.info(`Swagger UI: ${baseUrl}/api-docs`);
         console.log(`Swagger UI: ${baseUrl}/api-docs`);
-        if (process.env.NODE_ENV !== 'test') verifyMailer();
+        if (process.env.NODE_ENV !== 'test') {
+            verifyMailer();
+            startMonthlyReportSweeper();
+        }
     });
 };
 

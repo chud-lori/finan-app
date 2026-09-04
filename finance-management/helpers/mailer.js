@@ -1,5 +1,5 @@
 const { Resend } = require('resend');
-const { RESEND_API_KEY, FROM_EMAIL } = require('../config/keys');
+const { RESEND_API_KEY, FROM_EMAIL, REPORT_FROM_EMAIL } = require('../config/keys');
 const logger = require('./logger');
 
 let _resend = null;
@@ -9,6 +9,8 @@ const getClient = () => {
   return _resend;
 };
 const FROM = `Finan App <${FROM_EMAIL}>`;
+// Reports send from their own address so a spam mark cannot sink password resets.
+const REPORT_FROM = `Finan App <${REPORT_FROM_EMAIL}>`;
 
 const verifyMailer = () => {
   if (!RESEND_API_KEY) {
@@ -76,4 +78,35 @@ const sendVerificationEmail = async (to, verifyUrl) => {
   }
 };
 
-module.exports = { sendPasswordResetEmail, sendVerificationEmail, verifyMailer };
+
+const row = (label, value) => `
+  <tr>
+    <td style="padding:6px 0;color:#475569;font-size:14px">${label}</td>
+    <td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;text-align:right">${value}</td>
+  </tr>`;
+
+const sendMonthlyReportEmail = async (to, { monthLabel, narrative, lines, appUrl }) => {
+  const html = `
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px 24px;background:#f9fafb;border-radius:12px">
+      <h2 style="margin:0 0 8px;color:#0f172a;font-size:20px">${monthLabel}</h2>
+      <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px">${narrative}</p>
+      <table style="width:100%;border-collapse:collapse;margin:0 0 24px">${lines.map(l => row(l.label, l.value)).join('')}</table>
+      <a href="${appUrl}"
+         style="display:inline-block;background:#0d9488;color:#fff;font-weight:600;font-size:14px;
+                padding:12px 20px;border-radius:8px;text-decoration:none">Open Finan App</a>
+      <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:24px 0 0">
+        You are getting this because monthly reports are on in your preferences. Turn them off any time in the app.
+      </p>
+    </div>
+  `;
+
+  try {
+    await getClient().emails.send({ from: REPORT_FROM, to, subject: `Your ${monthLabel} in Finan App`, html });
+    logger.info(`Monthly report sent to ${to}`);
+  } catch (err) {
+    logger.error(`Failed to send monthly report to ${to}: ${err.message}`);
+    throw err;
+  }
+};
+
+module.exports = { sendPasswordResetEmail, sendVerificationEmail, sendMonthlyReportEmail, verifyMailer };

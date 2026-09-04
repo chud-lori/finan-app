@@ -9,6 +9,7 @@ const PreferenceSchema = new Schema({
     numberFormat:  { type: String, enum: ['dot', 'comma'], default: 'dot' },
     // dot = 1.000.000, comma = 1,000,000
     monthlyBudget: { type: Number, default: 0, min: 0 },
+    monthlyEmailReport: { type: Boolean, default: false },
 }, { timestamps: true });
 
 const Preference = mongoose.model('Preference', PreferenceSchema);
