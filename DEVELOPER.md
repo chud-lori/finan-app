@@ -862,6 +862,22 @@ Each `topCategories` entry carries `volatility` and `cv`. The frontend `buildIns
 
 `volatilityBreakdown` also carries `categories: { fixed, semi, flexible, unknown }` — the category names in each class. The Spending Mix bar uses it to drill from a segment into the transactions behind it without a second aggregation endpoint. Also additive; a cached pre-upgrade payload just renders the bar as non-clickable.
 
+**"Where It's Going" row presentation (`components/CategorySpendRow.js` + `lib/categorySpendRow.js`).** The row never shows a percentage change without the two currency totals it was measured from — a large ratio on a near-zero baseline (the low base effect) is arithmetically right and informationally useless. `describeCategorySpend(topCategoriesEntry)` is the pure decision function:
+
+**The comparability gate is the whole design.** `delta` is only a plain ratio of the two totals for `fixed` categories; every other class is measured against the previous month *pro-rated to the elapsed fraction*. So on day 3 of 30 a category at 150,000 against a previous month of 1,000,000 carries `delta = +50` — a rise, next to two totals that fell. The row therefore never trusts `delta` on its own: `totalsAreComparable({ current, previous, delta })` re-derives the ratio from the two totals it is about to print and only accepts `delta` when the two agree to within a point of rounding. That is a property of the numbers rather than a proxy through `volatility`, so a completed past month reads correctly for every class.
+
+| Output | Rule |
+|--------|------|
+| `comparison` | `{ previousTotal, currentTotal, periodsAlign }` in currency, rendered as `before → after` — real posted totals, never a derived difference. Suppressed when `delta === 0` and when `moneyAtStake` is below `MATERIALITY_FLOOR` of the month's spend. When the money that moved cannot be measured, `moneyAtStake` is `null` and the floor abstains rather than gating on an inflated figure. `periodsAlign: false` makes the row spell the periods out (`… last month → … so far`) so a 30-day figure is never silently placed beside a 3-day one |
+| `isSinglePurchase` | `count === 1` **and** `volatility === 'flexible'` — the only class that asserts an irregular history. `unknown` (fewer than 3 active months) is not enough to call a row a one-off, or a brand-new user would see every row hatched, rent included. The row drops the trend colour and renders its share bar as vertical segments (`.bar-one-off` in `globals.css`, with a `.dark` counterpart) — quieter than the solid habit bar in both themes, and pixel-aligned rather than a diagonal hatch that aliases on a high-DPR phone |
+| `isOnPace` | `delta === 0` against a real baseline. The row says `On pace` and shows no figures — confirmation that a large committed cost behaved, without a bare transaction count standing in for it |
+| `trend` | `up`/`down` only when a `comparison` is on screen, `periodsAlign`, and the row is not a single purchase. Otherwise the two totals still render, in neutral grey — figures without a verdict, never an unexplained blank and never a colour the totals contradict |
+| `percent` | the same gate as `trend`. A percentage never appears without the two totals it was measured from |
+
+`formatOccurrenceLabel(count, volatility)` counts *purchases* for a flexible category and *charges* for a `fixed`/`semi` one, and says nothing at all about a recurring commitment that posted once — "One purchase" under a rent row is both wrong vocabulary and a count masquerading as the story.
+
+`totalsAreComparable`, `moneyAtStake`, `MATERIALITY_FLOOR` and `formatChange` live in `lib/insightFeed.js` so the row and the insight feed cannot define them twice and disagree. Unit-tested in `lib/categorySpendRow.test.js`.
+
 Returns top 10 results sorted by anomaly score, each with `severity` (high/medium/low), `multiple` (Nx vs category average), and a plain-English `label`.
 
 **Severity thresholds:** `multiple ≥ 3` or `score ≥ 0.7` → high; `multiple ≥ 1.8` → medium; else low.
