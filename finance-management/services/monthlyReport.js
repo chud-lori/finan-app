@@ -72,15 +72,16 @@ const formatterFor = (preference) => {
   };
 };
 
-const dueRecipients = async (now) => {
-  const enabled = await Preference.find({ monthlyEmailReport: true }).select('user currency timezone numberFormat').lean();
+const dueRecipients = async (now, { force = false, onlyUser = null } = {}) => {
+  const filter = { monthlyEmailReport: true };
+  if (onlyUser) filter.user = onlyUser;
+  const enabled = await Preference.find(filter).select('user currency timezone numberFormat').lean();
   if (!enabled.length) return [];
 
   const due = [];
   for (const preference of enabled) {
     const yearMonth = previousYearMonth(now, preference.timezone || 'Asia/Jakarta');
-    const alreadySent = await EmailReport.exists({ user: preference.user, yearMonth });
-    if (alreadySent) continue;
+    if (!force && await EmailReport.exists({ user: preference.user, yearMonth })) continue;
 
     const user = await User.findById(preference.user).select('email emailVerified').lean();
     if (!user || user.emailVerified === false || !user.email) continue;
@@ -91,14 +92,17 @@ const dueRecipients = async (now) => {
   return due;
 };
 
-const sendDueReports = async (now = new Date()) => {
+const sendDueReports = async (now = new Date(), options = {}) => {
+  const { dryRun = false, force = false, onlyUser = null } = options;
   let sent = 0;
-  for (const { preference, user, yearMonth } of await dueRecipients(now)) {
+  for (const { preference, user, yearMonth } of await dueRecipients(now, { force, onlyUser })) {
     const snapshot = await Snapshot.findOne({ user: preference.user, yearMonth }).lean();
     const monthLabel = moment(yearMonth, 'YYYY-MM').format('MMMM YYYY');
 
     try {
-      if (!hasSomethingToSay(snapshot)) {
+      if (dryRun) {
+        logger.info(`[dry run] would send ${hasSomethingToSay(snapshot) ? 'report' : 'blank-month note'} for ${yearMonth} to ${user.email}`);
+      } else if (!hasSomethingToSay(snapshot)) {
         await sendNothingRecordedEmail(user.email, { monthLabel, appUrl: FE_URL });
       } else {
         const savingsNames = await getSavingsCategoryNames(preference.user);
@@ -110,7 +114,7 @@ const sendDueReports = async (now = new Date()) => {
           appUrl: FE_URL,
         });
       }
-      await EmailReport.create({ user: preference.user, yearMonth });
+      if (!dryRun) await EmailReport.create({ user: preference.user, yearMonth });
       sent += 1;
     } catch (error) {
       logger.error(`Monthly report failed for ${preference.user}: ${error.message}`);

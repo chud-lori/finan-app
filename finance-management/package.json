@@ -11,7 +11,8 @@
     "test:transaction": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/transaction.integration.test.js",
     "test:goal": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/goal.integration.test.js",
     "test:e2e": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/end-to-end.test.js",
-    "test:app": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/app.integration.test.js"
+    "test:app": "NODE_ENV=test bun x mocha --timeout 100000 --exit test/app.integration.test.js",
+    "report:monthly": "bun scripts/sendMonthlyReport.js"
   },
   "repository": {
     "type": "git",
