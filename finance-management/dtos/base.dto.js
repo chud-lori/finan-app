@@ -17,7 +17,12 @@ class BaseResponseDTO {
 
 class BaseRequestDTO {
     constructor(data) {
-        Object.assign(this, data);
+        // A JSON body may carry __proto__; Object.assign routes it through the
+        // prototype setter and strips every method off this instance.
+        for (const key of Object.keys(Object(data))) {
+            if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+            this[key] = data[key];
+        }
     }
 
     validate() {
