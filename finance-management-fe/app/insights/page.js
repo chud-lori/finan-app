@@ -5,6 +5,8 @@ import AuthGuard from '@/components/AuthGuard';
 import { invalidateSavingsCategories } from '@/lib/savingsCategories';
 import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup, getGroupBudgets, setGroupBudget, getRangeTransactions } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
+import { capitalizeFirst as cap } from '@/lib/format';
+import { buildInsights, MATERIALITY_FLOOR, selectTopInsights } from '@/lib/insightFeed';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 import MoneyRecap from '@/components/MoneyRecap';
@@ -12,8 +14,6 @@ import PaydayRunway from '@/components/PaydayRunway';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 import CategorySpendRow from '@/components/CategorySpendRow';
 
-
-const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
 function timeAgo(date) {
   if (!date) return null;
@@ -53,103 +53,12 @@ function RefreshButton({ generatedAt, onRefresh, loading, stale }) {
 }
 
 
-function buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount) {
-  const insights = [];
-  const daysElapsed = new Date().getDate();
-
-  // A missing bill is the highest-signal nudge; otherwise surface the subscription total.
-  if (recurring?.alerts?.length) {
-    const miss = recurring.alerts.find(a => a.type === 'missing');
-    if (miss) {
-      insights.push({ level: 'warn', icon: '⏰', text: `${cap(miss.merchant)} usually charges around now but nothing has posted — check it didn't fail`, anchor: 'recurring', cta: 'See recurring' });
-    }
-  }
-  if (recurring?.count > 0) {
-    insights.push({ level: 'info', icon: '🔁', text: `You have ${recurring.count} recurring charge${recurring.count > 1 ? 's' : ''} totalling about ${formatAmount(recurring.monthlyTotal)} a month`, anchor: 'recurring', cta: 'See recurring' });
-  }
-
-  if (ttz) {
-    if (ttz.status === 'critical') {
-      insights.push({ level: 'danger', icon: '🔥', text: `You're on track to overspend — balance runs out in ${ttz.daysToZero} days at current burn rate`, anchor: 'runway', cta: 'See runway' });
-    } else if (ttz.status === 'already_zero') {
-      insights.push({ level: 'danger', icon: '🔥', text: `Your balance is already at zero — stop all discretionary spending immediately`, anchor: 'runway', cta: 'See runway' });
-    } else if (ttz.status === 'warning') {
-      insights.push({ level: 'warn', icon: '⚡', text: `Balance runway is ${ttz.daysToZero} days — consider cutting back on discretionary spending`, anchor: 'runway', cta: 'See runway' });
-    } else if (ttz.status === 'safe' && ttz.daysToZero > 90) {
-      insights.push({ level: 'good', icon: '✅', text: `Your balance can last ${ttz.daysToZero} days at current pace — you're in solid shape`, anchor: 'runway', cta: 'See details' });
-    }
-  }
-
-  if (ml?.forecast?.available) {
-    const f = ml.forecast;
-    if (f.over_budget) {
-      insights.push({ level: 'danger', icon: '📊', text: `You're on pace to overspend your budget by ${f.variance > 0 ? '+' : ''}${f.variance?.toLocaleString()} this month`, anchor: 'forecast', cta: 'See forecast' });
-    } else if (f.pct_of_budget >= 85) {
-      insights.push({ level: 'warn', icon: '📊', text: `You'll use ${f.pct_of_budget}% of your monthly budget at this rate`, anchor: 'forecast', cta: 'See forecast' });
-    } else if (f.trend === 'accelerating') {
-      insights.push({ level: 'warn', icon: '📈', text: `Your spending is accelerating — you're likely to end higher than expected`, anchor: 'forecast', cta: 'See forecast' });
-    } else if (f.trend === 'decelerating') {
-      insights.push({ level: 'good', icon: '📉', text: `Your spending is slowing down — you're trending under your usual pace`, anchor: 'forecast', cta: 'See forecast' });
-    }
-  }
-
-  // If ML is available (even with 0 results) never fall through to the rule-based count — different logic.
-  if (ml && !ml.unavailable) {
-    if (ml.anomaly_count > 0) {
-      insights.push({ level: 'warn', icon: '🚨', text: `${ml.anomaly_count} unusual transaction${ml.anomaly_count > 1 ? 's' : ''} detected this month — statistically outside your normal pattern`, anchor: 'spending-alerts', cta: 'See transactions' });
-    }
-  } else if (anomaly?.count > 0) {
-    insights.push({ level: 'warn', icon: '🚨', text: `${anomaly.count} unusual transaction${anomaly.count > 1 ? 's' : ''} flagged this month — higher than your normal pattern`, anchor: 'spending-alerts', cta: 'See transactions' });
-  }
-
-  if (explain?.topCategories?.length) {
-    explain.topCategories.forEach(c => {
-      // `delta` is already pace-corrected server-side, so a young month doesn't read as "down".
-      const fixed = c.volatility === 'fixed';
-      const d = c.delta;
-
-      // A large share of a fixed cost is normal, so state it neutrally rather than warn.
-      if (!fixed && c.pct >= 35) {
-        insights.push({ level: 'warn', icon: '⚠️', text: `You spent ${c.pct}% on ${cap(c.category)} — very high dependency on a single category`, anchor: 'where-its-going', cta: 'See breakdown' });
-      } else if (fixed && c.pct >= 40) {
-        insights.push({ level: 'info', icon: '🏠', text: `${cap(c.category)} is ${c.pct}% of your spending — your fixed monthly base`, anchor: 'where-its-going', cta: 'See breakdown' });
-      }
-
-      // A fixed cost rarely moves so any change is reportable; a flexible one needs a bigger move.
-      if (d !== null) {
-        if (fixed) {
-          if (Math.abs(d) >= 10) {
-            insights.push({ level: 'info', icon: '🏠', text: `${cap(c.category)} ${d > 0 ? 'up' : 'down'} ${Math.abs(d)}% vs last month — new baseline?`, anchor: 'where-its-going', cta: 'See breakdown' });
-          }
-        } else if (d >= 40) {
-          insights.push({ level: 'danger', icon: '📈', text: `${cap(c.category)} is running ${d}% above your usual pace — a place you can trim`, anchor: 'where-its-going', cta: 'See breakdown' });
-        } else if (d >= 25) {
-          insights.push({ level: 'warn', icon: '📈', text: `${cap(c.category)} up ${d}% above pace — worth watching`, anchor: 'where-its-going', cta: 'See breakdown' });
-        } else if (d <= -25) {
-          insights.push({ level: 'good', icon: '📉', text: `${cap(c.category)} down ${Math.abs(d)}% vs your usual pace — great progress`, anchor: 'where-its-going', cta: 'See breakdown' });
-        }
-      }
-
-      if (c.count >= 10) {
-        const avg = (c.count / daysElapsed).toFixed(1);
-        insights.push({ level: 'info', icon: '🔁', text: `You made ${c.count} ${cap(c.category)} transactions this month — avg ${avg}/day`, anchor: 'where-its-going', cta: 'See breakdown' });
-      }
-      if (!fixed && c.pct >= 20 && c.pct < 35 && (d === null || Math.abs(d) < 25)) {
-        insights.push({ level: 'info', icon: '📊', text: `${cap(c.category)} is your top expense at ${c.pct}% of total spending`, anchor: 'where-its-going', cta: 'See breakdown' });
-      }
-    });
-  }
-
-  return insights;
-}
-
 const LEVEL = {
   danger: { dot: 'bg-rose-500',    badge: 'bg-rose-100 text-rose-700',     label: 'Alert' },
   warn:   { dot: 'bg-amber-400',   badge: 'bg-amber-100 text-amber-700',    label: 'Watch' },
   info:   { dot: 'bg-teal-500',    badge: 'bg-teal-100 text-teal-700',      label: 'Info'  },
   good:   { dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700', label: 'Good' },
 };
-const LEVEL_ORDER = { danger: 0, warn: 1, good: 2, info: 3 };
 
 function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
   const formatAmount = useFormatAmount();
@@ -171,20 +80,17 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
   }
 
   const insights = buildInsights(explain, ttz, anomaly, ml, recurring, formatAmount);
-  if (!insights.length) return null;
-
-  const top = [...insights]
-    .sort((a, b) => (LEVEL_ORDER[a.level] ?? 3) - (LEVEL_ORDER[b.level] ?? 3))
-    .slice(0, 5);
+  const top = selectTopInsights(insights, MATERIALITY_FLOOR.of(explain));
+  if (!top.length) return null;
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
       <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-800 flex items-center gap-2">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">What your data is saying</p>
-        <Tooltip text="Auto-generated highlights ranked by urgency. Alert = action needed, Watch = keep an eye on it, Good = positive progress." position="bottom" align="left" fixed />
+        <Tooltip text="Auto-generated highlights ranked by how much money is at stake, then by urgency. Anything too small to change your month is left out." position="bottom" align="left" fixed />
       </div>
       <div className="divide-y divide-gray-50 dark:divide-slate-800">
-        {top.map((ins, i) => {
+        {top.map((ins) => {
           const s = LEVEL[ins.level] ?? LEVEL.info;
           const inner = (
             <>
@@ -203,7 +109,7 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
           if (ins.anchor) {
             return (
               <a
-                key={i}
+                key={ins.key}
                 href={`#${ins.anchor}`}
                 className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
               >
@@ -212,7 +118,7 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading }) {
             );
           }
           return (
-            <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+            <div key={ins.key} className="flex items-center gap-3 px-5 py-3.5">
               {inner}
             </div>
           );
@@ -1254,7 +1160,7 @@ export default function InsightsPage() {
               id="where-its-going"
               title="🧠 Where It's Going"
               subtitle="Top categories driving your spending this month"
-              tooltip="Your top expense categories sorted by total. Changes are shown in money against last month — a percentage only when the two totals compare directly."
+              tooltip="Your top expense categories sorted by total. Changes are shown in money against the 30 days before — a percentage only when the two totals compare directly. Categories you only buy from occasionally get no change at all."
               loading={loading.explain}
               error={errors.explain}
             >

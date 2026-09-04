@@ -1,4 +1,22 @@
-import { MATERIALITY_FLOOR, moneyAtStake, totalsAreComparable } from '@/lib/insightFeed';
+import { MATERIALITY_FLOOR } from '@/lib/insightFeed';
+
+const PERCENT_CEILING = 200;
+const PERCENT_ROUNDING_TOLERANCE = 1;
+
+export const totalsAreComparable = ({ current, previous, delta }) => {
+  if (!Number.isFinite(delta) || !(previous > 0)) return false;
+  const ratioOfTheseTotals = Math.round(((current - previous) / previous) * 100);
+  return Math.abs(ratioOfTheseTotals - delta) <= PERCENT_ROUNDING_TOLERANCE;
+};
+
+export const moneyAtStake = ({ current, previous, delta }) =>
+  (totalsAreComparable({ current, previous, delta }) ? Math.abs(current - previous) : null);
+
+export const formatPercentLabel = (delta) => {
+  if (!Number.isFinite(delta)) return null;
+  if (Math.abs(delta) < PERCENT_CEILING) return `${delta > 0 ? '+' : ''}${Math.round(delta)}%`;
+  return `${(1 + delta / 100).toFixed(1)}\u00d7`;
+};
 
 const RECURRING_VOLATILITY = ['fixed', 'semi'];
 const IRREGULAR_VOLATILITY = 'flexible';

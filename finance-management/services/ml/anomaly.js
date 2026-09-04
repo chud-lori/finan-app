@@ -1,10 +1,9 @@
 // Baseline is leave-one-out median/MAD: a mean/stddev including the point caps its own z-score.
 
-const { classifyVolatility } = require('../../helpers/spendingVolatility');
+const { classifyVolatility, LUMPY_TX_PER_MONTH } = require('../../helpers/spendingVolatility');
 
 const MIN_BASELINE  = 2;
 const MZ_SATURATE   = 14;   // modified z at which the severity bar reads full
-const LUMPY_TX_PER_MONTH = 2; // few, big, irregular hits a month → inherently lumpy
 
 // Spiky categories need a bigger jump than flat ones; `flat` is the MAD===0 fallback multiple.
 const CLASS_TUNING = {

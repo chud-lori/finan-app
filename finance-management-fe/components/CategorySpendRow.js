@@ -1,7 +1,6 @@
 'use client';
 import { useFormatAmount } from '@/components/CurrencyContext';
-import { describeCategorySpend, formatOccurrenceLabel } from '@/lib/categorySpendRow';
-import { formatChange } from '@/lib/insightFeed';
+import { describeCategorySpend, formatOccurrenceLabel, formatPercentLabel } from '@/lib/categorySpendRow';
 
 const HABIT_BAR = 'bg-teal-400';
 const ONE_OFF_BAR = 'bar-one-off';
@@ -13,7 +12,7 @@ export default function CategorySpendRow({ rank, name, category, maxPct, explain
   const { isSinglePurchase, isOnPace, trend, comparison, percent } = describeCategorySpend(category, explain);
   const occurrences = formatOccurrenceLabel(category.count, category.volatility);
   const comparisonTone = trend ? TREND_TONE[trend] : 'text-gray-600';
-  const percentLabel = percent === null ? null : formatChange(percent);
+  const percentLabel = percent === null ? null : formatPercentLabel(percent);
 
   return (
     <div>

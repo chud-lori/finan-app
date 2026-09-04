@@ -33,6 +33,15 @@ const addExpense = (cookie, { description, category, amount, monthsAgo, day }) =
     });
 };
 
+const addExpenseDaysAgo = (cookie, { description, category, amount, daysAgo }) => {
+    const when = moment.tz(TZ).subtract(daysAgo, 'days').hour(10).minute(0).second(0);
+    return chai.request(server).post('/api/transaction').set('Cookie', cookie).send({
+        description, category, amount, type: 'expense',
+        time: when.format('YYYY-MM-DD HH:mm:ss'),
+        currency: 'idr', transaction_timezone: TZ,
+    });
+};
+
 describe('GET /api/transaction/explain — volatility & pace', () => {
     it('classifies a steady monthly charge as fixed and a swinging one as flexible', async () => {
         const cookie = await register('vol');
@@ -119,20 +128,12 @@ describe('GET /api/transaction/explain — volatility & pace', () => {
         expect(rent.delta === null || Math.abs(rent.delta) <= 1).to.equal(true);
     });
 
-    it('pace-corrects an accruing category so a partial month is not falsely down', async () => {
+    it('never reads a young month as a collapse in spending', async () => {
         const cookie = await register('accrue');
 
-        // Food ~3,000,000 per month across history, spread over the month.
-        for (let m = 1; m <= 6; m++) {
-            for (let k = 0; k < 3; k++) {
-                await addExpense(cookie, { description: `Food ${m}-${k}`, category: 'food', amount: 1000000, monthsAgo: m, day: 5 + k * 8 });
-            }
+        for (let daysAgo = 1; daysAgo <= 86; daysAgo += 5) {
+            await addExpenseDaysAgo(cookie, { description: 'Widget', category: 'food', amount: 150000, daysAgo });
         }
-        // This month, on pace: proportional spend for the elapsed days.
-        const now = moment.tz(TZ);
-        const fraction = now.date() / now.daysInMonth();
-        const onPace = Math.round(3000000 * fraction);
-        await addExpense(cookie, { description: 'Food this month', category: 'food', amount: onPace, monthsAgo: 0, day: 1 });
 
         const res = await chai.request(server)
             .get(`/api/transaction/explain?tz=${encodeURIComponent(TZ)}`)
@@ -140,7 +141,82 @@ describe('GET /api/transaction/explain — volatility & pace', () => {
 
         const food = res.body.data.topCategories.find(c => c.category === 'food');
         expect(food).to.exist;
-        // On last month's pace must read near 0%, not the large negative a full-month comparison gives.
-        expect(Math.abs(food.delta)).to.be.lessThan(25);
+        expect(food.delta).to.be.above(-25);
+    });
+
+    it('claims no pace for a category the user only buys from occasionally', async () => {
+        const cookie = await register('lumpy');
+
+        const past = [80000, 300000, 120000];
+        for (let m = 1; m <= 3; m++) {
+            await addExpense(cookie, { description: `Widget ${m}`, category: 'shopping', amount: past[m - 1], monthsAgo: m, day: 2 });
+        }
+        await addExpense(cookie, { description: 'Widget', category: 'shopping', amount: 550000, monthsAgo: 0, day: 1 });
+
+        const res = await chai.request(server)
+            .get(`/api/transaction/explain?tz=${encodeURIComponent(TZ)}`)
+            .set('Cookie', cookie);
+
+        const shopping = res.body.data.topCategories.find(c => c.category === 'shopping');
+        expect(shopping.volatility).to.not.equal('fixed');
+        expect(shopping.lumpy).to.equal(true);
+        expect(shopping.prevTotal).to.equal(80000);
+        expect(shopping.baseline).to.equal(null);
+        expect(shopping.delta).to.equal(null);
+    });
+
+    it('raises no alarm for a category whose behaviour has not changed, whatever day it is', async () => {
+        const cookie = await register('steady');
+
+        for (let daysAgo = 1; daysAgo <= 86; daysAgo += 5) {
+            await addExpenseDaysAgo(cookie, { description: 'Widget', category: 'food', amount: 250000, daysAgo });
+        }
+
+        const res = await chai.request(server)
+            .get(`/api/transaction/explain?tz=${encodeURIComponent(TZ)}`)
+            .set('Cookie', cookie);
+
+        const food = res.body.data.topCategories.find(c => c.category === 'food');
+        expect(food.windowKind).to.equal('rolling-30d');
+        expect(food.lumpy).to.equal(false);
+        expect(Math.abs(food.delta)).to.be.at.most(10);
+    });
+
+    it('still fires for a category that genuinely rose over the last thirty days', async () => {
+        const cookie = await register('uptrend');
+
+        for (let daysAgo = 1; daysAgo <= 86; daysAgo += 5) {
+            const amount = daysAgo <= 30 ? 160000 : 100000;
+            await addExpenseDaysAgo(cookie, { description: 'Widget', category: 'food', amount, daysAgo });
+        }
+
+        const res = await chai.request(server)
+            .get(`/api/transaction/explain?tz=${encodeURIComponent(TZ)}`)
+            .set('Cookie', cookie);
+
+        const food = res.body.data.topCategories.find(c => c.category === 'food');
+        expect(food.windowKind).to.equal('rolling-30d');
+        expect(food.delta).to.be.at.least(40);
+        expect(food.windowTotal - food.baseline).to.be.at.least(300000);
+    });
+
+    it('keeps the pace baseline for a category that accrues across the month', async () => {
+        const cookie = await register('accrual');
+
+        for (let m = 1; m <= 3; m++) {
+            for (let k = 0; k < 4; k++) {
+                await addExpense(cookie, { description: `Food ${m}-${k}`, category: 'food', amount: 500000, monthsAgo: m, day: 3 + k * 6 });
+            }
+        }
+        await addExpense(cookie, { description: 'Food', category: 'food', amount: 400000, monthsAgo: 0, day: 1 });
+
+        const res = await chai.request(server)
+            .get(`/api/transaction/explain?tz=${encodeURIComponent(TZ)}`)
+            .set('Cookie', cookie);
+
+        const food = res.body.data.topCategories.find(c => c.category === 'food');
+        expect(food.lumpy).to.equal(false);
+        expect(food.baseline).to.be.a('number');
+        expect(food.delta).to.be.a('number');
     });
 });

@@ -43,3 +43,6 @@ export const parseAmount = (str) =>
 
 export const toTitleCase = (str) =>
   str.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+
+export const capitalizeFirst = (str) =>
+  str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
