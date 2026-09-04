@@ -18,28 +18,35 @@ const shell = ({ preheader, monthLabel, headlineLabel, headline, caption, body, 
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
     <title>${monthLabel}</title>
+    <style>
+      @media only screen and (max-width:420px) {
+        .shell { padding:20px 12px !important; }
+        .pad { padding-left:18px !important; padding-right:18px !important; }
+        .hero { font-size:28px !important; line-height:36px !important; }
+      }
+    </style>
   </head>
   <body style="margin:0;padding:0;background:#f1f3f4;-webkit-font-smoothing:antialiased">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0">${preheader}</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f1f3f4">
       <tr>
-        <td align="center" style="padding:32px 16px">
+        <td align="center" class="shell" style="padding:32px 16px">
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:14px">
             <tr>
-              <td style="padding:32px 28px 8px">
+              <td class="pad" style="padding:32px 28px 8px">
                 <p style="margin:0;color:#5f6368;font-size:13px;line-height:18px;letter-spacing:.6px;text-transform:uppercase;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${monthLabel}</p>
                 <p style="margin:14px 0 0;color:#5f6368;font-size:15px;line-height:20px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${headlineLabel}</p>
-                <p style="margin:2px 0 0;color:#202124;font-size:40px;line-height:48px;font-weight:700;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${headline}</p>
+                <p class="hero" style="margin:2px 0 0;color:#202124;font-size:34px;line-height:42px;font-weight:700;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${headline}</p>
                 <p style="margin:8px 0 0;color:#5f6368;font-size:15px;line-height:22px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${caption}</p>
               </td>
             </tr>
             <tr>
-              <td style="padding:20px 28px 4px">
+              <td class="pad" style="padding:20px 28px 4px">
                 ${body}
               </td>
             </tr>
             <tr>
-              <td style="padding:28px">
+              <td class="pad" style="padding:28px">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <td align="center" bgcolor="#0d9488" style="border-radius:10px">

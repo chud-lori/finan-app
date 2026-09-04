@@ -157,3 +157,34 @@ describe('monthly report — a month with nothing in it', () => {
     expect(nudge.html).to.not.match(/\$\{/);
   });
 });
+
+describe('monthly report — the email on a phone', () => {
+  const html = monthlyReportEmail({
+    monthLabel: 'August 2026',
+    headlineLabel: 'You kept',
+    headline: 'IDR 12.500.000',
+    caption: 'caption',
+    lines: [{ label: 'Money in', value: 'IDR 12.500.000' }],
+    appUrl: 'https://example.test',
+  }).html;
+
+  it('shrinks the headline on a narrow screen so a large figure cannot overflow', () => {
+    expect(html).to.contain('max-width:420px');
+    expect(html).to.contain('class="hero"');
+    expect(html).to.match(/font-size:28px ?!important/);
+  });
+
+  it('keeps a readable size on a wide screen', () => {
+    expect(html).to.contain('font-size:34px');
+  });
+
+  it('gives the layout room to breathe by trimming padding, not content', () => {
+    expect(html).to.contain('class="shell"');
+    expect(html).to.contain('class="pad"');
+  });
+
+  it('never sets a fixed pixel width that a phone cannot honour', () => {
+    expect(html).to.contain('max-width:600px');
+    expect(html).to.contain('width:100%');
+  });
+});
