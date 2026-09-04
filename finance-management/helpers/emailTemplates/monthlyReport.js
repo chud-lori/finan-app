@@ -83,13 +83,12 @@ const nothingRecordedEmail = ({ monthLabel, appUrl }) => ({
     monthLabel,
     headlineLabel: 'You recorded',
     headline: 'nothing',
-    caption: 'A blank month is the one month the app cannot tell you anything about.',
+    caption: 'Nothing to summarise this month.',
     body: `<p style="margin:0;color:${MUTED};font-size:15px;line-height:23px;font-family:${FONT}">
-             Everything here is built from what you write down — where the money went, what is worth trimming, what is a habit and what was a one-off.
-             None of it works on an empty month.
+             A month of entries turns this page into where your money went, what is a habit, and what is worth trimming.
            </p>
-           <p style="margin:16px 0 0;color:${MUTED};font-size:15px;line-height:23px;font-family:${FONT}">
-             It does not take much. Log the next thing you buy, and by this time next month there is a real picture here instead of this.
+           <p style="margin:14px 0 0;color:${MUTED};font-size:15px;line-height:23px;font-family:${FONT}">
+             Start with the next thing you buy — one entry is enough to begin.
            </p>`,
     ctaLabel: 'Add a transaction',
     ctaUrl: `${appUrl}/add`,

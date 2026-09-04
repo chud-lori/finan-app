@@ -147,8 +147,9 @@ describe('monthly report — a month with nothing in it', () => {
     expect(nudge.html).to.contain('https://example.test/add');
   });
 
-  it('explains why recording matters instead of only nagging', () => {
-    expect(nudge.html).to.match(/built from what you write down/i);
+  it('names the value in one line and the next step in another', () => {
+    expect(nudge.html).to.match(/where your money went, what is a habit, and what is worth trimming/i);
+    expect(nudge.html).to.match(/one entry is enough to begin/i);
   });
 
   it('leaves no unfilled placeholder', () => {
