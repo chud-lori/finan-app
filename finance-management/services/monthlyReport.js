@@ -3,7 +3,7 @@ const Preference = require('../models/preference.model');
 const EmailReport = require('../models/emailReport.model');
 const Snapshot = require('../models/snapshot.model');
 const User = require('../models/user.model');
-const { sendMonthlyReportEmail } = require('../helpers/mailer');
+const { sendMonthlyReportEmail, sendNothingRecordedEmail } = require('../helpers/mailer');
 const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
 const logger = require('../helpers/logger');
 const { FE_URL } = require('../config/keys');
@@ -95,18 +95,21 @@ const sendDueReports = async (now = new Date()) => {
   let sent = 0;
   for (const { preference, user, yearMonth } of await dueRecipients(now)) {
     const snapshot = await Snapshot.findOne({ user: preference.user, yearMonth }).lean();
-    if (!hasSomethingToSay(snapshot)) continue;
+    const monthLabel = moment(yearMonth, 'YYYY-MM').format('MMMM YYYY');
 
     try {
-      const savingsNames = await getSavingsCategoryNames(preference.user);
-      const monthLabel = moment(yearMonth, 'YYYY-MM').format('MMMM YYYY');
-      const formatAmount = formatterFor(preference);
-      await sendMonthlyReportEmail(user.email, {
-        monthLabel,
-        ...buildHeadline(snapshot, savingsNames, formatAmount),
-        lines: buildReportLines(snapshot, savingsNames, formatAmount),
-        appUrl: FE_URL,
-      });
+      if (!hasSomethingToSay(snapshot)) {
+        await sendNothingRecordedEmail(user.email, { monthLabel, appUrl: FE_URL });
+      } else {
+        const savingsNames = await getSavingsCategoryNames(preference.user);
+        const formatAmount = formatterFor(preference);
+        await sendMonthlyReportEmail(user.email, {
+          monthLabel,
+          ...buildHeadline(snapshot, savingsNames, formatAmount),
+          lines: buildReportLines(snapshot, savingsNames, formatAmount),
+          appUrl: FE_URL,
+        });
+      }
       await EmailReport.create({ user: preference.user, yearMonth });
       sent += 1;
     } catch (error) {

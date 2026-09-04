@@ -91,3 +91,68 @@ describe('monthly report — the one number at the top', () => {
     expect(caption).to.match(/No income/);
   });
 });
+
+const { monthlyReportEmail, nothingRecordedEmail } = require('../helpers/emailTemplates/monthlyReport');
+
+describe('monthly report — the email itself', () => {
+  const report = monthlyReportEmail({
+    monthLabel: 'August 2026',
+    headlineLabel: 'You kept',
+    headline: 'IDR 6.500.000',
+    caption: 'IDR 12.000.000 came in and IDR 5.500.000 went out.',
+    lines: [{ label: 'Money in', value: 'IDR 12.000.000' }, { label: 'Savings rate', value: '54%' }],
+    appUrl: 'https://example.test',
+  });
+
+  it('puts the one number in the subject and the body', () => {
+    expect(report.subject).to.equal('August 2026: you kept IDR 6.500.000');
+    expect(report.html).to.contain('IDR 6.500.000');
+  });
+
+  it('renders every line it was given', () => {
+    expect(report.html).to.contain('Money in');
+    expect(report.html).to.contain('Savings rate');
+  });
+
+  it('lays out with tables so Outlook can render it', () => {
+    expect(report.html).to.contain('role="presentation"');
+    expect(report.html).to.not.contain('display:flex');
+    expect(report.html).to.not.contain('display:grid');
+  });
+
+  it('declares both colour schemes so dark mode does not invert blindly', () => {
+    expect(report.html).to.contain('color-scheme');
+  });
+
+  it('sends the reader to the app, not a dead end', () => {
+    expect(report.html).to.contain('https://example.test/insights');
+  });
+
+  it('leaves no unfilled placeholder', () => {
+    expect(report.html).to.not.contain('undefined');
+    expect(report.html).to.not.match(/\$\{/);
+  });
+});
+
+describe('monthly report — a month with nothing in it', () => {
+  const nudge = nothingRecordedEmail({ monthLabel: 'August 2026', appUrl: 'https://example.test' });
+
+  it('says the month was blank rather than pretending it had figures', () => {
+    expect(nudge.subject).to.contain('blank');
+    expect(nudge.html).to.not.contain('Money in');
+  });
+
+  it('asks for the one action that fixes it', () => {
+    expect(nudge.html).to.contain('Add a transaction');
+    expect(nudge.html).to.contain('https://example.test/add');
+  });
+
+  it('explains why recording matters instead of only nagging', () => {
+    expect(nudge.html).to.match(/built from what you write down/i);
+  });
+
+  it('leaves no unfilled placeholder', () => {
+    expect(nudge.html).to.not.contain('undefined');
+    expect(nudge.html).to.not.match(/\$\{/);
+  });
+});
