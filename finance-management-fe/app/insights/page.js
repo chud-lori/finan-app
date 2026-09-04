@@ -6,12 +6,13 @@ import { invalidateSavingsCategories } from '@/lib/savingsCategories';
 import { getAnomalies, getExplainability, getRecurring, getTimeToZero, getMLInsights, refreshMLInsights, getGroupSummary, getGamificationSummary, classifyAllCategories, setCategoryGroup, getGroupBudgets, setGroupBudget, getRangeTransactions } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import { capitalizeFirst as cap } from '@/lib/format';
-import { buildInsights, formatChange, MATERIALITY_FLOOR, selectTopInsights } from '@/lib/insightFeed';
+import { buildInsights, MATERIALITY_FLOOR, selectTopInsights } from '@/lib/insightFeed';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 import MoneyRecap from '@/components/MoneyRecap';
 import PaydayRunway from '@/components/PaydayRunway';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
+import CategorySpendRow from '@/components/CategorySpendRow';
 
 
 function timeAgo(date) {
@@ -293,38 +294,9 @@ function ExplainCard({ data }) {
     <div className="p-5">
       <p className="text-sm text-gray-500 dark:text-slate-400 mb-5 italic leading-relaxed">&ldquo;{data.summary}&rdquo;</p>
       <div className="space-y-4">
-        {data.topCategories.map((c, i) => {
-          const change = formatChange(c, formatAmount);
-          return (
-          <div key={c.category}>
-            <div className="flex items-start justify-between mb-1.5 gap-3">
-              <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
-                <span className="text-xs font-bold text-gray-300 flex-shrink-0">#{i + 1}</span>
-                <span className="text-sm font-semibold text-gray-800 dark:text-slate-200 truncate">{cap(c.category)}</span>
-                {c.count > 0 && <span className="text-xs text-gray-400 flex-shrink-0">{c.count}×</span>}
-                {change && (
-                  <span className={`inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 tabular-nums ${
-                    change.rising ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
-                  }`}>
-                    {change.badge}
-                    <Tooltip text={`${change.range}${change.pctSuffix} ${change.against}.`} align="left" fixed />
-                  </span>
-                )}
-                {c.lumpy && c.count === 1 && (
-                  <span className="text-xs text-gray-400 flex-shrink-0">one-off</span>
-                )}
-              </div>
-              <div className="text-right flex-shrink-0 tabular-nums leading-tight">
-                <p className="text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">{formatAmount(c.total)}</p>
-                <p className="text-xs text-gray-400">({c.pct}%)</p>
-              </div>
-            </div>
-            <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-              <div className="h-1.5 rounded-full bg-teal-400 transition-all duration-500" style={{ width: `${(c.pct / maxPct) * 100}%` }} />
-            </div>
-          </div>
-          );
-        })}
+        {data.topCategories.map((c, i) => (
+          <CategorySpendRow key={c.category} rank={i + 1} name={cap(c.category)} category={c} maxPct={maxPct} explain={data} />
+        ))}
       </div>
       <div className="mt-5 pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between">
         <p className="text-xs text-gray-400">Total this month</p>
@@ -1188,7 +1160,7 @@ export default function InsightsPage() {
               id="where-its-going"
               title="🧠 Where It's Going"
               subtitle="Top categories driving your spending this month"
-              tooltip="Your top expense categories sorted by total. The badge shows the change in money against last month, or against last month's pace for categories that accrue daily. Categories you only buy from occasionally get no pace badge."
+              tooltip="Your top expense categories sorted by total. Changes are shown in money against the 30 days before — a percentage only when the two totals compare directly. Categories you only buy from occasionally get no change at all."
               loading={loading.explain}
               error={errors.explain}
             >

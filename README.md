@@ -34,7 +34,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Top merchants** — where the money actually went in the selected period: total, visit count and share per place, derived from your own transaction descriptions (no bank feed, no third-party lookup); savings transfers are not counted as spending, one-off purchases are rolled up so repeat spend stands out, and tapping a merchant shows its transactions
 - **Period comparison** — this month vs last month or vs your average, with per-category deltas and spike warnings
 - **Anomaly detection** — flags unusually large transactions compared to your spending baseline
-- **Spending explainability** — shows which categories drive your spending the most
+- **Spending explainability** — shows which categories drive your spending the most, with month-over-month changes stated in money rather than percentages, and one-off purchases marked as such
 - **Time-to-zero runway** — estimates when your balance hits zero if current spending continues
 - **Money Recap** — a monthly in-app "wrapped": a plain-language narrative plus stat tiles (net saved, spend vs last month, top category, streak, net-worth change) stitched entirely from your own numbers, no AI
 - **Payday Runway** — forward safe-to-spend before your next expected income: detects your income cadence, projects the balance forward using upcoming bills and your everyday spending pace, and flags the day the balance would run out (degrades to a rolling 30-day view for variable income)
