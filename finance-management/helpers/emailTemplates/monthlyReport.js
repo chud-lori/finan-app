@@ -203,11 +203,11 @@ const shell = ({ preheader, monthLabel, headlineLabel, headline, caption, badge,
 </html>`;
 
 const monthlyReportEmail = ({
-  monthLabel, headlineLabel, headline, caption, badge = null,
+  monthLabel, subjectMonth, headlineLabel, headline, caption, badge = null,
   cards = [], lines = [], categories = [], categoryNote = null,
   comparison = [], glance = [], appUrl,
 }) => ({
-  subject: `${monthLabel}: ${headlineLabel.toLowerCase()} ${headline}`,
+  subject: `${headlineLabel} ${headline} in ${subjectMonth || monthLabel}`,
   html: shell({
     preheader: `${headlineLabel} ${headline} in ${monthLabel}.`,
     monthLabel, headlineLabel, headline, caption, badge,
@@ -235,8 +235,8 @@ const monthlyReportEmail = ({
   }),
 });
 
-const nothingRecordedEmail = ({ monthLabel, appUrl, lastActive = null }) => ({
-  subject: `${monthLabel} is a blank page`,
+const nothingRecordedEmail = ({ monthLabel, subjectMonth, appUrl, lastActive = null }) => ({
+  subject: `Nothing recorded in ${subjectMonth || monthLabel}`,
   html: shell({
     preheader: `Nothing was recorded in ${monthLabel} — one month of entries is what makes the rest of it work.`,
     monthLabel,

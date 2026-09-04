@@ -1423,6 +1423,8 @@ Only verified addresses are mailed, and reports send from `REPORT_FROM_EMAIL` (f
 
 `buildComparison` and `buildBadge` reuse `helpers/materiality.js` and `services/ml/recap.js#topMover`, so a change the app calls immaterial is not one the email calls a trend. Currency always leads and a percentage only ever trails it, per the insight rules. `buildGlance` omits a tile it has no reading for rather than printing a zero, so a user with no net-worth entries simply does not see that tile.
 
+**Subject lines** front-load the figure, because a phone client truncates around 30-35 characters: `You kept IDR 3.015.100 in August`, `You overspent by IDR 3.000.000 in August`, `Nothing recorded in August`. `subjectMonthOf` drops the year when the report month falls in the current year and keeps it otherwise, so a backfilled month is never ambiguous. The rest of the preview line is the template's hidden preheader.
+
 `buildCategories` filters savings-group categories out of the breakdown, keeping the bars an exact decomposition of the "money out" figure above them.
 
 A month with no activity gets `nothingRecordedEmail`, which is a re-activation mail rather than a stub: when the user has any earlier month with entries, `buildBlankPayload` pulls the most recent one and shows what that month looked like, so the ask is anchored to their own history instead of a generic pitch. Below that it names the four things a month of entries turns on (category ranking, recurring-charge detection, per-category anomaly baselines, savings-rate and net-worth trends) and ends on a single action.

@@ -20,6 +20,11 @@ const previousYearMonth = (now, tz) => moment(now).tz(tz).subtract(1, 'month').f
 
 const monthLabelOf = (yearMonth) => moment(yearMonth, 'YYYY-MM').format('MMMM YYYY');
 
+const subjectMonthOf = (yearMonth, now = new Date()) => {
+  const month = moment(yearMonth, 'YYYY-MM');
+  return month.year() === moment(now).year() ? month.format('MMMM') : month.format('MMMM YYYY');
+};
+
 const titleCase = (name) => String(name || '')
   .split(' ')
   .filter(Boolean)
@@ -86,7 +91,7 @@ const buildHeadline = (snapshot, savingsNames, formatAmount) => {
   }
   if (income > 0) {
     return {
-      headlineLabel: 'You spent over by',
+      headlineLabel: 'You overspent by',
       headline: formatAmount(Math.abs(kept)),
       caption: `${formatAmount(spent)} went out against ${formatAmount(income)} in.`,
     };
@@ -278,6 +283,7 @@ const buildReportPayload = async (userId, yearMonth, preference, snapshot) => {
 
   return {
     monthLabel: monthLabelOf(yearMonth),
+    subjectMonth: subjectMonthOf(yearMonth),
     ...buildHeadline(snapshot, savingsNames, formatAmount),
     badge: buildBadge(snapshot, prior, savingsNames, formatAmount, priorLabel),
     cards: buildMoneyCards(snapshot, savingsNames, formatAmount),
@@ -313,7 +319,7 @@ const buildBlankPayload = async (userId, yearMonth, preference) => {
     };
   }
 
-  return { monthLabel: monthLabelOf(yearMonth), appUrl: FE_URL, lastActive };
+  return { monthLabel: monthLabelOf(yearMonth), subjectMonth: subjectMonthOf(yearMonth), appUrl: FE_URL, lastActive };
 };
 
 const sendDueReports = async (now = new Date(), options = {}) => {
@@ -359,6 +365,7 @@ module.exports = {
   buildSummaryLines,
   buildMoneyCards,
   buildHeadline,
+  subjectMonthOf,
   buildBadge,
   buildCategories,
   buildComparison,

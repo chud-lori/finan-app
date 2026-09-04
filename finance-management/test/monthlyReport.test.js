@@ -191,7 +191,7 @@ describe('monthly report — the one number at the top', () => {
 
   it('says plainly when more went out than came in', () => {
     const { headlineLabel, headline } = buildHeadline(snapshot({ income: 2_000_000, expense: 5_000_000 }), savings, fmt);
-    expect(headlineLabel).to.equal('You spent over by');
+    expect(headlineLabel).to.equal('You overspent by');
     expect(headline).to.equal('IDR 3.000.000');
   });
 
@@ -215,7 +215,7 @@ describe('monthly report — the email itself', () => {
   });
 
   it('puts the one number in the subject and the body', () => {
-    expect(report.subject).to.equal('August 2026: you kept IDR 6.500.000');
+    expect(report.subject).to.equal('You kept IDR 6.500.000 in August 2026');
     expect(report.html).to.contain('IDR 6.500.000');
   });
 
@@ -248,7 +248,7 @@ describe('monthly report — a month with nothing in it', () => {
   const nudge = nothingRecordedEmail({ monthLabel: 'August 2026', appUrl: 'https://example.test' });
 
   it('says the month was blank rather than pretending it had figures', () => {
-    expect(nudge.subject).to.contain('blank');
+    expect(nudge.subject).to.equal('Nothing recorded in August 2026');
     expect(nudge.html).to.not.contain('Money in');
   });
 
@@ -276,6 +276,30 @@ describe('monthly report — a month with nothing in it', () => {
   it('leaves no unfilled placeholder', () => {
     expect(nudge.html).to.not.contain('undefined');
     expect(nudge.html).to.not.match(/\$\{/);
+  });
+});
+
+describe('monthly report — the subject line', () => {
+  const { subjectMonthOf } = require('../services/monthlyReport');
+  const now = new Date('2026-09-04T00:00:00Z');
+
+  it('leads with the number, so a truncating phone still shows it', () => {
+    const subject = monthlyReportEmail({
+      monthLabel: 'August 2026', subjectMonth: 'August',
+      headlineLabel: 'You kept', headline: 'IDR 3.015.100', caption: 'c', appUrl: 'https://example.test',
+    }).subject;
+    expect(subject).to.equal('You kept IDR 3.015.100 in August');
+    expect(subject.length).to.be.below(45);
+  });
+
+  it('drops the year for the current year and keeps it for a backfilled month', () => {
+    expect(subjectMonthOf('2026-08', now)).to.equal('August');
+    expect(subjectMonthOf('2025-12', now)).to.equal('December 2025');
+  });
+
+  it('says what happened when nothing was recorded', () => {
+    expect(nothingRecordedEmail({ monthLabel: 'August 2026', subjectMonth: 'August', appUrl: 'x' }).subject)
+      .to.equal('Nothing recorded in August');
   });
 });
 
