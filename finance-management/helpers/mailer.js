@@ -79,29 +79,71 @@ const sendVerificationEmail = async (to, verifyUrl) => {
 };
 
 
-const row = (label, value) => `
+const statRow = ({ label, value, tone }) => `
   <tr>
-    <td style="padding:6px 0;color:#475569;font-size:14px">${label}</td>
-    <td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;text-align:right">${value}</td>
+    <td style="padding:11px 0;border-top:1px solid #e8eaed;color:#5f6368;font-size:15px;line-height:20px">${label}</td>
+    <td align="right" style="padding:11px 0;border-top:1px solid #e8eaed;color:${tone || '#202124'};font-size:15px;line-height:20px;font-weight:600;white-space:nowrap">${value}</td>
   </tr>`;
 
-const sendMonthlyReportEmail = async (to, { monthLabel, narrative, lines, appUrl }) => {
-  const html = `
-    <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px 24px;background:#f9fafb;border-radius:12px">
-      <h2 style="margin:0 0 8px;color:#0f172a;font-size:20px">${monthLabel}</h2>
-      <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px">${narrative}</p>
-      <table style="width:100%;border-collapse:collapse;margin:0 0 24px">${lines.map(l => row(l.label, l.value)).join('')}</table>
-      <a href="${appUrl}"
-         style="display:inline-block;background:#0d9488;color:#fff;font-weight:600;font-size:14px;
-                padding:12px 20px;border-radius:8px;text-decoration:none">Open Finan App</a>
-      <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:24px 0 0">
-        You are getting this because monthly reports are on in your preferences. Turn them off any time in the app.
-      </p>
-    </div>
-  `;
+const sendMonthlyReportEmail = async (to, { monthLabel, headlineLabel, headline, caption, lines, appUrl }) => {
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>${monthLabel}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f3f4;-webkit-font-smoothing:antialiased">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0">${headlineLabel} ${headline} in ${monthLabel}.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f1f3f4">
+      <tr>
+        <td align="center" style="padding:32px 16px">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:14px">
+            <tr>
+              <td style="padding:32px 28px 8px">
+                <p style="margin:0;color:#5f6368;font-size:13px;line-height:18px;letter-spacing:.6px;text-transform:uppercase;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${monthLabel}</p>
+                <p style="margin:14px 0 0;color:#5f6368;font-size:15px;line-height:20px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${headlineLabel}</p>
+                <p style="margin:2px 0 0;color:#202124;font-size:40px;line-height:48px;font-weight:700;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${headline}</p>
+                <p style="margin:8px 0 0;color:#5f6368;font-size:15px;line-height:22px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">${caption}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 28px 4px">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">
+                  ${lines.map(statRow).join('')}
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="center" bgcolor="#0d9488" style="border-radius:10px">
+                      <a href="${appUrl}/insights"
+                         style="display:inline-block;padding:14px 26px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">See the detail</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px">
+            <tr>
+              <td style="padding:18px 28px 0;color:#80868b;font-size:12px;line-height:18px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif">
+                Monthly reports are on in your preferences. Turn them off any time in the app.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
 
   try {
-    await getClient().emails.send({ from: REPORT_FROM, to, subject: `Your ${monthLabel} in Finan App`, html });
+    await getClient().emails.send({ from: REPORT_FROM, to, subject: `${monthLabel}: ${headlineLabel.toLowerCase()} ${headline}`, html });
     logger.info(`Monthly report sent to ${to}`);
   } catch (err) {
     logger.error(`Failed to send monthly report to ${to}: ${err.message}`);

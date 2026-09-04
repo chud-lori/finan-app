@@ -62,6 +62,7 @@ services:
       FE_URL: ${FE_URL:-http://localhost:3000}
       RESEND_API_KEY: ${RESEND_API_KEY}
       FROM_EMAIL: ${FROM_EMAIL:-noreply@lori.my.id}
+      REPORT_FROM_EMAIL: ${REPORT_FROM_EMAIL:-}
       SENTRY_DSN: ${SENTRY_DSN}
       # Smart insights and category classification run in-process via services/ml.
     depends_on:

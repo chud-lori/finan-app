@@ -6,6 +6,7 @@ const User = require('../models/user.model');
 const { sendMonthlyReportEmail } = require('../helpers/mailer');
 const { getSavingsCategoryNames } = require('../helpers/savingsCategories');
 const logger = require('../helpers/logger');
+const { FE_URL } = require('../config/keys');
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const MAX_PER_SWEEP = 50;
@@ -28,8 +29,35 @@ const buildReportLines = (snapshot, savingsNames, formatAmount) => {
     { label: 'Money out', value: formatAmount(spent) },
   ];
   if (saved > 0) lines.push({ label: 'Moved to savings', value: formatAmount(saved) });
-  if (rate !== null) lines.push({ label: 'Savings rate', value: `${rate}%` });
+  if (rate !== null) lines.push({ label: 'Savings rate', value: `${rate}%`, tone: rate >= 0 ? '#0f9d58' : '#d93025' });
   return lines;
+};
+
+const buildHeadline = (snapshot, savingsNames, formatAmount) => {
+  const income = snapshot.income || 0;
+  const saved = savingsOutflow(snapshot, savingsNames);
+  const spent = Math.max(0, (snapshot.expense || 0) - saved);
+  const kept = income - spent;
+
+  if (income > 0 && kept >= 0) {
+    return {
+      headlineLabel: 'You kept',
+      headline: formatAmount(kept),
+      caption: `${formatAmount(income)} came in and ${formatAmount(spent)} went out.`,
+    };
+  }
+  if (income > 0) {
+    return {
+      headlineLabel: 'You spent over by',
+      headline: formatAmount(Math.abs(kept)),
+      caption: `${formatAmount(spent)} went out against ${formatAmount(income)} in.`,
+    };
+  }
+  return {
+    headlineLabel: 'You spent',
+    headline: formatAmount(spent),
+    caption: 'No income was recorded this month.',
+  };
 };
 
 const hasSomethingToSay = (snapshot) =>
@@ -72,11 +100,12 @@ const sendDueReports = async (now = new Date()) => {
     try {
       const savingsNames = await getSavingsCategoryNames(preference.user);
       const monthLabel = moment(yearMonth, 'YYYY-MM').format('MMMM YYYY');
+      const formatAmount = formatterFor(preference);
       await sendMonthlyReportEmail(user.email, {
         monthLabel,
-        narrative: `Here is how ${monthLabel} closed out.`,
-        lines: buildReportLines(snapshot, savingsNames, formatterFor(preference)),
-        appUrl: process.env.APP_URL || 'https://finance.lori.my.id',
+        ...buildHeadline(snapshot, savingsNames, formatAmount),
+        lines: buildReportLines(snapshot, savingsNames, formatAmount),
+        appUrl: FE_URL,
       });
       await EmailReport.create({ user: preference.user, yearMonth });
       sent += 1;
@@ -87,16 +116,23 @@ const sendDueReports = async (now = new Date()) => {
   return sent;
 };
 
+const FIRST_SWEEP_DELAY_MS = 60 * 1000;
+
+const sweep = () => sendDueReports()
+  .then(sent => { if (sent > 0) logger.info(`Monthly report sweep sent ${sent} report(s)`); })
+  .catch(error => logger.error(`Monthly report sweep failed: ${error.message}`));
+
 const startMonthlyReportSweeper = () => {
-  const timer = setInterval(() => {
-    sendDueReports().catch(error => logger.error(`Monthly report sweep failed: ${error.message}`));
-  }, SWEEP_INTERVAL_MS);
+  logger.info(`Monthly report sweeper on — every ${SWEEP_INTERVAL_MS / 60000} min, first run in ${FIRST_SWEEP_DELAY_MS / 1000}s`);
+  setTimeout(sweep, FIRST_SWEEP_DELAY_MS).unref();
+  const timer = setInterval(sweep, SWEEP_INTERVAL_MS);
   timer.unref();
   return timer;
 };
 
 module.exports = {
   buildReportLines,
+  buildHeadline,
   hasSomethingToSay,
   previousYearMonth,
   savingsOutflow,
@@ -105,4 +141,5 @@ module.exports = {
   sendDueReports,
   startMonthlyReportSweeper,
   SWEEP_INTERVAL_MS,
+  FIRST_SWEEP_DELAY_MS,
 };

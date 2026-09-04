@@ -1,6 +1,6 @@
 const { expect } = require('chai');
 const {
-  buildReportLines, hasSomethingToSay, previousYearMonth, savingsOutflow, formatterFor,
+  buildReportLines, buildHeadline, hasSomethingToSay, previousYearMonth, savingsOutflow, formatterFor,
 } = require('../services/monthlyReport');
 
 const fmt = formatterFor({ currency: 'IDR', numberFormat: 'dot' });
@@ -66,5 +66,28 @@ describe('monthly report — which month it closes', () => {
     const instant = new Date('2026-08-31T18:00:00Z');
     expect(previousYearMonth(instant, 'Asia/Jakarta')).to.equal('2026-08');
     expect(previousYearMonth(instant, 'UTC')).to.equal('2026-07');
+  });
+});
+
+describe('monthly report — the one number at the top', () => {
+  const savings = new Set(['reksadana']);
+
+  it('leads with what was kept, savings counted as kept', () => {
+    const snap = snapshot({ expense: 4_000_000, byCategory: [{ category: 'reksadana', total: 3_000_000 }] });
+    const { headlineLabel, headline } = buildHeadline(snap, savings, fmt);
+    expect(headlineLabel).to.equal('You kept');
+    expect(headline).to.equal('IDR 9.000.000');
+  });
+
+  it('says plainly when more went out than came in', () => {
+    const { headlineLabel, headline } = buildHeadline(snapshot({ income: 2_000_000, expense: 5_000_000 }), savings, fmt);
+    expect(headlineLabel).to.equal('You spent over by');
+    expect(headline).to.equal('IDR 3.000.000');
+  });
+
+  it('falls back to spend when no income was recorded', () => {
+    const { headlineLabel, caption } = buildHeadline(snapshot({ income: 0, expense: 800_000 }), savings, fmt);
+    expect(headlineLabel).to.equal('You spent');
+    expect(caption).to.match(/No income/);
   });
 });
