@@ -151,7 +151,7 @@ describe('Data integrity regressions', () => {
                 expiresAt: new Date(Date.now() + 60000),
             });
             await OAuthToken.create({
-                tokenHash: 'token-hash', type: 'access', user: userId, clientId: 'c',
+                tokenHash: 'token-hash', type: 'access', user: userId, clientId: 'c', pairId: 'p',
                 scope: ['finan:read'], resource: 'https://x.test/mcp',
                 expiresAt: new Date(Date.now() + 60000),
             });

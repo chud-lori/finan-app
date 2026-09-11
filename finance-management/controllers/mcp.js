@@ -59,23 +59,25 @@ const dispatch = async (message, context) => {
 // Streamable HTTP without SSE: this server only answers requests, so a JSON
 // response is a complete implementation of the transport for it.
 const postMcp = async (req, res) => {
-  const body = req.body;
-  const messages = Array.isArray(body) ? body : [body];
+  const message = req.body;
 
-  if (!messages.length || messages.some(m => !m || m.jsonrpc !== '2.0' || typeof m.method !== 'string')) {
+  // Batching was removed in this protocol version, and accepting it meant one
+  // request could fan out into hundreds of full-ledger exports inside the body
+  // size limit — enough to exhaust the box on a single call.
+  if (Array.isArray(message)) {
+    return res.status(400).json(failure(null, INVALID_REQUEST, 'Batched requests are not supported'));
+  }
+  if (!message || message.jsonrpc !== '2.0' || typeof message.method !== 'string') {
     return res.status(400).json(failure(null, INVALID_REQUEST, 'Expected JSON-RPC 2.0'));
   }
 
   try {
     // A notification carries no id and gets no body back, only an accepted status.
-    const requests = messages.filter(m => m.id !== undefined && m.id !== null);
-    if (!requests.length) return res.status(202).end();
+    if (message.id === undefined || message.id === null) return res.status(202).end();
 
-    const responses = [];
-    for (const message of requests) responses.push(await dispatch(message, req.mcp));
-
+    const response = await dispatch(message, req.mcp);
     res.set('MCP-Protocol-Version', PROTOCOL_VERSION);
-    return res.json(Array.isArray(body) ? responses : responses[0]);
+    return res.json(response);
   } catch (error) {
     logger.error(`MCP dispatch error: ${error.message}`);
     return res.status(500).json(failure(null, INTERNAL_ERROR, 'Internal error'));

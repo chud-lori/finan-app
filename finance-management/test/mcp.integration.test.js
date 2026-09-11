@@ -33,12 +33,12 @@ const pkce = () => {
   return { verifier, challenge: crypto.createHash('sha256').update(verifier).digest('base64url') };
 };
 
-const registerClient = async () => {
+const registerClient = async (scope = 'finan:read') => {
   const res = await chai.request(server).post('/oauth/register').send({
     client_name: 'Test Client',
     redirect_uris: [REDIRECT],
     token_endpoint_auth_method: 'none',
-    scope: 'finan:read',
+    scope,
   });
   if (!res.body.client_id) throw new Error(`client registration failed (${res.status}): ${JSON.stringify(res.body)}`);
   return res.body;
@@ -390,6 +390,136 @@ describe('MCP — the token leg', () => {
   });
 });
 
+describe('MCP — abuse resistance', () => {
+  let token;
+  let userId;
+
+  beforeEach(async () => {
+    const client = await registerClient();
+    const session = await registerAndLogin('abuse');
+    userId = session.userId;
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(session.cookie, client, challenge);
+    token = (await exchange(client, code, verifier)).body.access_token;
+  });
+
+  it('refuses a batched request rather than fanning it out', async () => {
+    const batch = Array.from({ length: 50 }, (_, i) => ({
+      jsonrpc: '2.0', id: i, method: 'tools/call',
+      params: { name: 'export_transactions', arguments: { limit: 2000 } },
+    }));
+    const res = await chai.request(server).post('/mcp').set('Authorization', `Bearer ${token}`).send(batch);
+    expect(res).to.have.status(400);
+    expect(res.body.error.message).to.match(/batch/i);
+  });
+
+  it('will not let a Mongo operator stand in for a client id', async () => {
+    const res = await chai.request(server).post('/oauth/token')
+      .send({ grant_type: 'refresh_token', client_id: { $ne: null }, refresh_token: 'x' });
+    expect(res).to.have.status(401);
+    expect(res.body.error).to.equal('invalid_client');
+  });
+
+  it('cuts connector access when the password changes', async () => {
+    const session = await registerAndLogin('recover');
+    const client = await registerClient();
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(session.cookie, client, challenge);
+    const live = (await exchange(client, code, verifier)).body.access_token;
+    expect(await rpc(live, 'ping')).to.have.status(200);
+
+    await chai.request(server).patch('/api/auth/password').set('Cookie', session.cookie)
+      .send({ currentPassword: 'password123', newPassword: 'password456' });
+
+    expect(await rpc(live, 'ping')).to.have.status(401);
+  });
+
+  it('cuts connector access when the user logs out everywhere', async () => {
+    const session = await registerAndLogin('logoutall');
+    const client = await registerClient();
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(session.cookie, client, challenge);
+    const live = (await exchange(client, code, verifier)).body.access_token;
+
+    await chai.request(server).post('/api/auth/logout-all').set('Cookie', session.cookie);
+    expect(await rpc(live, 'ping')).to.have.status(401);
+  });
+
+  it('kills the access token when its refresh token is revoked', async () => {
+    const session = await registerAndLogin('revokepair');
+    const client = await registerClient();
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(session.cookie, client, challenge);
+    const pair = (await exchange(client, code, verifier)).body;
+
+    await chai.request(server).post('/oauth/revoke').type('form').send({ token: pair.refresh_token });
+    expect(await rpc(pair.access_token, 'ping')).to.have.status(401);
+  });
+
+  it('burns the family when a rotated refresh token is presented again', async () => {
+    const session = await registerAndLogin('reuse');
+    const client = await registerClient();
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(session.cookie, client, challenge);
+    const first = (await exchange(client, code, verifier)).body;
+
+    const refresh = (raw) => chai.request(server).post('/oauth/token').type('form')
+      .send({ grant_type: 'refresh_token', refresh_token: raw, client_id: client.client_id });
+
+    const thief = (await refresh(first.refresh_token)).body;
+    expect(thief.access_token).to.be.a('string');
+
+    // The victim's copy is now stale; presenting it must cost the thief everything.
+    expect(await refresh(first.refresh_token)).to.have.status(400);
+    expect(await rpc(thief.access_token, 'ping')).to.have.status(401);
+    expect(await refresh(thief.refresh_token)).to.have.status(400);
+  });
+
+  it('does not redirect anywhere for a logged-out caller, whatever is wrong with the request', async () => {
+    const client = await registerClient();
+    const res = await chai.request(server)
+      .get(`/oauth/authorize?client_id=${client.client_id}&redirect_uri=${encodeURIComponent(REDIRECT)}&response_type=token`)
+      .redirects(0);
+    expect(res).to.have.status(302);
+    expect(res.headers.location).to.contain('/login?next=');
+    expect(res.headers.location).to.not.contain('error=');
+  });
+
+  it('refuses a consent token replayed with a wider scope', async () => {
+    // The client may hold both scopes; the approval was only for one of them.
+    const client = await registerClient('finan:read finan:write');
+    const session = await registerAndLogin('widen');
+    const { challenge } = pkce();
+    const query = new URLSearchParams({
+      client_id: client.client_id, redirect_uri: REDIRECT, response_type: 'code',
+      scope: 'finan:read', code_challenge: challenge, code_challenge_method: 'S256', resource: MCP_RESOURCE,
+    });
+    const page = await chai.request(server).get(`/oauth/authorize?${query}`).set('Cookie', session.cookie);
+    const consentToken = /name="consent_token" value="([^"]+)"/.exec(page.text)[1];
+
+    const res = await chai.request(server).post('/oauth/authorize').set('Cookie', session.cookie).redirects(0)
+      .type('form')
+      .send({
+        client_id: client.client_id, redirect_uri: REDIRECT, response_type: 'code',
+        scope: 'finan:read finan:write', code_challenge: challenge, code_challenge_method: 'S256',
+        resource: MCP_RESOURCE, consent_token: consentToken, decision: 'approve',
+      });
+    expect(res).to.have.status(400);
+  });
+
+  it('tells the consent page not to sit in a shared browser cache', async () => {
+    const client = await registerClient();
+    const session = await registerAndLogin('nostore');
+    const { challenge } = pkce();
+    const query = new URLSearchParams({
+      client_id: client.client_id, redirect_uri: REDIRECT, response_type: 'code',
+      scope: 'finan:read', code_challenge: challenge, code_challenge_method: 'S256', resource: MCP_RESOURCE,
+    });
+    const page = await chai.request(server).get(`/oauth/authorize?${query}`).set('Cookie', session.cookie);
+    expect(page.headers['cache-control']).to.contain('no-store');
+  });
+});
+
 describe('MCP — the protocol', () => {
   let token;
   let userId;
@@ -439,7 +569,7 @@ describe('MCP — the protocol', () => {
   it('refuses a token minted for another audience', async () => {
     const foreign = crypto.randomBytes(32).toString('hex');
     await OAuthToken.create({
-      tokenHash: hashToken(foreign), type: 'access', user: userId, clientId: 'someone-else',
+      tokenHash: hashToken(foreign), type: 'access', user: userId, clientId: 'someone-else', pairId: 'pair-foreign',
       scope: ['finan:read'], resource: 'https://another.test/mcp', expiresAt: new Date(Date.now() + 60_000),
     });
     const res = await rpc(foreign, 'tools/list');
@@ -449,7 +579,7 @@ describe('MCP — the protocol', () => {
   it('refuses an expired token', async () => {
     const stale = crypto.randomBytes(32).toString('hex');
     await OAuthToken.create({
-      tokenHash: hashToken(stale), type: 'access', user: userId, clientId: 'c',
+      tokenHash: hashToken(stale), type: 'access', user: userId, clientId: 'c', pairId: 'pair-stale',
       scope: ['finan:read'], resource: MCP_RESOURCE, expiresAt: new Date(Date.now() - 1000),
     });
     expect(await rpc(stale, 'tools/list')).to.have.status(401);

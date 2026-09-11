@@ -8,6 +8,7 @@ const schema = new mongoose.Schema({
   type:       { type: String, enum: ['access', 'refresh'], required: true },
   user:       { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   clientId:   { type: String, required: true },
+  pairId:     { type: String, required: true, index: true },
   scope:      { type: [String], default: [] },
   resource:   { type: String, required: true },
   expiresAt:  { type: Date, required: true },

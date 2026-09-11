@@ -37,10 +37,12 @@ const issueTokenPair = async ({ user, clientId, scope, resource }) => {
   const access = randomToken();
   const refresh = randomToken();
   const now = Date.now();
+  // Revoking either half must kill the other, so they carry the same pair id.
+  const pairId = randomToken();
 
   await OAuthToken.create([
-    { tokenHash: hashToken(access), type: 'access', user, clientId, scope, resource, expiresAt: new Date(now + ACCESS_TTL_MS) },
-    { tokenHash: hashToken(refresh), type: 'refresh', user, clientId, scope, resource, expiresAt: new Date(now + REFRESH_TTL_MS) },
+    { tokenHash: hashToken(access), type: 'access', user, clientId, scope, resource, pairId, expiresAt: new Date(now + ACCESS_TTL_MS) },
+    { tokenHash: hashToken(refresh), type: 'refresh', user, clientId, scope, resource, pairId, expiresAt: new Date(now + REFRESH_TTL_MS) },
   ]);
 
   return {
@@ -68,17 +70,24 @@ const CONSENT_TTL_MS = 10 * 60 * 1000;
 // The session cookie is SameSite=none in production, so a cross-site form could
 // otherwise POST an approval using the victim's cookie. This binds the form to
 // one session and one set of request parameters.
-const consentToken = (sessionHash, clientId, codeChallenge, expiresAt = Date.now() + CONSENT_TTL_MS) => {
-  const payload = `${sessionHash}|${clientId}|${codeChallenge}|${expiresAt}`;
-  const mac = crypto.createHmac('sha256', SECRET_TOKEN).update(payload).digest('hex');
+const consentPayload = ({ sessionHash, clientId, codeChallenge, scope, redirectUri, resource }) =>
+  [sessionHash, clientId, codeChallenge, scope, redirectUri, resource].map(v => String(v || '')).join('|');
+
+const consentToken = (fields, expiresAt = Date.now() + CONSENT_TTL_MS) => {
+  const mac = crypto.createHmac('sha256', SECRET_TOKEN)
+    .update(`${consentPayload(fields)}|${expiresAt}`)
+    .digest('hex');
   return `${expiresAt}.${mac}`;
 };
 
-const verifyConsentToken = (token, sessionHash, clientId, codeChallenge) => {
+// Everything the grant is built from is bound, not only the session. Binding a
+// subset let a valid token be replayed with a wider scope, a different
+// registered redirect_uri, or another resource.
+const verifyConsentToken = (token, fields) => {
   const [rawExpiry, mac] = String(token || '').split('.');
   const expiresAt = Number(rawExpiry);
   if (!mac || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return false;
-  const expected = Buffer.from(consentToken(sessionHash, clientId, codeChallenge, expiresAt).split('.')[1]);
+  const expected = Buffer.from(consentToken(fields, expiresAt).split('.')[1]);
   const actual = Buffer.from(mac);
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 };

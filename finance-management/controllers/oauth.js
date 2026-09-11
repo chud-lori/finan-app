@@ -84,7 +84,9 @@ const consentPage = ({ user, client, scope, params }) => `<!doctype html>
       ${scope.map(s => `<li>${escapeHtml(SCOPES[s])}</li>`).join('')}
     </ul>
     <p style="margin:18px 0 0;font-size:13px;line-height:20px;color:#8a94a3">
-      Anything it reads leaves this server and reaches ${escapeHtml(client.clientName)}. You can revoke this from Settings at any time.
+      Anything it reads leaves this server and reaches ${escapeHtml(client.clientName)}, which will return to
+      <strong style="color:#1a2230">${escapeHtml(new URL(params.redirect_uri).host)}</strong>.
+      Signing out of all devices in Settings revokes this access.
     </p>
     <form method="POST" action="/oauth/authorize" style="margin:24px 0 0">
       ${Object.entries(params).map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`).join('')}
@@ -111,7 +113,10 @@ const readAuthorizeParams = (source) => ({
 // anywhere. A bad client_id or redirect_uri is shown to the user instead —
 // redirecting an unverified URI is how open-redirect phishing starts.
 const validateAuthorizeRequest = async (params) => {
-  const client = params.client_id ? await OAuthClient.findOne({ clientId: params.client_id }).lean() : null;
+  // String() or a JSON body / bracketed query can smuggle a Mongo operator in
+  // and turn this lookup into a client enumerator.
+  const clientId = typeof params.client_id === 'string' ? params.client_id : null;
+  const client = clientId ? await OAuthClient.findOne({ clientId }).lean() : null;
   if (!client) return { fatal: 'Unknown application', detail: 'The application asking for access is not registered with Finan.' };
   if (!params.redirect_uri || !client.redirectUris.some(uri => redirectUriMatches(params.redirect_uri, uri))) {
     return { fatal: 'Redirect mismatch', detail: 'The return address this application asked for is not one it registered.' };
@@ -125,6 +130,15 @@ const getAuthorize = async (req, res) => {
     const { client, fatal, detail } = await validateAuthorizeRequest(params);
     if (fatal) return errorPage(res, 400, fatal, detail);
 
+    // Authentication comes before any error redirect. Otherwise a registered
+    // https redirect_uri plus a deliberately bad parameter turns this endpoint
+    // into an open redirector that needs no cookie at all.
+    const user = await sessionUser(req);
+    if (!user) {
+      const next = `/oauth/authorize?${new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)).toString()}`;
+      return res.redirect(`${FE_URL}/login?next=${encodeURIComponent(next)}`);
+    }
+
     if (params.response_type !== 'code') {
       return redirectWithError(res, params.redirect_uri, params.state, 'unsupported_response_type', 'Only the authorization code flow is supported');
     }
@@ -136,23 +150,28 @@ const getAuthorize = async (req, res) => {
       return redirectWithError(res, params.redirect_uri, params.state, 'invalid_target', 'Unknown resource');
     }
 
-    const user = await sessionUser(req);
-    if (!user) {
-      const next = `/oauth/authorize?${new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)).toString()}`;
-      return res.redirect(`${FE_URL}/login?next=${encodeURIComponent(next)}`);
-    }
-
     const scope = parseScope(params.scope).filter(s => client.scopes.includes(s));
     if (!scope.length) {
       return redirectWithError(res, params.redirect_uri, params.state, 'invalid_scope', 'No scope this application may request');
     }
 
+    const bound = {
+      sessionHash: user.sessionHash,
+      clientId: client.clientId,
+      codeChallenge: params.code_challenge,
+      scope: scope.join(' '),
+      redirectUri: params.redirect_uri,
+      resource,
+    };
     const params_with_consent = {
       ...params,
-      scope: scope.join(' '),
+      scope: bound.scope,
       resource,
-      consent_token: consentToken(user.sessionHash, client.clientId, params.code_challenge),
+      consent_token: consentToken(bound),
     };
+    // The page names the account and a 10-minute token; it must not sit in a
+    // shared browser's back-forward cache.
+    res.set('Cache-Control', 'no-store');
     return res.type('html').send(consentPage({ user, client, scope, params: params_with_consent }));
   } catch (error) {
     logger.error(`OAuth authorize error: ${error.message}`);
@@ -166,18 +185,32 @@ const postAuthorize = async (req, res) => {
     const { client, fatal, detail } = await validateAuthorizeRequest(params);
     if (fatal) return errorPage(res, 400, fatal, detail);
 
-    if (req.body.decision !== 'approve') {
-      return redirectWithError(res, params.redirect_uri, params.state, 'access_denied', 'The user declined');
-    }
-
     const user = await sessionUser(req);
     if (!user) return errorPage(res, 401, 'Session expired', 'Log in again and retry the connection.');
 
-    if (!verifyConsentToken(req.body.consent_token, user.sessionHash, client.clientId, params.code_challenge)) {
+    const scope = parseScope(params.scope).filter(s => client.scopes.includes(s));
+    const resource = params.resource || MCP_RESOURCE;
+
+    // Verified before the decision is read, so a declined request cannot be used
+    // as an unauthenticated redirector either.
+    const bound = {
+      sessionHash: user.sessionHash,
+      clientId: client.clientId,
+      codeChallenge: params.code_challenge,
+      scope: scope.join(' '),
+      redirectUri: params.redirect_uri,
+      resource,
+    };
+    if (!verifyConsentToken(req.body.consent_token, bound)) {
       return errorPage(res, 400, 'This approval could not be verified', 'Start the connection again from the application.');
     }
 
-    const scope = parseScope(params.scope).filter(s => client.scopes.includes(s));
+    if (resource !== MCP_RESOURCE) {
+      return redirectWithError(res, params.redirect_uri, params.state, 'invalid_target', 'Unknown resource');
+    }
+    if (req.body.decision !== 'approve') {
+      return redirectWithError(res, params.redirect_uri, params.state, 'access_denied', 'The user declined');
+    }
     if (!scope.length) {
       return redirectWithError(res, params.redirect_uri, params.state, 'invalid_scope', 'No scope this application may request');
     }
@@ -189,7 +222,7 @@ const postAuthorize = async (req, res) => {
       clientId: client.clientId,
       redirectUri: params.redirect_uri,
       scope,
-      resource: params.resource || MCP_RESOURCE,
+      resource,
       codeChallenge: params.code_challenge,
       expiresAt: new Date(Date.now() + CODE_TTL_MS),
     });
@@ -208,8 +241,8 @@ const tokenError = (res, status, error, description) =>
   res.status(status).json({ error, error_description: description });
 
 const authenticateClient = async (req) => {
-  let clientId = req.body.client_id;
-  let clientSecret = req.body.client_secret;
+  let clientId = typeof req.body.client_id === 'string' ? req.body.client_id : null;
+  let clientSecret = typeof req.body.client_secret === 'string' ? req.body.client_secret : null;
 
   const header = req.headers.authorization;
   if (header && header.startsWith('Basic ')) {
@@ -251,7 +284,9 @@ const exchangeCode = async (req, res, client) => {
     // intercepted, so every token minted from it is burned.
     const spent = await OAuthGrant.findOne({ codeHash });
     if (spent) {
-      await burnGrant(spent);
+      // Only the client the code belongs to can trigger the burn, or anyone
+      // holding a spent code could revoke a stranger's live connector.
+      if (spent.clientId === client.clientId) await burnGrant(spent);
       return tokenError(res, 400, 'invalid_grant', 'Code already used');
     }
     return tokenError(res, 400, 'invalid_grant', 'Unknown or expired code');
@@ -277,12 +312,25 @@ const refresh = async (req, res, client) => {
 
   // Revoke atomically for the same reason the authorization code is claimed
   // atomically: two concurrent refreshes must not both succeed.
+  const tokenHash = hashToken(raw);
   const existing = await OAuthToken.findOneAndUpdate(
-    { tokenHash: hashToken(raw), type: 'refresh', revokedAt: null },
+    { tokenHash, type: 'refresh', revokedAt: null },
     { revokedAt: new Date() },
     { new: false },
   );
-  if (!existing) return tokenError(res, 400, 'invalid_grant', 'Unknown refresh token');
+  if (!existing) {
+    // A token that was already rotated being presented again means a copy
+    // leaked. Whoever rotated first does not get to keep the account, so every
+    // live token for this user and client goes.
+    const spent = await OAuthToken.findOne({ tokenHash, type: 'refresh' }).lean();
+    if (spent) {
+      await OAuthToken.updateMany(
+        { user: spent.user, clientId: spent.clientId, revokedAt: null },
+        { revokedAt: new Date() },
+      );
+    }
+    return tokenError(res, 400, 'invalid_grant', 'Unknown refresh token');
+  }
   if (existing.expiresAt.getTime() <= Date.now()) return tokenError(res, 400, 'invalid_grant', 'Refresh token expired');
   if (existing.clientId !== client.clientId) return tokenError(res, 400, 'invalid_grant', 'Token was issued to another client');
 
@@ -346,8 +394,12 @@ const postRegister = async (req, res) => {
 
 const postRevoke = async (req, res) => {
   try {
-    const raw = req.body.token;
-    if (raw) await OAuthToken.updateOne({ tokenHash: hashToken(raw) }, { revokedAt: new Date() });
+    const raw = typeof req.body.token === 'string' ? req.body.token : null;
+    if (raw) {
+      const token = await OAuthToken.findOne({ tokenHash: hashToken(raw) }).lean();
+      // RFC 7009: revoking a refresh token should take its access token with it.
+      if (token) await OAuthToken.updateMany({ pairId: token.pairId }, { revokedAt: new Date() });
+    }
     return res.status(200).json({});
   } catch (error) {
     logger.error(`OAuth revoke error: ${error.message}`);

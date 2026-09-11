@@ -7,6 +7,8 @@ if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
         'password', 'newpassword', 'currentpassword',
         'token', 'tokenhash', 'secret',
         'email', 'identifier',
+        'access_token', 'refresh_token', 'client_secret',
+        'code', 'code_verifier', 'consent_token',
     ]);
     const scrub = (obj) => {
         if (!obj || typeof obj !== 'object') return obj;
