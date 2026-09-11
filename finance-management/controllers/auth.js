@@ -281,6 +281,8 @@ const deleteAccount = async (req, res) => {
             require('../models/allocation.model'),
             require('../models/insightDismissal.model'),
             require('../models/emailReport.model'),
+            require('../models/oauthGrant.model'),
+            require('../models/oauthToken.model'),
         ];
 
         await Promise.all([
