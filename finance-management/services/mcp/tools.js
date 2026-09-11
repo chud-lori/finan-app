@@ -9,7 +9,13 @@ const { getSavingsCategoryNames } = require('../../helpers/savingsCategories');
 const MAX_MONTHS = 24;
 const MAX_TRANSACTIONS = 100;
 
+// An export page is a whole analysis window, not a screenful. The cap is what a
+// model can actually hold, and `next_cursor` carries the rest.
+const EXPORT_PAGE = 1000;
+const EXPORT_MAX_PAGE = 2000;
+
 const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+const YEAR_MONTH_DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 const preferenceFor = async (userId) =>
   (await Preference.findOne({ user: userId }).select('currency timezone').lean()) || {};
@@ -157,6 +163,86 @@ const listTransactions = async (userId, args = {}) => {
   };
 };
 
+// Whole-ledger read for analysis, paged by time so a caller can walk the entire
+// history without holding it all at once. Ordered oldest-first so appended pages
+// read as one continuous series.
+const exportTransactions = async (userId, args = {}) => {
+  const { timezone = 'Asia/Jakarta', currency = 'IDR' } = await preferenceFor(userId);
+  const limit = Math.min(Math.max(Number(args.limit) || EXPORT_PAGE, 1), EXPORT_MAX_PAGE);
+
+  const filter = { user: userId };
+  if (args.type === 'income' || args.type === 'expense') filter.type = args.type;
+  if (args.category) filter.category = String(args.category);
+
+  const range = {};
+  if (args.from && YEAR_MONTH_DAY.test(args.from)) {
+    range.$gte = moment.tz(args.from, 'YYYY-MM-DD', timezone).startOf('day').toDate();
+  }
+  if (args.to && YEAR_MONTH_DAY.test(args.to)) {
+    range.$lte = moment.tz(args.to, 'YYYY-MM-DD', timezone).endOf('day').toDate();
+  }
+  // The cursor is the last row's timestamp, so paging cannot skip or repeat a
+  // row the way a numeric offset does when the ledger changes mid-walk.
+  if (args.cursor) {
+    const after = new Date(args.cursor);
+    if (!Number.isNaN(after.getTime())) range.$gt = range.$gt && range.$gt > after ? range.$gt : after;
+  }
+  if (Object.keys(range).length) filter.time = range;
+
+  const select = args.include_descriptions === true
+    ? 'amount type category time description currency'
+    : 'amount type category time currency';
+
+  const rows = await Transaction.find(filter).select(select).sort({ time: 1 }).limit(limit + 1).lean();
+  const page = rows.slice(0, limit);
+  const hasMore = rows.length > limit;
+
+  const totals = page.reduce((acc, row) => {
+    if (row.type === 'income') acc.income += row.amount || 0;
+    else acc.expense += row.amount || 0;
+    return acc;
+  }, { income: 0, expense: 0 });
+
+  return {
+    currency,
+    timezone,
+    count: page.length,
+    has_more: hasMore,
+    next_cursor: hasMore && page.length ? page[page.length - 1].time.toISOString() : null,
+    descriptions_included: args.include_descriptions === true,
+    page_totals: { income: round(totals.income), expense: round(totals.expense) },
+    transactions: page.map(row => ({
+      date: moment(row.time).tz(timezone).format('YYYY-MM-DD'),
+      time: row.time.toISOString(),
+      type: row.type,
+      category: row.category,
+      amount: round(row.amount),
+      ...(args.include_descriptions === true ? { description: row.description } : {}),
+    })),
+  };
+};
+
+const getLedgerRange = async (userId) => {
+  const { timezone = 'Asia/Jakarta', currency = 'IDR' } = await preferenceFor(userId);
+  const [oldest, newest, total] = await Promise.all([
+    Transaction.findOne({ user: userId }).select('time').sort({ time: 1 }).lean(),
+    Transaction.findOne({ user: userId }).select('time').sort({ time: -1 }).lean(),
+    Transaction.countDocuments({ user: userId }),
+  ]);
+  if (!total) return { currency, timezone, total_transactions: 0, recorded: false };
+
+  return {
+    currency,
+    timezone,
+    recorded: true,
+    total_transactions: total,
+    first_transaction: moment(oldest.time).tz(timezone).format('YYYY-MM-DD'),
+    last_transaction: moment(newest.time).tz(timezone).format('YYYY-MM-DD'),
+    suggested_page_size: EXPORT_PAGE,
+    pages_at_suggested_size: Math.ceil(total / EXPORT_PAGE),
+  };
+};
+
 const TOOLS = [
   {
     name: 'get_monthly_summary',
@@ -213,6 +299,32 @@ const TOOLS = [
       additionalProperties: false,
     },
     handler: listTransactions,
+  },
+  {
+    name: 'get_ledger_range',
+    description: 'How much history exists: total transaction count, first and last dates, and how many pages export_transactions will take. Call this before exporting so you know the size of the job.',
+    scope: 'finan:read',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    handler: getLedgerRange,
+  },
+  {
+    name: 'export_transactions',
+    description: 'The full ledger for analysis, oldest first, paged. Returns up to 1000 rows per call with a next_cursor; pass it back to continue until has_more is false. Narrow with from/to/type/category when the whole history is more than you need.',
+    scope: 'finan:read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', description: 'Rows per page, 1-2000, default 1000' },
+        cursor: { type: 'string', description: 'The next_cursor from the previous page' },
+        from: { type: 'string', description: 'Earliest date, YYYY-MM-DD' },
+        to: { type: 'string', description: 'Latest date, YYYY-MM-DD' },
+        type: { type: 'string', enum: ['income', 'expense'] },
+        category: { type: 'string' },
+        include_descriptions: { type: 'boolean', description: 'Include free-text descriptions. Off by default — they carry merchant and personal detail.' },
+      },
+      additionalProperties: false,
+    },
+    handler: exportTransactions,
   },
 ];
 

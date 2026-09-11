@@ -150,6 +150,8 @@ app.use('/api/insights', insightRoutes);
 app.get('/.well-known/oauth-protected-resource', getProtectedResourceMetadata);
 app.get('/.well-known/oauth-protected-resource/mcp', getProtectedResourceMetadata);
 app.get('/.well-known/oauth-authorization-server', getAuthorizationServerMetadata);
+// Some clients probe the OpenID discovery path before the OAuth one.
+app.get('/.well-known/openid-configuration', getAuthorizationServerMetadata);
 app.use('/oauth', oauthRoutes);
 app.use('/mcp', mcpRoutes);
 

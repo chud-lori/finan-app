@@ -174,6 +174,100 @@ describe('MCP — the authorization leg', () => {
   });
 });
 
+describe('MCP — redirect URI matching', () => {
+  const { redirectUriMatches } = require('../controllers/oauth');
+
+  it('lets a native client come back on whatever port the OS gave it', () => {
+    expect(redirectUriMatches('http://127.0.0.1:51234/cb', 'http://127.0.0.1:0/cb')).to.equal(true);
+  });
+
+  it('still holds the path and host of a loopback URI', () => {
+    expect(redirectUriMatches('http://127.0.0.1:51234/other', 'http://127.0.0.1:0/cb')).to.equal(false);
+    expect(redirectUriMatches('http://evil.test:80/cb', 'http://127.0.0.1:0/cb')).to.equal(false);
+  });
+
+  it('gives a remote URI no latitude at all', () => {
+    expect(redirectUriMatches('https://claude.ai/cb', 'https://claude.ai/cb')).to.equal(true);
+    expect(redirectUriMatches('https://claude.ai/cb?x=1', 'https://claude.ai/cb')).to.equal(false);
+    expect(redirectUriMatches('https://evil.test/cb', 'https://claude.ai/cb')).to.equal(false);
+  });
+});
+
+describe('MCP — the whole ledger', () => {
+  let token;
+  let cookie;
+
+  beforeEach(async () => {
+    const client = await registerClient();
+    const session = await registerAndLogin('bulk');
+    cookie = session.cookie;
+    for (const [i, amount] of [120000, 340000, 90000].entries()) {
+      await chai.request(server).post('/api/transaction').set('Cookie', cookie).send({
+        description: `entry ${i}`, category: 'widgets', amount, type: 'expense', currency: 'idr',
+        time: moment.tz(TZ).subtract(i, 'days').format('YYYY-MM-DD HH:mm:ss'), transaction_timezone: TZ,
+      });
+    }
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(cookie, client, challenge);
+    token = (await exchange(client, code, verifier)).body.access_token;
+  });
+
+  it('reports how much history there is before anything is exported', async () => {
+    const res = await rpc(token, 'tools/call', { name: 'get_ledger_range', arguments: {} });
+    const range = res.body.result.structuredContent;
+    expect(range.total_transactions).to.equal(3);
+    expect(range.pages_at_suggested_size).to.equal(1);
+    expect(range.first_transaction).to.be.a('string');
+  });
+
+  it('returns the ledger oldest first so pages append into one series', async () => {
+    const res = await rpc(token, 'tools/call', { name: 'export_transactions', arguments: {} });
+    const rows = res.body.result.structuredContent.transactions;
+    expect(rows).to.have.length(3);
+    const dates = rows.map(r => r.time);
+    expect([...dates].sort()).to.deep.equal(dates);
+  });
+
+  it('pages with a cursor that neither skips nor repeats a row', async () => {
+    const first = await rpc(token, 'tools/call', { name: 'export_transactions', arguments: { limit: 2 } });
+    const page1 = first.body.result.structuredContent;
+    expect(page1.count).to.equal(2);
+    expect(page1.has_more).to.equal(true);
+
+    const second = await rpc(token, 'tools/call', {
+      name: 'export_transactions', arguments: { limit: 2, cursor: page1.next_cursor },
+    });
+    const page2 = second.body.result.structuredContent;
+    expect(page2.count).to.equal(1);
+    expect(page2.has_more).to.equal(false);
+
+    const all = [...page1.transactions, ...page2.transactions].map(r => r.time);
+    expect(new Set(all).size).to.equal(3);
+  });
+
+  it('totals each page so a caller can reconcile what it has read', async () => {
+    const res = await rpc(token, 'tools/call', { name: 'export_transactions', arguments: {} });
+    expect(res.body.result.structuredContent.page_totals.expense).to.equal(550000);
+  });
+
+  it('withholds descriptions here too unless asked', async () => {
+    const res = await rpc(token, 'tools/call', { name: 'export_transactions', arguments: {} });
+    expect(res.body.result.structuredContent.transactions[0]).to.not.have.property('description');
+  });
+
+  it('narrows by date range', async () => {
+    const today = moment.tz(TZ).format('YYYY-MM-DD');
+    const res = await rpc(token, 'tools/call', { name: 'export_transactions', arguments: { from: today, to: today } });
+    expect(res.body.result.structuredContent.count).to.equal(1);
+  });
+
+  it('caps the page size rather than trusting the caller', async () => {
+    const res = await rpc(token, 'tools/call', { name: 'export_transactions', arguments: { limit: 999999 } });
+    expect(res.body.result.isError).to.equal(false);
+    expect(res.body.result.structuredContent.count).to.equal(3);
+  });
+});
+
 describe('MCP — the token leg', () => {
   it('exchanges a code for a bound token pair', async () => {
     const client = await registerClient();

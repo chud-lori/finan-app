@@ -1433,6 +1433,7 @@ Tokens are opaque random values stored as SHA-256 hashes, matching `Session` / `
 **The security properties that are not obvious from the code:**
 
 - **PKCE is S256-only.** OAuth 2.1 drops `plain`, and accepting it would make the challenge worthless against an intercepted code.
+- **Loopback redirect URIs ignore the port** (RFC 8252 §7.3). A native client registers `http://127.0.0.1:0/cb` and listens on whatever port the OS hands it; scheme, host and path must still match exactly, and a non-loopback URI gets no latitude at all.
 - **An unregistered `redirect_uri` is never redirected to.** A bad `client_id` or `redirect_uri` renders an error page instead — redirecting an unverified URI is exactly how open-redirect phishing starts. Every *other* error does redirect, per spec.
 - **A replayed authorization code burns every token minted from it.** A second use means the first exchange may have been intercepted, so the whole grant is revoked rather than merely refused.
 - **Refresh tokens rotate.** The presented token is revoked before the replacement is issued, so a stolen copy is good for one use at most.
@@ -1450,9 +1451,13 @@ Tokens are opaque random values stored as SHA-256 hashes, matching `Session` / `
 | `get_spending_by_category` | one month ranked by amount, with shares |
 | `get_net_worth` | assets, liabilities, per-holding breakdown |
 | `get_goals` | target, saved, progress |
-| `list_transactions` | individual rows, newest first |
+| `list_transactions` | individual rows, newest first (a screenful) |
+| `get_ledger_range` | total count, first/last date, how many export pages it will take |
+| `export_transactions` | the whole ledger for analysis, oldest first, cursor-paged |
 
-Everything a tool returns travels to the model provider, so **`list_transactions` withholds `description` unless `include_descriptions: true` is passed.** Amounts and categories are aggregate-ish; free-text descriptions carry merchant names, people and places. Spend figures exclude savings-group outflow via `getSavingsCategoryNames`, so a tool cannot disagree with the app.
+`export_transactions` is the one to reach for when a model should analyse the whole history rather than glance at it: up to 1000 rows a call, ordered oldest-first so appended pages read as one series, with a `next_cursor` to walk the rest. **The cursor is the last row's timestamp, not a numeric offset** — an offset skips or repeats rows when the ledger changes mid-walk. `get_ledger_range` exists so a caller can size the job before starting it.
+
+Everything a tool returns travels to the model provider, so **`list_transactions` and `export_transactions` withhold `description` unless `include_descriptions: true` is passed.** Amounts and categories are aggregate-ish; free-text descriptions carry merchant names, people and places. Spend figures exclude savings-group outflow via `getSavingsCategoryNames`, so a tool cannot disagree with the app.
 
 `mcpAuth` also sets `req.user = { id }` — `limiter.byUser()` keys on it, and without that every MCP caller would share one bucket keyed on the provider's egress IP.
 

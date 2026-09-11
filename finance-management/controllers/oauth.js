@@ -15,6 +15,30 @@ const {
   consentToken, verifyConsentToken,
 } = require('../helpers/oauth');
 
+// RFC 8252 s7.3: a native client registers http://127.0.0.1:0/cb but listens on
+// whatever port the OS hands it, so the port cannot be part of the comparison.
+// Everything else must still match exactly.
+const isLoopback = (uri) => {
+  try {
+    const { hostname, protocol } = new URL(uri);
+    return protocol === 'http:' && (hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1' || hostname === 'localhost');
+  } catch {
+    return false;
+  }
+};
+
+const redirectUriMatches = (requested, registered) => {
+  if (requested === registered) return true;
+  if (!isLoopback(requested) || !isLoopback(registered)) return false;
+  try {
+    const a = new URL(requested);
+    const b = new URL(registered);
+    return a.protocol === b.protocol && a.hostname === b.hostname && a.pathname === b.pathname;
+  } catch {
+    return false;
+  }
+};
+
 const escapeHtml = (value) => String(value == null ? '' : value)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -89,7 +113,7 @@ const readAuthorizeParams = (source) => ({
 const validateAuthorizeRequest = async (params) => {
   const client = params.client_id ? await OAuthClient.findOne({ clientId: params.client_id }).lean() : null;
   if (!client) return { fatal: 'Unknown application', detail: 'The application asking for access is not registered with Finan.' };
-  if (!params.redirect_uri || !client.redirectUris.includes(params.redirect_uri)) {
+  if (!params.redirect_uri || !client.redirectUris.some(uri => redirectUriMatches(params.redirect_uri, uri))) {
     return { fatal: 'Redirect mismatch', detail: 'The return address this application asked for is not one it registered.' };
   }
   return { client };
@@ -218,7 +242,7 @@ const exchangeCode = async (req, res, client) => {
   }
   if (grant.expiresAt.getTime() <= Date.now()) return tokenError(res, 400, 'invalid_grant', 'Code expired');
   if (grant.clientId !== client.clientId) return tokenError(res, 400, 'invalid_grant', 'Code was issued to another client');
-  if (grant.redirectUri !== redirect_uri) return tokenError(res, 400, 'invalid_grant', 'redirect_uri mismatch');
+  if (!redirectUriMatches(redirect_uri, grant.redirectUri)) return tokenError(res, 400, 'invalid_grant', 'redirect_uri mismatch');
   if (!verifyPkce(code_verifier, grant.codeChallenge)) return tokenError(res, 400, 'invalid_grant', 'PKCE verification failed');
 
   grant.usedAt = new Date();
@@ -317,6 +341,7 @@ const getProtectedResourceMetadata = (req, res) => res.json(protectedResourceMet
 const getAuthorizationServerMetadata = (req, res) => res.json(authorizationServerMetadata());
 
 module.exports = {
+  redirectUriMatches,
   getAuthorize, postAuthorize, postToken, postRegister, postRevoke,
   getProtectedResourceMetadata, getAuthorizationServerMetadata,
   sessionUser, ISSUER,
