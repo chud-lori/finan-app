@@ -40,6 +40,7 @@ const registerClient = async () => {
     token_endpoint_auth_method: 'none',
     scope: 'finan:read',
   });
+  if (!res.body.client_id) throw new Error(`client registration failed (${res.status}): ${JSON.stringify(res.body)}`);
   return res.body;
 };
 
@@ -278,7 +279,9 @@ describe('MCP — the protocol', () => {
     userId = session.userId;
     const { verifier, challenge } = pkce();
     const { code } = await authorize(session.cookie, client, challenge);
-    token = (await exchange(client, code, verifier)).body.access_token;
+    const pair = await exchange(client, code, verifier);
+    if (!pair.body.access_token) throw new Error(`token exchange failed (${pair.status}): ${JSON.stringify(pair.body)}`);
+    token = pair.body.access_token;
   });
 
   it('completes the initialize handshake', async () => {
