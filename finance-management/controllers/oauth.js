@@ -226,27 +226,44 @@ const authenticateClient = async (req) => {
   return (await bcrypt.compare(clientSecret, client.clientSecretHash)) ? client : null;
 };
 
+const burnGrant = async (grant) => {
+  await OAuthToken.updateMany({ user: grant.user, clientId: grant.clientId, revokedAt: null }, { revokedAt: new Date() });
+  await OAuthGrant.deleteOne({ _id: grant._id });
+};
+
 const exchangeCode = async (req, res, client) => {
   const { code, redirect_uri, code_verifier } = req.body;
   if (!code || !code_verifier) return tokenError(res, 400, 'invalid_request', 'code and code_verifier are required');
 
-  const grant = await OAuthGrant.findOne({ codeHash: hashToken(code) });
-  if (!grant) return tokenError(res, 400, 'invalid_grant', 'Unknown or expired code');
+  // Claim the code atomically. Checking `usedAt` and then writing it lets two
+  // concurrent redemptions of a stolen code both pass the check and both mint
+  // tokens, with the replay never detected. The filter is the lock.
+  const codeHash = hashToken(code);
+  const grant = await OAuthGrant.findOneAndUpdate(
+    { codeHash, usedAt: null },
+    { usedAt: new Date() },
+    { new: false },
+  );
 
-  // A replayed code means the first exchange may have been intercepted, so every
-  // token already minted from it is burned along with the code.
-  if (grant.usedAt) {
-    await OAuthToken.updateMany({ user: grant.user, clientId: grant.clientId, revokedAt: null }, { revokedAt: new Date() });
-    await OAuthGrant.deleteOne({ _id: grant._id });
-    return tokenError(res, 400, 'invalid_grant', 'Code already used');
+  if (!grant) {
+    // Either the code never existed, or someone else already claimed it. A
+    // claimed code being presented again means the first exchange may have been
+    // intercepted, so every token minted from it is burned.
+    const spent = await OAuthGrant.findOne({ codeHash });
+    if (spent) {
+      await burnGrant(spent);
+      return tokenError(res, 400, 'invalid_grant', 'Code already used');
+    }
+    return tokenError(res, 400, 'invalid_grant', 'Unknown or expired code');
   }
+
+  // Past this point the code is spent whatever happens. A failed check here
+  // means someone is holding a code they should not, so it does not get a
+  // second attempt.
   if (grant.expiresAt.getTime() <= Date.now()) return tokenError(res, 400, 'invalid_grant', 'Code expired');
   if (grant.clientId !== client.clientId) return tokenError(res, 400, 'invalid_grant', 'Code was issued to another client');
   if (!redirectUriMatches(redirect_uri, grant.redirectUri)) return tokenError(res, 400, 'invalid_grant', 'redirect_uri mismatch');
   if (!verifyPkce(code_verifier, grant.codeChallenge)) return tokenError(res, 400, 'invalid_grant', 'PKCE verification failed');
-
-  grant.usedAt = new Date();
-  await grant.save();
 
   const tokens = await issueTokenPair({
     user: grant.user, clientId: grant.clientId, scope: grant.scope, resource: grant.resource,
@@ -258,15 +275,16 @@ const refresh = async (req, res, client) => {
   const raw = req.body.refresh_token;
   if (!raw) return tokenError(res, 400, 'invalid_request', 'refresh_token is required');
 
-  const existing = await OAuthToken.findOne({ tokenHash: hashToken(raw), type: 'refresh' });
-  if (!existing || existing.revokedAt) return tokenError(res, 400, 'invalid_grant', 'Unknown refresh token');
+  // Revoke atomically for the same reason the authorization code is claimed
+  // atomically: two concurrent refreshes must not both succeed.
+  const existing = await OAuthToken.findOneAndUpdate(
+    { tokenHash: hashToken(raw), type: 'refresh', revokedAt: null },
+    { revokedAt: new Date() },
+    { new: false },
+  );
+  if (!existing) return tokenError(res, 400, 'invalid_grant', 'Unknown refresh token');
   if (existing.expiresAt.getTime() <= Date.now()) return tokenError(res, 400, 'invalid_grant', 'Refresh token expired');
   if (existing.clientId !== client.clientId) return tokenError(res, 400, 'invalid_grant', 'Token was issued to another client');
-
-  // Rotation: the presented token dies here whether or not the client ever sees
-  // the replacement, so a stolen copy is good for one use at most.
-  existing.revokedAt = new Date();
-  await existing.save();
 
   const tokens = await issueTokenPair({
     user: existing.user, clientId: existing.clientId, scope: existing.scope, resource: existing.resource,

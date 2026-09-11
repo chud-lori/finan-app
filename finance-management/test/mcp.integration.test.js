@@ -323,6 +323,34 @@ describe('MCP — the token leg', () => {
     expect(live.revokedAt).to.not.equal(null);
   });
 
+  it('lets only one of two simultaneous redemptions of a code succeed', async () => {
+    const client = await registerClient();
+    const { cookie } = await registerAndLogin('race');
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(cookie, client, challenge);
+
+    const [a, b] = await Promise.all([
+      exchange(client, code, verifier),
+      exchange(client, code, verifier),
+    ]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).to.deep.equal([200, 400]);
+  });
+
+  it('lets only one of two simultaneous refreshes succeed', async () => {
+    const client = await registerClient();
+    const { cookie } = await registerAndLogin('refreshrace');
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(cookie, client, challenge);
+    const pair = (await exchange(client, code, verifier)).body;
+
+    const refreshOnce = () => chai.request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token', refresh_token: pair.refresh_token, client_id: client.client_id,
+    });
+    const [a, b] = await Promise.all([refreshOnce(), refreshOnce()]);
+    expect([a.status, b.status].sort()).to.deep.equal([200, 400]);
+  });
+
   it('rotates the refresh token, killing the one just presented', async () => {
     const client = await registerClient();
     const { cookie } = await registerAndLogin('rotate');
