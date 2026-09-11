@@ -64,6 +64,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **Number format** — dot grouping (5.000.000) or comma grouping (5,000,000)
 - **Per-month budget** — set a budget for each month independently; optionally update the global default
 - **Timezone** — transactions recorded and displayed in your local timezone
+- **MCP connector** — connect Finan to Claude or ChatGPT as a custom connector and ask about your own money in plain language. OAuth 2.1 with PKCE, scoped and revocable; read-only, and transaction descriptions stay out unless you ask for them
 - **Monthly email report** — off by default; when on, a summary of the month just ended arrives on the 1st: what you kept, money in and out, your top spending categories with bars, what moved against the month before, and net worth / streak / flagged-purchase tiles. A month you recorded nothing in gets a note showing your last tracked month instead of an empty report
 
 ---

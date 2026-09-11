@@ -60,6 +60,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3001/api/auth/google/callback}
       FE_URL: ${FE_URL:-http://localhost:3000}
+      PUBLIC_URL: ${PUBLIC_URL:-}
       RESEND_API_KEY: ${RESEND_API_KEY}
       FROM_EMAIL: ${FROM_EMAIL:-noreply@lori.my.id}
       REPORT_FROM_EMAIL: ${REPORT_FROM_EMAIL:-}
