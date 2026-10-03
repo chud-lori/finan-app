@@ -7,6 +7,8 @@ if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
         'password', 'newpassword', 'currentpassword',
         'token', 'tokenhash', 'secret',
         'email', 'identifier',
+        'access_token', 'refresh_token', 'client_secret',
+        'code', 'code_verifier', 'consent_token',
     ]);
     const scrub = (obj) => {
         if (!obj || typeof obj !== 'object') return obj;
@@ -115,6 +117,9 @@ const categoryRoutes = require('./routers/category');
 const netWorthRoutes = require('./routers/netWorth');
 const groupBudgetRoutes = require('./routers/groupBudget');
 const insightRoutes = require('./routers/insight');
+const oauthRoutes = require('./routers/oauth');
+const mcpRoutes = require('./routers/mcp');
+const { getProtectedResourceMetadata, getAuthorizationServerMetadata } = require('./controllers/oauth');
 // Routes
 app.get("/", (req, res) => res.json("HEHHHH"));
 app.get('/health', (_req, res) => {
@@ -140,6 +145,17 @@ app.use('/api/category', categoryRoutes);
 app.use('/api/networth', netWorthRoutes);
 app.use('/api/group-budget', groupBudgetRoutes);
 app.use('/api/insights', insightRoutes);
+
+// RFC 9728 inserts the resource path into the well-known URL, so a client
+// looking for https://host/mcp asks for .../oauth-protected-resource/mcp.
+// Clients differ on whether they try the bare path too, so both are served.
+app.get('/.well-known/oauth-protected-resource', getProtectedResourceMetadata);
+app.get('/.well-known/oauth-protected-resource/mcp', getProtectedResourceMetadata);
+app.get('/.well-known/oauth-authorization-server', getAuthorizationServerMetadata);
+// Some clients probe the OpenID discovery path before the OAuth one.
+app.get('/.well-known/openid-configuration', getAuthorizationServerMetadata);
+app.use('/oauth', oauthRoutes);
+app.use('/mcp', mcpRoutes);
 
 // Must come after all routes.
 Sentry.setupExpressErrorHandler(app);

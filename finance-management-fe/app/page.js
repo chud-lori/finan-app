@@ -48,6 +48,9 @@ const FEATURES = [
   { icon: '🔍', title: 'AI Insights',       desc: 'Money Recap, Payday Runway safe-to-spend, seasonal-aware anomaly detection, explainability, and time-to-zero projections.' },
   { icon: '💡', title: '11 Planning Tools', desc: 'Debt snowball, FIRE calculator, 50/30/20 budgeting, tax estimator, windfall & zakat planners — all built-in.' },
   { icon: '🔒', title: 'Secure & Private',  desc: 'bcrypt passwords, JWT token versioning, Google OAuth. Your financial data is never sold or shared.' },
+  { icon: '🔌', title: 'Connect to Claude',  desc: 'Add Finan as a custom connector and ask about your own money in plain language. Read-only, scoped, and revocable from Settings whenever you want.' },
+  { icon: '✉️', title: 'Monthly Email Report', desc: 'On the 1st, a summary of the month just closed: what you kept, where it went, and what moved against last month. Off until you turn it on.' },
+  { icon: '🔁', title: 'Subscription Radar', desc: 'Repeating charges are spotted on their own — next due date, what each costs across a year, and a flag when one quietly goes up.' },
 ];
 
 const TOOLS = [

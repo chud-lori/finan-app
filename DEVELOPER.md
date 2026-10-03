@@ -1086,6 +1086,7 @@ Copy `.env.example` → `.env` and fill in values:
 | `DB_URI` | `mongodb://mongo:27017/finan?replicaSet=rs0` | | MongoDB connection string |
 | `NEXT_PUBLIC_API_URL` | — | **always** | Backend URL as seen by the browser |
 | `FE_URL` | `http://localhost:3000` | | Allowed CORS origin (must match frontend URL) |
+| `PUBLIC_URL` | falls back to `FE_URL` | | Public origin of the app. Becomes the OAuth issuer and the MCP resource id (`<PUBLIC_URL>/mcp`), both baked into issued tokens — changing it invalidates every authorised connector |
 | `GOOGLE_CLIENT_ID` | — | | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | — | | Google OAuth client secret |
 | `GOOGLE_CALLBACK_URL` | `http://localhost:3001/api/auth/google/callback` | | Google OAuth redirect URI |
@@ -1403,6 +1404,87 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | GET | `/api/auth/sessions` | — | ✓ | List all active sessions with device info |
 | DELETE | `/api/auth/sessions/:id` | — | ✓ | Revoke a specific session (cannot revoke current) |
 | PATCH | `/api/auth/password` | 5/min per user | ✓ | Change password (deletes all sessions) |
+### MCP connector (remote MCP server + OAuth 2.1)
+
+Finan is a Claude/ChatGPT **custom connector**: an MCP server at `/mcp` plus the OAuth 2.1 authorization server that protects it. Both live inside the existing backend — the tools are thin readers over the same models the app uses, so a separate service would only duplicate the model layer.
+
+**It is served from a path, not a subdomain.** nginx already routes `/api` to the backend on `finance.lori.my.id`; `/mcp`, `/oauth/` and `/.well-known/oauth-` join it. The deciding reason is the session cookie: the consent screen at `/oauth/authorize` has to read it to know who is approving, and it is scoped to that exact host. A `mcp.` subdomain would mean widening the cookie to `.lori.my.id` — handing it to every other app on a shared VPS.
+
+```nginx
+location /mcp                { proxy_pass http://backend; }
+location /oauth/             { proxy_pass http://backend; }
+location /.well-known/oauth- { proxy_pass http://backend; }
+```
+
+`PUBLIC_URL` is the origin those are reached at. It becomes the OAuth issuer and the MCP resource identifier (`<PUBLIC_URL>/mcp`), and both are written into every token — **changing it invalidates every connector already authorised.**
+
+**Discovery.** RFC 9728 inserts the resource path into the well-known URL, so a client after `https://host/mcp` fetches `/.well-known/oauth-protected-resource/mcp`. Clients differ on whether they also try the bare path, so `app.js` serves the same document at both. The authorization-server metadata needs no such treatment because the issuer is the bare origin. A request to `/mcp` without a token gets a 401 whose `WWW-Authenticate` header names the metadata URL — that header is the entire bootstrap, not decoration.
+
+**What is stored, and how.**
+
+| Model | Holds | Notes |
+|---|---|---|
+| `OAuthClient` | registered clients | **Not** user-scoped — one record serves every user who authorises it |
+| `OAuthGrant` | pending authorization codes | hash only, 60s TTL, `usedAt` marks spend |
+| `OAuthToken` | access + refresh tokens | hash only, `resource` is the audience, TTL index |
+
+Tokens are opaque random values stored as SHA-256 hashes, matching `Session` / `PasswordReset` / `EmailVerification` — not JWTs. `OAuthGrant` and `OAuthToken` are in `userScopedModels`; `OAuthClient` deliberately is not.
+
+**The security properties that are not obvious from the code:**
+
+- **PKCE is S256-only.** OAuth 2.1 drops `plain`, and accepting it would make the challenge worthless against an intercepted code.
+- **Loopback redirect URIs ignore the port** (RFC 8252 §7.3). A native client registers `http://127.0.0.1:0/cb` and listens on whatever port the OS hands it; scheme, host and path must still match exactly, and a non-loopback URI gets no latitude at all.
+- **An unregistered `redirect_uri` is never redirected to.** A bad `client_id` or `redirect_uri` renders an error page instead — redirecting an unverified URI is exactly how open-redirect phishing starts. Every *other* error does redirect, per spec.
+- **A replayed authorization code burns every token minted from it.** A second use means the first exchange may have been intercepted, so the whole grant is revoked rather than merely refused.
+- **Refresh tokens rotate.** The presented token is revoked before the replacement is issued, so a stolen copy is good for one use at most.
+- **The consent form carries an HMAC bound to the session, client and PKCE challenge.** In production the session cookie is `SameSite=none`, so a cross-site form could otherwise POST an approval using the victim's cookie. `helpers/oauth.js#consentToken` closes that.
+- **`express.urlencoded` is mounted on the `/oauth` router only.** The app is JSON-only on purpose (see Input sanitization), but the token endpoint is form-encoded by specification and the consent screen is a real HTML form. Scoping the parser to one router keeps the global guarantee intact.
+- **No JSON-RPC batching.** Arrays are rejected outright. The protocol version this server advertises removed batching, and accepting it let one request inside the 100kb body limit fan out into hundreds of full-ledger exports — measured at ~80MB of response and 171MB of heap from 100 batched calls, while counting as a single hit against the rate limiter.
+- **Access and refresh tokens share a `pairId`.** Revoking either takes the other with it (RFC 7009 §2.1), so a disconnect is immediate rather than leaving the access token alive for its remaining hour.
+- **Reusing a rotated refresh token burns the family.** Presenting an already-rotated token means a copy leaked, so every live token for that user and client is revoked — whoever rotated first does not get to keep the account.
+- **Account recovery cuts connectors.** `changePassword`, `logoutAllDevices` and `resetPassword` all revoke `OAuthToken` alongside `Session`. Without that, a compromised account stays readable through a connector for as long as the thief keeps refreshing.
+- **Authentication precedes every error redirect.** A registered https `redirect_uri` plus a deliberately bad parameter would otherwise make `/oauth/authorize` an open redirector needing no cookie at all — the classic error-redirect phishing vector.
+- **The consent HMAC binds every field the grant is built from** — session, client, challenge, scope, `redirect_uri` and `resource`. Binding a subset let a valid token be replayed with a wider scope or a different registered redirect.
+- **Client lookups reject non-string ids.** `/oauth` sits under the global JSON parser, so `{"client_id":{"$regex":"^ab"}}` would otherwise turn the token endpoint into a client enumerator.
+- **A spent code only burns tokens for the client it was issued to.** Otherwise anyone holding a used code could revoke a stranger's live connector.
+- **Audience binding.** `resolveAccessToken` rejects a token whose `resource` is not this server's, which is what stops a token issued elsewhere being replayed here.
+
+**Transport.** `controllers/mcp.js` implements Streamable HTTP as plain JSON-RPC over POST. This server only ever answers requests — it opens no SSE stream and sends nothing unprompted — and the transport spec allows a JSON response in that case, so there is no dependency on the MCP SDK. `GET /mcp` returns 405. Notifications (no `id`) get 202 with no body.
+
+**Tools** live in `services/mcp/tools.js`, all `finan:read` today:
+
+| Tool | Returns |
+|---|---|
+| `get_monthly_summary` | income, spend, savings rate, tx count for N recent months |
+| `get_spending_by_category` | one month ranked by amount, with shares |
+| `get_net_worth` | assets, liabilities, per-holding breakdown |
+| `get_goals` | target, saved, progress |
+| `list_transactions` | individual rows, newest first (a screenful) |
+| `get_ledger_range` | total count, first/last date, how many export pages it will take |
+| `export_transactions` | the whole ledger for analysis, oldest first, cursor-paged |
+
+`export_transactions` is the one to reach for when a model should analyse the whole history rather than glance at it: up to 1000 rows a call, ordered oldest-first so appended pages read as one series, with a `next_cursor` to walk the rest. **The cursor is the last row's timestamp, not a numeric offset** — an offset skips or repeats rows when the ledger changes mid-walk. `get_ledger_range` exists so a caller can size the job before starting it.
+
+Everything a tool returns travels to the model provider, so **`list_transactions` and `export_transactions` withhold `description` unless `include_descriptions: true` is passed.** Amounts and categories are aggregate-ish; free-text descriptions carry merchant names, people and places. Spend figures exclude savings-group outflow via `getSavingsCategoryNames`, so a tool cannot disagree with the app.
+
+`mcpAuth` also sets `req.user = { id }` — `limiter.byUser()` keys on it, and without that every MCP caller would share one bucket keyed on the provider's egress IP.
+
+**Connecting from Claude:** Settings → Connectors → Add custom connector → `https://finance.lori.my.id/mcp`. Claude registers itself through `/oauth/register`, opens the consent screen, and the tools appear once approved.
+
+### MCP connector & OAuth
+
+| Method | Path | Rate limit | Auth | Description |
+|---|---|---|---|---|
+| GET | `/.well-known/oauth-protected-resource` | — | — | RFC 9728 metadata. Also served at `/mcp` suffixed, because RFC 9728 inserts the resource path |
+| GET | `/.well-known/oauth-authorization-server` | — | — | RFC 8414 metadata |
+| GET | `/oauth/authorize` | 20/min per IP | session cookie | Consent screen. Logged out → `FE_URL/login?next=…`. An unregistered `redirect_uri` renders an error rather than redirecting |
+| POST | `/oauth/authorize` | 20/min per IP | session cookie | Approval. Requires the HMAC `consent_token` from the page; mints a 60s single-use code |
+| POST | `/oauth/token` | 30/min per IP | client credentials | `authorization_code` (S256 PKCE verified, code single-use) and `refresh_token` (rotating) |
+| POST | `/oauth/register` | 5/min per IP | — | RFC 7591 dynamic registration. Redirect URIs must be https, or localhost for development |
+| POST | `/oauth/revoke` | 20/min per IP | — | Revokes one token. Always 200, so it cannot be used to probe which tokens exist |
+| POST | `/mcp` | 120/min per user | Bearer | JSON-RPC 2.0: `initialize`, `ping`, `tools/list`, `tools/call`. Notifications get 202 |
+| GET | `/mcp` | — | Bearer | 405 — no SSE stream is opened |
+
 ### Monthly email report
 
 An hourly sweeper (`services/monthlyReport.js`, started in `app.js`) asks whether any opted-in user has no `EmailReport` record for last month. It never checks the clock: the answer flips when the month rolls over, so a restart or a deploy at the wrong moment costs nothing and the next pass picks it up. That also gives backfill — a month missed entirely while the app was down still sends when it comes back.

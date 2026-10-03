@@ -6,6 +6,7 @@ const Balance = require('../models/balance.model');
 const PasswordReset = require('../models/passwordReset.model');
 const EmailVerification = require('../models/emailVerification.model');
 const Session = require('../models/session.model');
+const OAuthToken = require('../models/oauthToken.model');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const {USER_EMAIL:email, SECRET_TOKEN, FE_URL, GOOGLE_CLIENT_ID} = require('../config/keys');
@@ -281,6 +282,8 @@ const deleteAccount = async (req, res) => {
             require('../models/allocation.model'),
             require('../models/insightDismissal.model'),
             require('../models/emailReport.model'),
+            require('../models/oauthGrant.model'),
+            require('../models/oauthToken.model'),
         ];
 
         await Promise.all([
@@ -323,6 +326,8 @@ const changePassword = async (req, res) => {
     const hash = await bcrypt.hash(newPassword, salt);
     await User.findByIdAndUpdate(userId, { password: hash, $inc: { tokenVersion: 1 } });
     await Session.deleteMany({ user: userId });
+    // A connector token outlives a session, so recovery has to cut it too.
+    await OAuthToken.updateMany({ user: userId, revokedAt: null }, { revokedAt: new Date() });
     res.clearCookie('token', CLEAR_COOKIE_OPTS);
 
     res.status(200).json(BaseResponseDTO.success('Password changed. Please log in again.'));
@@ -347,6 +352,8 @@ const logout = async (req, res) => {
 const logoutAllDevices = async (req, res) => {
     try {
         await Session.deleteMany({ user: req.user.id });
+        // A connector token outlives a session, so "log out everywhere" has to cut it too.
+        await OAuthToken.updateMany({ user: req.user.id, revokedAt: null }, { revokedAt: new Date() });
         await User.findByIdAndUpdate(req.user.id, { $inc: { tokenVersion: 1 } });
         res.clearCookie('token', CLEAR_COOKIE_OPTS);
         res.status(200).json(BaseResponseDTO.success('All sessions invalidated. Please log in again.'));
@@ -453,6 +460,8 @@ const resetPassword = async (req, res) => {
         $inc: { tokenVersion: 1 },
     });
     await Session.deleteMany({ user: record.user });
+    // A connector token outlives a session, so recovery has to cut it too.
+    await OAuthToken.updateMany({ user: record.user, revokedAt: null }, { revokedAt: new Date() });
 
     record.used = true;
     await record.save();
