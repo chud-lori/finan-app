@@ -1212,12 +1212,15 @@ const getExplainability = async (req, res) => {
             periodStart = now.clone().startOf('month').toDate();
             periodEnd   = now.clone().endOf('month').toDate();
         }
-        const prevStart = moment(periodStart).subtract(1, 'month').toDate();
+        // Subtracting months has to happen in the user's zone. moment(Date) lands
+        // in the server's zone, so a server west of the user stepped back into
+        // the wrong month and the baseline came from the month before the right one.
+        const prevStart = moment(periodStart).tz(userTz).subtract(1, 'month').toDate();
         // Trailing complete months (the current, possibly-partial month is excluded)
         // used to classify each category's volatility and to supply the month-over-
         // month baseline. Six months is enough to be stable while staying recent
         // enough to reflect the user's current life.
-        const historyStart = moment(periodStart).subtract(6, 'month').toDate();
+        const historyStart = moment(periodStart).tz(userTz).subtract(6, 'month').toDate();
 
         const [currentTxnsRaw, historyTxnsRaw, savingsNames, changesPaused] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: periodStart, $lte: periodEnd } }).lean(),
