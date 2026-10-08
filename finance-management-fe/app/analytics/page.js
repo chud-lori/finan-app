@@ -574,7 +574,7 @@ function AnalyticsPageInner() {
         .sort((a, b) => new Date(b.time) - new Date(a.time)),
     );
     setLoadingDrilldown(false);
-  }, [periodTxns, loadPeriodTxns, filters, groupOf, periodLabel, kind]);
+  }, [periodTxns, loadPeriodTxns, filters, groupOf, periodLabel, kind, setDrilldown, setDrilldownTxns, setLoadingDrilldown]);
 
   // Merchant row → that merchant's own transactions. The card hands back the
   // ids the server grouped, so the drill-down never re-derives a merchant key
@@ -592,7 +592,7 @@ function AnalyticsPageInner() {
         .sort((a, b) => new Date(b.time) - new Date(a.time)),
     );
     setLoadingDrilldown(false);
-  }, [periodTxns, loadPeriodTxns, periodLabel]);
+  }, [periodTxns, loadPeriodTxns, periodLabel, setDrilldown, setDrilldownTxns, setLoadingDrilldown]);
 
   // Yearly bar click → that month's transactions
   const handleBarClick = async (label) => {

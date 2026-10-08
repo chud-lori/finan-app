@@ -16,11 +16,16 @@ const addGoal = async (req, res) => {
             return res.status(400).json(BaseResponseDTO.error('Validation failed', errors));
         }
 
+        const savedAmount = dto.savedAmount ?? 0;
+
         const goal = await Goal.create({
             user: req.user.id,
             description: dto.description.trim(),
             price: dto.price,
             kind: dto.kind,
+            savedAmount,
+            // Same rule as updateGoal: a goal created already funded is achieved.
+            achieve: savedAmount >= dto.price ? 1 : 0,
         });
 
         return res.status(201).json(BaseResponseDTO.success('Goal created successfully', new AddGoalResponseDTO(goal)));

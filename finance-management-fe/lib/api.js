@@ -33,6 +33,9 @@ const handleResponse = async (res) => {
         if (!isPublic) {
           try { localStorage.removeItem('username'); } catch {}
           const next = `${p}${window.location.search}`;
+          // Hard navigation on purpose: a full document load drops the client state
+          // belonging to the dead session, where router.push() would keep it alive.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = `/login?next=${encodeURIComponent(next)}`;
         }
       }
@@ -232,8 +235,8 @@ export const importCsv = (files) => {
 
 // ── Goals ─────────────────────────────────────────────────────────────────────
 
-export const addGoal = (description, price, kind = 'general') =>
-  apiFetch('/api/goal/add', { method: 'POST', body: JSON.stringify({ description, price, kind }) });
+export const addGoal = (description, price, kind = 'general', savedAmount = 0) =>
+  apiFetch('/api/goal/add', { method: 'POST', body: JSON.stringify({ description, price, kind, savedAmount }) });
 
 export const getAllGoals = () =>
   apiFetch('/api/goal/goals');

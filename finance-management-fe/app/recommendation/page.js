@@ -627,6 +627,7 @@ function SavingsGoalTool() {
   const [monthly,     setMonthly]     = useState('');
   const [result,      setResult]      = useState(null);
 
+  const [newSaved, setNewSaved] = useState('');
   const [prefillBanner, setPrefillBanner] = useState(null);
 
   const reloadGoals = () =>
@@ -647,8 +648,8 @@ function SavingsGoalTool() {
     if (!newName.trim() || !price) { setAddError('Name and amount are required'); return; }
     setAdding(true); setAddError('');
     try {
-      await addGoal(newName.trim(), price);
-      setNewName(''); setNewAmount(''); setPrefillBanner(null);
+      await addGoal(newName.trim(), price, 'general', parseNum(newSaved));
+      setNewName(''); setNewAmount(''); setNewSaved(''); setPrefillBanner(null);
       reloadGoals();
     } catch (err) {
       setAddError(err.message || 'Failed to save goal');
@@ -673,6 +674,7 @@ function SavingsGoalTool() {
     if (!result) return;
     setNewName(result.name !== 'My Goal' ? result.name : '');
     setNewAmount(fmtInput(String(result.target)));
+    setNewSaved(result.current ? fmtInput(String(result.current)) : '');
     setPrefillBanner(result.name);
     document.getElementById('my-goals-card')?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -735,6 +737,7 @@ function SavingsGoalTool() {
             placeholder="e.g. New laptop, Holiday, Emergency fund"
             className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           <AmountInput label="" value={newAmount} onChange={setNewAmount} placeholder="Target amount" />
+          <AmountInput label="" value={newSaved} onChange={setNewSaved} placeholder="Already saved (optional)" />
           {addError && <p className="text-xs text-red-500">{addError}</p>}
           <button type="submit" disabled={adding}
             className="w-full py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
