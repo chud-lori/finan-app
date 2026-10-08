@@ -33,6 +33,10 @@ const handleResponse = async (res) => {
         if (!isPublic) {
           try { localStorage.removeItem('username'); } catch {}
           const next = `${p}${window.location.search}`;
+          // A hard navigation on purpose: the session is gone, and a full document
+          // load drops every bit of client state belonging to it. router.push()
+          // would keep the unauthenticated app's React tree alive.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = `/login?next=${encodeURIComponent(next)}`;
         }
       }
