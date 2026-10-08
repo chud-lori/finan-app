@@ -28,6 +28,7 @@ const nativeMl = require('../services/ml');
 const nativeMlRecurring = require('../services/ml/recurring');
 const { topMerchants } = require('../services/ml/merchants');
 const NetWorthSnapshot = require('../models/netWorthSnapshot.model');
+const NetWorth = require('../models/netWorth.model');
 const { buildRecap } = require('../services/ml/recap');
 const { computeRunway } = require('../services/ml/runway');
 const { computeHealth } = require('./gamification');
@@ -570,6 +571,10 @@ const getRecommendation = async (req, res, next) => {
         if (!monthlyBudget || monthlyBudget <= 0) {
             return res.status(400).json(BaseResponseDTO.error('Invalid monthly budget'));
         }
+        // Unchecked, a negative amount came back as "go ahead".
+        if (!Number.isFinite(desiredSpend) || desiredSpend < 0) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid spend amount'));
+        }
 
         const userTz = validTz(req.query.tz);
         const now = moment().tz(userTz);
@@ -579,18 +584,51 @@ const getRecommendation = async (req, res, next) => {
         const daysElapsed = Math.max(now.date(), 1);
         const daysRemaining = daysInMonth - daysElapsed;
 
-        // Fetch all expense transactions this month
-        const transactions = await Transaction.find({
-            user: req.user.id,
-            type: 'expense',
-            time: { $gte: startOfMonth, $lte: endOfMonth }
-        }).exec();
+        const [transactions, savingsNames, netWorth, balanceDoc] = await Promise.all([
+            Transaction.find({
+                user: req.user.id,
+                type: 'expense',
+                time: { $gte: startOfMonth, $lte: endOfMonth }
+            }).exec(),
+            getSavingsCategoryNames(req.user.id),
+            NetWorth.findOne({ user: req.user.id }).lean(),
+            Balance.findOne({ user: req.user.id }).select('amount').lean(),
+        ]);
 
-        const actualSpend = transactions.reduce((sum, t) => sum + t.amount, 0);
+        // Savings transfers are retained, not spent, so counting them inflates the burn rate.
+        const actualSpend = transactions
+            .filter(t => !savingsNames.has((t.category || '').toLowerCase()))
+            .reduce((sum, t) => sum + t.amount, 0);
         const dailyBurnRate = actualSpend / daysElapsed;
         const projectedTotal = Math.round(actualSpend + dailyBurnRate * daysRemaining);
         const budgetRemaining = Math.round(monthlyBudget - projectedTotal);
-        const canAfford = budgetRemaining >= desiredSpend ? 1 : 0;
+        const fitsBudget = budgetRemaining >= desiredSpend;
+
+        // Net worth's cash row is derived from Balance, so adding both double-counts.
+        const assets = netWorth?.assets || [];
+        const cashOnHand = netWorth
+            ? assets.filter(a => a.type === 'cash').reduce((sum, a) => sum + (a.amount || 0), 0)
+            : Math.max(Math.round(balanceDoc?.amount ?? 0), 0);
+        const emergencyFund = assets
+            .filter(a => a.type === 'emergency_fund')
+            .reduce((sum, a) => sum + (a.amount || 0), 0);
+
+        const coveredByCash = desiredSpend <= cashOnHand;
+        const coveredWithEmergency = !coveredByCash && desiredSpend <= cashOnHand + emergencyFund;
+        const knowsBalances = cashOnHand > 0 || emergencyFund > 0;
+
+        // Only the first verdict is about the budget. The rest ask whether the money exists.
+        let verdict;
+        if (fitsBudget) verdict = 'fits_budget';
+        else if (!knowsBalances) verdict = 'over_budget';
+        else if (coveredByCash) verdict = 'from_savings';
+        else if (coveredWithEmergency) verdict = 'uses_emergency_fund';
+        else verdict = 'not_enough';
+
+        const canAfford = (fitsBudget || coveredByCash) ? 1 : 0;
+
+        // A line drawn from a handful of days is noise; early spend is front-loaded by rent.
+        const projectionConfidence = daysElapsed >= 10 ? 'ok' : 'low';
 
         // Savings rate with and without the purchase
         const savingsRateWithout = monthlyBudget > 0
@@ -617,6 +655,11 @@ const getRecommendation = async (req, res, next) => {
             savingsRateWith,
             velocityStatus,
             canAfford,
+            verdict,
+            cashOnHand,
+            emergencyFund,
+            knowsBalances,
+            projectionConfidence,
         });
 
         res.status(200).json(BaseResponseDTO.success('Budget recommendation', responseDTO));

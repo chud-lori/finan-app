@@ -6,6 +6,7 @@ const User = require('../models/user.model');
 const Balance = require('../models/balance.model');
 const Transaction = require('../models/transaction.model');
 const Category = require('../models/category.model');
+const NetWorth = require('../models/netWorth.model');
 
 chai.use(chaiHttp);
 
@@ -343,6 +344,82 @@ describe('Transaction Integration Tests', () => {
                 time: weekAgo,
                 transaction_timezone: 'Asia/Jakarta'
             });
+        });
+
+        it('rejects a spend amount that is negative or not a number', async () => {
+            for (const spend of ['-500000', 'abc']) {
+                const res = await chai.request(server)
+                    .get(`/api/transaction/recommendation/10000000/${spend}`)
+                    .set('Cookie', authCookie);
+                expect(res).to.have.status(400);
+            }
+        });
+
+        it('says the purchase comes from savings when cash covers what the budget will not', async () => {
+            await NetWorth.create({
+                user: userId,
+                assets: [{ label: 'Savings', amount: 50000000, type: 'cash' }],
+                liabilities: [],
+            });
+
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/1000000/20000000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.verdict).to.equal('from_savings');
+            expect(res.body.data.cashOnHand).to.equal(50000000);
+            expect(res.body.data.canAfford).to.equal(1);
+        });
+
+        it('names the emergency fund when only the safety net would cover it', async () => {
+            await NetWorth.create({
+                user: userId,
+                assets: [
+                    { label: 'Savings', amount: 1000000, type: 'cash' },
+                    { label: 'Safety net', amount: 30000000, type: 'emergency_fund' },
+                ],
+                liabilities: [],
+            });
+
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/1000000/20000000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.verdict).to.equal('uses_emergency_fund');
+            expect(res.body.data.canAfford).to.equal(0);
+        });
+
+        it('falls back to the budget verdict when no balances are recorded', async () => {
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/1000000/20000000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.verdict).to.equal('over_budget');
+            expect(res.body.data.knowsBalances).to.equal(false);
+        });
+
+        it('leaves savings transfers out of the burn rate', async () => {
+            await Category.create({ user: userId, name: 'reksadana', type: 'expense', group: 'savings' });
+            await Transaction.create({
+                user: userId, description: 'Monthly transfer', amount: 5000000,
+                category: 'reksadana', type: 'expense', currency: 'IDR',
+                time: new Date(), transaction_timezone: 'Asia/Jakarta',
+            });
+
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/10000000/500000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.actualSpend).to.equal(200000);
+        });
+
+        it('calls the projection rough while there is little of the month to go on', async () => {
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/10000000/500000')
+                .set('Cookie', authCookie);
+
+            const expected = new Date().getDate() >= 10 ? 'ok' : 'low';
+            expect(res.body.data.projectionConfidence).to.equal(expected);
         });
 
         it('should return budget recommendation', async () => {

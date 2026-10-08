@@ -125,20 +125,39 @@ function AffordTool({ savedBudget }) {
 
   const budget      = parseNum(monthly);
   const canAfford   = result?.canAfford === 1;
-  const alreadyOver = result && result.actualSpend >= budget;
-  const projectedOver = result && result.budgetRemaining < 0;
   const velocity    = result ? (VELOCITY_CONFIG[result.velocityStatus] ?? VELOCITY_CONFIG.on_track) : null;
+
+  // Only the first is about the budget. The rest answer whether the money exists.
+  const VERDICTS = {
+    fits_budget:         { tone: 'good',  icon: '✅', title: 'Go ahead, it fits this month' },
+    from_savings:        { tone: 'mixed', icon: '💰', title: 'Yes, but it comes out of savings' },
+    uses_emergency_fund: { tone: 'warn',  icon: '🛡️', title: 'Only by dipping into your emergency fund' },
+    not_enough:          { tone: 'bad',   icon: '❌', title: 'Not enough set aside for this' },
+    over_budget:         { tone: 'warn',  icon: '⚠️', title: 'Over budget for this month' },
+  };
+  const TONE = {
+    good:  { border: 'border-emerald-300 bg-emerald-50', head: 'text-emerald-700', body: 'text-emerald-600' },
+    mixed: { border: 'border-teal-300 bg-teal-50',       head: 'text-teal-700',    body: 'text-teal-600'    },
+    warn:  { border: 'border-amber-300 bg-amber-50',     head: 'text-amber-700',   body: 'text-amber-600'   },
+    bad:   { border: 'border-rose-300 bg-rose-50',       head: 'text-rose-700',    body: 'text-rose-600'    },
+  };
+
+  const verdict = result ? (VERDICTS[result.verdict] ?? VERDICTS.over_budget) : null;
+  const tone    = verdict ? TONE[verdict.tone] : null;
 
   let verdictSub = '';
   if (result) {
-    if (canAfford) {
+    const overBy = formatAmount(Math.abs(result.budgetRemaining - result.desiredSpend));
+    if (result.verdict === 'fits_budget') {
       verdictSub = `You'll have ${formatAmount(result.budgetRemaining - result.desiredSpend)} projected remaining after this`;
-    } else if (alreadyOver) {
-      verdictSub = `You've already spent ${formatAmount(result.actualSpend - budget)} over budget — adding this makes it worse`;
-    } else if (projectedOver) {
-      verdictSub = `Projected ${formatAmount(Math.abs(result.budgetRemaining))} over budget — plus ${formatAmount(result.desiredSpend)} for this purchase`;
+    } else if (result.verdict === 'from_savings') {
+      verdictSub = `${overBy} over this month's budget, but you hold ${formatAmount(result.cashOnHand)} in cash`;
+    } else if (result.verdict === 'uses_emergency_fund') {
+      verdictSub = `Your ${formatAmount(result.cashOnHand)} in cash doesn't cover it. The rest would come from your ${formatAmount(result.emergencyFund)} safety net`;
+    } else if (result.verdict === 'not_enough') {
+      verdictSub = `You hold ${formatAmount(result.cashOnHand + result.emergencyFund)} against a ${formatAmount(result.desiredSpend)} purchase`;
     } else {
-      verdictSub = `This purchase would put you ${formatAmount(Math.abs(result.budgetRemaining - result.desiredSpend))} over budget`;
+      verdictSub = `${overBy} over budget. Add your balances in Net Worth and this can tell you whether you have the money`;
     }
   }
 
@@ -158,12 +177,10 @@ function AffordTool({ savedBudget }) {
 
       {result && (
         <div className="space-y-4">
-          <div className={`rounded-2xl border-2 p-5 text-center ${canAfford ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'}`}>
-            <div className="text-3xl mb-2">{canAfford ? '✅' : '❌'}</div>
-            <h3 className={`font-bold text-lg ${canAfford ? 'text-emerald-700' : 'text-rose-700'}`}>
-              {canAfford ? 'Go ahead — you can afford it' : alreadyOver ? 'Already over budget' : 'Hold off — budget is tight'}
-            </h3>
-            <p className={`text-sm mt-1 ${canAfford ? 'text-emerald-600' : 'text-rose-600'}`}>{verdictSub}</p>
+          <div className={`rounded-2xl border-2 p-5 text-center ${tone.border}`}>
+            <div className="text-3xl mb-2">{verdict.icon}</div>
+            <h3 className={`font-bold text-lg ${tone.head}`}>{verdict.title}</h3>
+            <p className={`text-sm mt-1 ${tone.body}`}>{verdictSub}</p>
           </div>
 
           <ToolCard>
@@ -180,7 +197,9 @@ function AffordTool({ savedBudget }) {
               sub={`${result.daysElapsed} day${result.daysElapsed !== 1 ? 's' : ''} elapsed`} />
             <StatRow label="Daily burn rate" value={`${formatAmount(result.dailyBurnRate)} / day`} />
             <StatRow label="Projected month total" value={formatAmount(result.projectedTotal)}
-              sub={`${result.daysRemaining} days remaining`}
+              sub={result.projectionConfidence === 'low'
+                ? `Rough: only ${result.daysElapsed} days to go on`
+                : `${result.daysRemaining} days remaining`}
               valueClass={result.projectedTotal > budget ? 'text-rose-600' : 'text-gray-900'} />
             <StatRow label="Projected budget left" value={formatAmount(result.budgetRemaining)}
               valueClass={result.budgetRemaining < 0 ? 'text-rose-600' : 'text-emerald-600'} />
@@ -209,6 +228,17 @@ function AffordTool({ savedBudget }) {
               </p>
             )}
           </ToolCard>
+
+          {result.knowsBalances && (
+            <ToolCard>
+              <h4 className="text-sm font-semibold text-gray-700 mb-4">What you have to spend</h4>
+              <StatRow label="Cash on hand" value={formatAmount(result.cashOnHand)} />
+              {result.emergencyFund > 0 && (
+                <StatRow label="Emergency fund" value={formatAmount(result.emergencyFund)}
+                  sub="Kept separate. Spending it is a different decision" />
+              )}
+            </ToolCard>
+          )}
 
           <div className={`rounded-2xl border border-gray-200 p-4 flex items-center gap-3 ${velocity.bg}`}>
             <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${velocity.dot}`} />
