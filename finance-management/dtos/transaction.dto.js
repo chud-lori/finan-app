@@ -127,6 +127,11 @@ class RecommendationResponseDTO {
         this.savingsRateWith = data.savingsRateWith;
         this.velocityStatus = data.velocityStatus;
         this.canAfford = data.canAfford;
+        this.verdict = data.verdict;
+        this.cashOnHand = data.cashOnHand;
+        this.emergencyFund = data.emergencyFund;
+        this.knowsBalances = data.knowsBalances;
+        this.projectionConfidence = data.projectionConfidence;
         // backward compat
         this.resultRecommendation = data.canAfford;
     }
