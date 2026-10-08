@@ -71,9 +71,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test
-      # Gates on what ships. Dev-only advisories are reported below but do not
-      # fail the build: `braces` is reachable only through eslint-config-next
-      # and its advisory covers every published version, so no bump clears it.
+      # Gates on what ships. braces reaches us only through eslint-config-next and
+      # its advisory covers every published version, so no bump can clear it.
       - name: npm audit (high, production deps)
         run: |
           for attempt in 1 2 3; do

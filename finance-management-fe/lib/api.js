@@ -33,9 +33,8 @@ const handleResponse = async (res) => {
         if (!isPublic) {
           try { localStorage.removeItem('username'); } catch {}
           const next = `${p}${window.location.search}`;
-          // A hard navigation on purpose: the session is gone, and a full document
-          // load drops every bit of client state belonging to it. router.push()
-          // would keep the unauthenticated app's React tree alive.
+          // Hard navigation on purpose: a full document load drops the client state
+          // belonging to the dead session, where router.push() would keep it alive.
           // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = `/login?next=${encodeURIComponent(next)}`;
         }
