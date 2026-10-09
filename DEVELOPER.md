@@ -1804,7 +1804,7 @@ Two workflows in `.github/workflows/`:
 
 **`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which subtree changed. Backend tests (`bun run test`) only run when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed. CI installs Bun via `oven-sh/setup-bun@v1`.
 
-**`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds changed images. Backend and frontend build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 300s and recreates the labelled containers, provided its GHCR credentials resolve (see [Watchtower auto-deploy](#watchtower-auto-deploy)).
+**`cd.yml`** runs on push to `main`. Same path filtering, so only changed images are rebuilt. Backend and frontend build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 300s and recreates the labelled containers, provided its GHCR credentials resolve (see [Watchtower auto-deploy](#watchtower-auto-deploy)).
 
 **Important:** Changing `docker-compose.yml` or other root-level files does **not** trigger an image rebuild — those changes require a manual `git pull` + `docker compose up -d` on the server.
 
