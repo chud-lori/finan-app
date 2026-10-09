@@ -653,7 +653,7 @@ worthless, because the same rule re-fires with new numbers next month.
 |-------|------|-------------|-------|
 | `user` | ObjectId | ref: User, required | |
 | `kind` | String | required, enum | the six category-scoped `kind`s `lib/insightFeed.js` emits: `category-concentration`, `category-fixed-base`, `category-change`, `category-one-off`, `category-frequency`, `category-top-expense` |
-| `subject` | String | required, ≤120 chars, `sanitizeText` + lowercased + trimmed | the category the insight is about. 120 rather than 64 because category names are user-typed and effectively unbounded (`models/category.model.js` uses `max`, which Mongoose ignores on Strings) — a cap below what a category can be turns the dismiss button into a dead control |
+| `subject` | String | required, ≤120 chars, `sanitizeText` + lowercased + trimmed | the category the insight is about. 120 rather than 64 because it has to clear the 100-char cap on `Category.name`; a cap below what a category can be turns the dismiss button into a dead control |
 | `reason` | String | required, enum: `expected \| not_useful` | closed enum, so the reason is never free text to sanitise |
 | `expiresAt` | Date | required, TTL index | when the insight comes back |
 | `createdAt` / `updatedAt` | Date | auto | `updatedAt` is surfaced as `dismissedAt` |
@@ -1752,6 +1752,22 @@ Use atomic `$inc` — never read-modify-write. Balance is a derived value. `POST
 ### Input sanitization
 
 `sanitizeText()` in `transaction.dto.js` strips HTML tags (`/<[^>]*>/g`) and null bytes (`/\0/g`) from all `description` and `category` fields before they reach the database. Prevents stored XSS.
+
+### String length caps
+
+Mongoose's `max` is a Number and Date validator; on a String it is silently ignored, so the schemas that carried `max: 100` had no cap at all and the effective bound was the 100kb body limit. The caps are `maxlength` on the schema plus a check in the DTO:
+
+| Field | Cap | Enforced in |
+|-------|-----|-------------|
+| `User.name` | 100 | `dtos/auth.dto.js` (register), `controllers/profile.js#updateIdentity` (update) |
+| `User.username` | 100 | schema only; `updateIdentity` applies a stricter `^[a-z0-9_]{3,30}$` on update |
+| `Category.name` | 100 | `dtos/transaction.dto.js` (created via a transaction), `controllers/category.js#renameCategory` |
+| `Transaction.description` | 500 | `dtos/transaction.dto.js`, `controllers/transaction.js#patchTransaction` |
+| `Transaction.category` | 100 | same as `Category.name`, the field stores the resolved category name |
+
+`maxlength` only runs on `save()` and on an update passing `runValidators`. Every update path here uses `findOneAndUpdate`, so a cap that must hold on an edit is checked in the handler as well, not only on the schema.
+
+`User.password` carries no cap: the stored value is a bcrypt hash, and the 8-char minimum on the plaintext is enforced where the plaintext exists (`helpers/validator.js` for register, `controllers/auth.js` for change-password and reset).
 
 ### Rate limiting
 

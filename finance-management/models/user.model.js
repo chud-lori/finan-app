@@ -5,13 +5,13 @@ const UserSchema = new Schema({
     name: {
         type: String, 
         required: true, 
-        max: 100
+        maxlength: 100
     },
     username: {
         type: String,
         required: true,
         unique: true,
-        max: 100
+        maxlength: 100
     },
     email: {
         type: String, 
@@ -19,8 +19,7 @@ const UserSchema = new Schema({
         unique: true
     },
     password: {
-        type: String,
-        min: 8
+        type: String
         // not required — Google OAuth users have no password
     },
     googleId: {

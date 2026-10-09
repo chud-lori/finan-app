@@ -1,5 +1,8 @@
 const { BaseRequestDTO, BaseResponseDTO } = require('./base.dto');
 
+// The bound controllers/profile.js#updateIdentity already applies, so creation and update agree.
+const MAX_NAME_LENGTH = 100;
+
 class RegisterRequestDTO extends BaseRequestDTO {
     constructor(data) {
         super(data);
@@ -13,6 +16,8 @@ class RegisterRequestDTO extends BaseRequestDTO {
         const errors = [];
         if (!this.name || typeof this.name !== 'string') {
             errors.push('Name is required and must be a string');
+        } else if (this.name.length > MAX_NAME_LENGTH) {
+            errors.push(`Name must be ${MAX_NAME_LENGTH} characters or fewer`);
         }
         if (!this.username || typeof this.username !== 'string') {
             errors.push('Username is required and must be a string');
