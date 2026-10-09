@@ -5,7 +5,8 @@ class RegisterRequestDTO extends BaseRequestDTO {
         super(data);
         this.name = data.name;
         this.username = data.username;
-        this.email = data.email;
+        // Every lookup path lowercases, so the stored address has to be lowercase too.
+        this.email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : data.email;
         this.password = data.password;
     }
 

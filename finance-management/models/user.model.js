@@ -16,7 +16,10 @@ const UserSchema = new Schema({
     email: {
         type: String, 
         required: true, 
-        unique: true
+        unique: true,
+        // Covers the Google write path and the query filters, which Mongoose runs setters on too.
+        lowercase: true,
+        trim: true
     },
     password: {
         type: String,
