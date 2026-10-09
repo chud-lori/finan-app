@@ -131,6 +131,7 @@ function AffordTool({ savedBudget }) {
   const VERDICTS = {
     fits_budget:         { tone: 'good',  icon: '✅', title: 'Go ahead, it fits this month' },
     from_savings:        { tone: 'mixed', icon: '💰', title: 'Yes, but it comes out of savings' },
+    from_investments:    { tone: 'mixed', icon: '📈', title: 'Yes, by drawing on your investments' },
     uses_emergency_fund: { tone: 'warn',  icon: '🛡️', title: 'Only by dipping into your emergency fund' },
     not_enough:          { tone: 'bad',   icon: '❌', title: 'Not enough set aside for this' },
     over_budget:         { tone: 'warn',  icon: '⚠️', title: 'Over budget for this month' },
@@ -152,10 +153,15 @@ function AffordTool({ savedBudget }) {
       verdictSub = `You'll have ${formatAmount(result.budgetRemaining - result.desiredSpend)} projected remaining after this`;
     } else if (result.verdict === 'from_savings') {
       verdictSub = `${overBy} over this month's budget, but you hold ${formatAmount(result.cashOnHand)} in cash`;
+    } else if (result.verdict === 'from_investments') {
+      verdictSub = `Your ${formatAmount(result.cashOnHand)} in cash doesn't cover it, but your ${formatAmount(result.investments)} in investments does, without touching your safety net`;
     } else if (result.verdict === 'uses_emergency_fund') {
-      verdictSub = `Your ${formatAmount(result.cashOnHand)} in cash doesn't cover it. The rest would come from your ${formatAmount(result.emergencyFund)} safety net`;
+      const liquid = result.investments > 0
+        ? `${formatAmount(result.cashOnHand + result.investments)} in cash and investments`
+        : `${formatAmount(result.cashOnHand)} in cash`;
+      verdictSub = `Your ${liquid} doesn't cover it. The rest would come from your ${formatAmount(result.emergencyFund)} safety net`;
     } else if (result.verdict === 'not_enough') {
-      verdictSub = `You hold ${formatAmount(result.cashOnHand + result.emergencyFund)} against a ${formatAmount(result.desiredSpend)} purchase`;
+      verdictSub = `You hold ${formatAmount(result.cashOnHand + result.investments + result.emergencyFund)} against a ${formatAmount(result.desiredSpend)} purchase`;
     } else {
       verdictSub = `${overBy} over budget. Add your balances in Net Worth and this can tell you whether you have the money`;
     }
@@ -233,6 +239,10 @@ function AffordTool({ savedBudget }) {
             <ToolCard>
               <h4 className="text-sm font-semibold text-gray-700 mb-4">What you have to spend</h4>
               <StatRow label="Cash on hand" value={formatAmount(result.cashOnHand)} />
+              {result.investments > 0 && (
+                <StatRow label="Investments" value={formatAmount(result.investments)}
+                  sub="Spendable, but days away rather than today" />
+              )}
               {result.emergencyFund > 0 && (
                 <StatRow label="Emergency fund" value={formatAmount(result.emergencyFund)}
                   sub="Kept separate. Spending it is a different decision" />

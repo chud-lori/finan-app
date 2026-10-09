@@ -604,28 +604,36 @@ const getRecommendation = async (req, res, next) => {
         const budgetRemaining = Math.round(monthlyBudget - projectedTotal);
         const fitsBudget = budgetRemaining >= desiredSpend;
 
-        // Net worth's cash row is derived from Balance, so adding both double-counts.
+        // A net worth cash row is seeded from Balance, so the two are alternatives and never summed.
         const assets = netWorth?.assets || [];
-        const cashOnHand = netWorth
-            ? assets.filter(a => a.type === 'cash').reduce((sum, a) => sum + (a.amount || 0), 0)
+        const cashRows = assets.filter(a => a.type === 'cash');
+        const cashOnHand = cashRows.length
+            ? cashRows.reduce((sum, a) => sum + (a.amount || 0), 0)
             : Math.max(Math.round(balanceDoc?.amount ?? 0), 0);
+        // Property, vehicle and receivable rows stay out: none turns into money on the timescale of a purchase decision.
+        const investments = assets
+            .filter(a => a.type === 'investment')
+            .reduce((sum, a) => sum + (a.amount || 0), 0);
         const emergencyFund = assets
             .filter(a => a.type === 'emergency_fund')
             .reduce((sum, a) => sum + (a.amount || 0), 0);
 
         const coveredByCash = desiredSpend <= cashOnHand;
-        const coveredWithEmergency = !coveredByCash && desiredSpend <= cashOnHand + emergencyFund;
-        const knowsBalances = cashOnHand > 0 || emergencyFund > 0;
+        const coveredByInvestments = !coveredByCash && desiredSpend <= cashOnHand + investments;
+        const coveredWithEmergency = !coveredByCash && !coveredByInvestments
+            && desiredSpend <= cashOnHand + investments + emergencyFund;
+        const knowsBalances = cashOnHand > 0 || investments > 0 || emergencyFund > 0;
 
         // Only the first verdict is about the budget. The rest ask whether the money exists.
         let verdict;
         if (fitsBudget) verdict = 'fits_budget';
         else if (!knowsBalances) verdict = 'over_budget';
         else if (coveredByCash) verdict = 'from_savings';
+        else if (coveredByInvestments) verdict = 'from_investments';
         else if (coveredWithEmergency) verdict = 'uses_emergency_fund';
         else verdict = 'not_enough';
 
-        const canAfford = (fitsBudget || coveredByCash) ? 1 : 0;
+        const canAfford = (fitsBudget || coveredByCash || coveredByInvestments) ? 1 : 0;
 
         // A line drawn from a handful of days is noise; early spend is front-loaded by rent.
         const projectionConfidence = daysElapsed >= 10 ? 'ok' : 'low';
@@ -657,6 +665,7 @@ const getRecommendation = async (req, res, next) => {
             canAfford,
             verdict,
             cashOnHand,
+            investments,
             emergencyFund,
             knowsBalances,
             projectionConfidence,

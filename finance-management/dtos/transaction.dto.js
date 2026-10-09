@@ -129,6 +129,7 @@ class RecommendationResponseDTO {
         this.canAfford = data.canAfford;
         this.verdict = data.verdict;
         this.cashOnHand = data.cashOnHand;
+        this.investments = data.investments;
         this.emergencyFund = data.emergencyFund;
         this.knowsBalances = data.knowsBalances;
         this.projectionConfidence = data.projectionConfidence;

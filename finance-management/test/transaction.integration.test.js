@@ -389,6 +389,95 @@ describe('Transaction Integration Tests', () => {
             expect(res.body.data.canAfford).to.equal(0);
         });
 
+        it('reads cash from Balance when the net worth records no cash row', async () => {
+            await Balance.updateOne({ user: userId }, { $set: { amount: 50000000 } });
+            await NetWorth.create({
+                user: userId,
+                assets: [{ label: 'Safety net', amount: 5000000, type: 'emergency_fund' }],
+                liabilities: [],
+            });
+
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/1000000/20000000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.cashOnHand).to.equal(50000000);
+            expect(res.body.data.verdict).to.equal('from_savings');
+        });
+
+        it('does not add Balance to a net worth that already has a cash row', async () => {
+            await Balance.updateOne({ user: userId }, { $set: { amount: 50000000 } });
+            await NetWorth.create({
+                user: userId,
+                assets: [{ label: 'Cash balance', amount: 8000000, type: 'cash' }],
+                liabilities: [],
+            });
+
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/1000000/20000000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.cashOnHand).to.equal(8000000);
+            expect(res.body.data.verdict).to.equal('not_enough');
+        });
+
+        it('spends investments before the emergency fund', async () => {
+            await NetWorth.create({
+                user: userId,
+                assets: [
+                    { label: 'Savings', amount: 1000000, type: 'cash' },
+                    { label: 'Mutual funds', amount: 30000000, type: 'investment' },
+                    { label: 'Safety net', amount: 30000000, type: 'emergency_fund' },
+                ],
+                liabilities: [],
+            });
+
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/1000000/20000000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.verdict).to.equal('from_investments');
+            expect(res.body.data.investments).to.equal(30000000);
+            expect(res.body.data.canAfford).to.equal(1);
+        });
+
+        it('still reaches the emergency fund when investments fall short', async () => {
+            await NetWorth.create({
+                user: userId,
+                assets: [
+                    { label: 'Savings', amount: 1000000, type: 'cash' },
+                    { label: 'Mutual funds', amount: 2000000, type: 'investment' },
+                    { label: 'Safety net', amount: 30000000, type: 'emergency_fund' },
+                ],
+                liabilities: [],
+            });
+
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/1000000/20000000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.verdict).to.equal('uses_emergency_fund');
+            expect(res.body.data.canAfford).to.equal(0);
+        });
+
+        it('does not count a property as money available for a purchase', async () => {
+            await NetWorth.create({
+                user: userId,
+                assets: [
+                    { label: 'Savings', amount: 1000000, type: 'cash' },
+                    { label: 'House', amount: 500000000, type: 'property' },
+                ],
+                liabilities: [],
+            });
+
+            const res = await chai.request(server)
+                .get('/api/transaction/recommendation/1000000/20000000')
+                .set('Cookie', authCookie);
+
+            expect(res.body.data.verdict).to.equal('not_enough');
+            expect(res.body.data.investments).to.equal(0);
+        });
+
         it('falls back to the budget verdict when no balances are recorded', async () => {
             const res = await chai.request(server)
                 .get('/api/transaction/recommendation/1000000/20000000')
