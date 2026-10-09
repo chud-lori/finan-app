@@ -1,0 +1,11 @@
+[Unit]
+Description=finan-app MongoDB backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=RCLONE_CONFIG=/root/.config/rclone/rclone.conf
+EnvironmentFile=-/etc/finan-backup.env
+ExecStart=/usr/local/sbin/finan-backup-mongo
+TimeoutStartSec=30min

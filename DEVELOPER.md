@@ -62,6 +62,10 @@ finan-app/                          ← monorepo root
 ├── README.md                       ← product overview
 ├── DEVELOPER.md                    ← this file
 │
+├── scripts/
+│   ├── backup.sh                   ← one-shot migration tarball (mongodump + redacted .env)
+│   └── mongo-backup/               ← daily mongodump: host script + systemd service/timer
+│
 ├── finance-management/             ← Backend (Bun + Express.js + MongoDB)
 │   ├── app.js                      ← Express entry point (CORS, Helmet, Sentry, routes)
 │   ├── Dockerfile
@@ -1239,6 +1243,104 @@ The script uses `mongodump`'s live archive stream — no container downtime need
 ```
 
 The tarball is the only thing that needs to leave the host. Move it to encrypted storage (S3 with KMS, an encrypted external drive, your laptop's FileVault disk, etc.) — the redacted `.env` is safe, but the database dump still contains user PII and transaction history.
+
+### Daily automated backup (systemd timer)
+
+`scripts/mongo-backup/` holds a host script plus a systemd service and timer that dump the `finan` database every day at 03:00 WIB. It covers the database only. Use `scripts/backup.sh` when you also need the `.env` and compose file for a migration.
+
+Each run:
+
+- runs `mongodump --archive --gzip` inside `finan-mongo` and writes `/var/backups/finan/finan-YYYYMMDD-HHMMSSZ.archive.gz` (directory and files are root-only)
+- writes to a `.partial` name and renames it only after the dump succeeded, is non-empty and passes `gzip -t`. A failed or empty dump exits non-zero and leaves no file behind
+- deletes local dumps older than `BACKUP_RETENTION_DAYS`, but only after a good dump, so a broken run never eats the last good backups
+- copies the new dump off-site with `rclone copy` when `BACKUP_RCLONE_REMOTE` is set, otherwise logs a warning that the backup exists on this host only
+- posts to `BACKUP_DISCORD_WEBHOOK` when anything above fails, including a systemd timeout kill
+
+`Persistent=true` on the timer means a run missed while the host was down fires at the next boot.
+
+Settings live in `/etc/finan-backup.env` (template: `scripts/mongo-backup/backup.env.example`). All are optional:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MONGO_CONTAINER` | `finan-mongo` | Container that runs mongod |
+| `MONGO_DB` | `finan` | Database to dump |
+| `MONGO_BACKUP_URI` | empty (no auth) | Connection string once Mongo has auth, e.g. `mongodb://backup:<password>@localhost:27017/?authSource=admin&directConnection=true`. No database in the path; percent-encode special characters in the password. It reaches mongodump through a config file on stdin, so it never appears in `ps` or the journal |
+| `BACKUP_DIR` | `/var/backups/finan` | Where dumps land on the host |
+| `BACKUP_RETENTION_DAYS` | `14` | Local dumps older than this many days are deleted |
+| `BACKUP_RCLONE_REMOTE` | empty (local only) | rclone destination, e.g. `r2:finan-backups` |
+| `BACKUP_DISCORD_WEBHOOK` | empty (no alert) | Discord webhook URL that receives a message on failure. Never logged |
+
+#### Install on the server
+
+The files are not deployed by CD. Copy them from a checkout:
+
+```bash
+# from your laptop, in the repo root
+scp scripts/mongo-backup/{backup-mongo.sh,finan-backup.service,finan-backup.timer,backup.env.example} ubuntu@your-vps:/tmp/
+```
+
+```bash
+# on the server
+sudo install -m 755 /tmp/backup-mongo.sh /usr/local/sbin/finan-backup-mongo
+sudo install -m 644 /tmp/finan-backup.service /tmp/finan-backup.timer /etc/systemd/system/
+sudo install -m 600 /tmp/backup.env.example /etc/finan-backup.env   # then edit to set the webhook / remote
+rm /tmp/backup-mongo.sh /tmp/finan-backup.service /tmp/finan-backup.timer /tmp/backup.env.example
+sudo systemctl daemon-reload
+sudo systemctl enable --now finan-backup.timer
+```
+
+To update later, repeat the `scp` and the first two `install` lines, then `sudo systemctl daemon-reload`.
+
+#### Run it manually and verify
+
+```bash
+sudo systemctl start finan-backup.service          # blocks until the dump finishes
+systemctl status finan-backup.service --no-pager   # expect status=0/SUCCESS
+journalctl -u finan-backup -n 30 --no-pager
+systemctl list-timers finan-backup.timer           # NEXT should be 03:00 WIB
+sudo ls -lh /var/backups/finan/
+```
+
+Check that the newest dump is readable and lists the expected collections. `--dryRun` writes nothing:
+
+```bash
+F=$(sudo sh -c 'ls -t /var/backups/finan/finan-*.archive.gz | head -1')
+sudo gzip -t "$F" && echo gzip ok
+sudo cat "$F" | sudo docker exec -i finan-mongo mongorestore --archive --gzip --dryRun --verbose 2>&1 | grep 'found collection'
+```
+
+#### Restore
+
+`--drop` replaces every `finan.*` collection with the dump's contents. Stop the backend first so nothing writes mid-restore:
+
+```bash
+F=/var/backups/finan/finan-YYYYMMDD-HHMMSSZ.archive.gz
+cd /opt/finan-app && sudo docker compose stop backend
+sudo cat "$F" | sudo docker exec -i finan-mongo mongorestore --archive --gzip --drop --nsInclude='finan.*'
+sudo docker compose start backend
+```
+
+To restore an off-site copy, fetch it first with `sudo rclone copy r2:finan-backups/finan-YYYYMMDD-HHMMSSZ.archive.gz /var/backups/finan/` and use the same commands.
+
+#### Set up off-site copies to Cloudflare R2 (later)
+
+1. In the Cloudflare dashboard, create an R2 bucket (e.g. `finan-backups`), then an R2 API token with **Object Read & Write** scoped to that bucket. Note the access key ID, the secret, and the S3 endpoint `https://<account_id>.r2.cloudflarestorage.com`.
+2. On the server, install rclone and create the remote interactively, so the secret stays out of shell history:
+
+   ```bash
+   sudo apt-get install -y rclone
+   sudo rclone config
+   # n (new remote) → name: r2 → storage: s3 → provider: Cloudflare
+   # env_auth: false → access_key_id / secret_access_key from step 1
+   # region: auto → endpoint: https://<account_id>.r2.cloudflarestorage.com → accept the rest
+   sudo rclone config update r2 no_check_bucket true   # a bucket-scoped token cannot create buckets
+   sudo rclone ls r2:finan-backups                      # no error = credentials work
+   ```
+
+   This writes `/root/.config/rclone/rclone.conf`, which is where `finan-backup.service` points `RCLONE_CONFIG`.
+3. Set `BACKUP_RCLONE_REMOTE=r2:finan-backups` in `/etc/finan-backup.env`, run `sudo systemctl start finan-backup.service`, and confirm the file shows in `sudo rclone ls r2:finan-backups`.
+
+The script never deletes anything off-site. Add an object lifecycle rule on the bucket (e.g. delete after 90 days) to bound its size.
 
 ---
 
