@@ -1470,7 +1470,7 @@ docker exec finan-be bun scripts/sendMonthlyReport.js --to=you@example.com --for
 | POST | `/api/transaction/category` | — | ✓ | Seed default categories (idempotent) |
 | GET | `/api/transaction/date/:date` | — | ✓ | Transactions on a specific date; `YYYY-MM-DD` |
 | GET | `/api/transaction/range/:start/:end` | 60/min | ✓ | Transactions in date range (`YYYY-MM-DD`) with income/expense summary. Unpaginated — the whole range comes back, which is what the spending calendar needs. Query: `?tz=IANA` bounds the range in the user's zone (defaults to UTC) |
-| GET | `/api/transaction/recommendation/:monthly/:spend` | — | ✓ | Budget affordability check (legacy calculator) |
+| GET | `/api/transaction/recommendation/:monthly/:spend` | 30/min per user | ✓ | Affordability verdict. Reads `Balance` and `NetWorth` alongside the budget and returns `verdict` as one of `fits_budget`, `from_savings`, `from_investments`, `uses_emergency_fund`, `not_enough`, or `over_budget` when no balances are recorded. Spendable money is cash, then investments, then the emergency fund; property, vehicle and receivable are excluded. Response also carries `cashOnHand`, `investments`, `emergencyFund`, `knowsBalances` and `projectionConfidence`. `canAfford` is true for the first three verdicts, so read `verdict` when the distinction matters |
 
 **CSV import column mapping (case-insensitive):**
 
