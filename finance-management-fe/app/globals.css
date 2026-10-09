@@ -310,3 +310,12 @@ body {
 .dark .bar-one-off {
   background-image: repeating-linear-gradient(90deg, #0d9488 0 4px, #0f766e 4px 8px);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
