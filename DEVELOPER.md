@@ -48,7 +48,7 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
 | Frontend testing | Playwright E2E |
 | Smart insights | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, median/MAD anomaly detector, linear-regression forecast, gated recurring/subscription detector |
 | Container | Docker + Docker Compose |
-| CI/CD | GitHub Actions → GHCR → Watchtower (auto-deploy) |
+| CI/CD | GitHub Actions → GHCR → SSH deploy |
 
 ---
 
@@ -1193,28 +1193,23 @@ make down    # stop everything
 | `finan-mongo-init` | `mongo:7` | — | — | — (exits after init) |
 | `finan-be` | `ghcr.io/.../finan-app-backend` | 3000 | **3001** | 512 MB |
 | `finan-fe` | `ghcr.io/.../finan-app-frontend` | 3000 | **3000** | 256 MB |
-| `finan-watchtower` | `containrrr/watchtower` | — | — | 64 MB |
 
 MongoDB is capped at 512 MB WiredTiger cache (`--wiredTigerCacheSizeGB 0.5`) to prevent it consuming all RAM on a small VPS.
 
-### Watchtower auto-deploy
+### Deploying
 
-Watchtower polls GHCR every 300 seconds (`WATCHTOWER_POLL_INTERVAL`). Only containers with label `com.centurylinklabs.watchtower.enable=true` are watched (backend, frontend). On a new `:latest` image, Watchtower pulls and recreates the container in-place.
+CD deploys over SSH after the test and lint gates pass, pulling the new `:latest` images and recreating the two app containers. See [CI/CD pipeline](#cicd-pipeline).
 
-The GHCR packages are private, so every poll needs registry credentials. Watchtower reads them from `$DOCKER_CONFIG/config.json`, which means `DOCKER_CONFIG` must name a **directory**: compose mounts the host's `/root/.docker/config.json` at `/config/config.json` and sets `DOCKER_CONFIG: /config`. Before that fix it was set to the file itself, so the resolved path was `/config.json/config.json`, Watchtower queried the registry anonymously, took a 401 on every manifest request and skipped the container instead of erroring. The symptom was silence: correct labels, correct interval, container never cycled, and every deploy needed a manual `docker compose pull`.
+Watchtower used to do this by polling GHCR every 300 seconds. It was removed because it required mounting `/var/run/docker.sock`, which is root-equivalent control of the Docker daemon, on a host that also serves several other sites. A socket proxy is not a fix: anything that can create a container can mount the host filesystem into it.
 
-**The deployed `/opt/finan-app/docker-compose.yml` is maintained by hand**, and CD never touches it (see [CI/CD pipeline](#cicd-pipeline)). Merging the repo-side fix therefore does **not** fix production. Edit the same two lines on the server, then recreate the container:
+**The deployed `/opt/finan-app/docker-compose.yml` is maintained by hand**, and CD never touches it. A compose change has to be applied on the server as well as merged, or it is not live. A manual deploy, if CD is unavailable:
 
 ```bash
-# In /opt/finan-app/docker-compose.yml, watchtower service:
-#   volumes:     - /root/.docker/config.json:/config/config.json:ro
-#   environment: DOCKER_CONFIG: /config
 cd /opt/finan-app
-docker compose up -d watchtower
-docker logs --tail 50 finan-watchtower | grep -iE "401|unauthorized|credential|denied"
+docker compose pull backend frontend
+docker compose up -d backend frontend
+docker image prune -f
 ```
-
-The credentials have to exist as well. `/root/.docker/config.json` must be the file written by `docker login ghcr.io` with a `read:packages` PAT, not an empty `{}` and not the directory Docker auto-creates when a bind-mount source is missing.
 
 ---
 
@@ -1366,17 +1361,17 @@ This is the end-to-end procedure to move finan-app from VPS A to VPS B. Plan for
 
 #### Phase B — On VPS B (the fresh target)
 
-4. **Provision the VPS** with enough resources to match the [2 GB constraint](#docker-compose-full-stack) (mongo 1G + backend 512M + frontend 256M + watchtower 64M = ~2 GB stack ceiling). Ubuntu 22.04 LTS or 24.04 LTS works.
+4. **Provision the VPS** with enough resources to match the [2 GB constraint](#docker-compose-full-stack) (mongo 1G + backend 512M + frontend 256M = ~1.8 GB stack ceiling). Ubuntu 22.04 LTS or 24.04 LTS works.
 5. **Install Docker + Compose:**
    ```bash
    curl -fsSL https://get.docker.com | sh
    # Compose is bundled with the modern docker-ce package — verify:
    docker compose version
    ```
-6. **Authenticate to GHCR** so Docker (and Watchtower) can pull the private `ghcr.io/chud-lori/finan-app-*` images. Generate a GitHub PAT with `read:packages` scope at https://github.com/settings/tokens, then:
+6. **Authenticate to GHCR** if the `ghcr.io/chud-lori/finan-app-*` packages are private. They are public today, so this step is usually unnecessary. If you need it, generate a GitHub PAT with `read:packages` scope at https://github.com/settings/tokens, then:
    ```bash
    echo "<your-pat>" | docker login ghcr.io -u <your-github-username> --password-stdin
-   # Watchtower reads /root/.docker/config.json (the file `docker login` just wrote);
+   # docker login writes /root/.docker/config.json;
    # the compose mount `/root/.docker/config.json:/config/config.json:ro` handles the rest.
    ```
 7. **Clone the repo:**
@@ -1442,7 +1437,7 @@ This is the end-to-end procedure to move finan-app from VPS A to VPS B. Plan for
 - **Cloudflare WAF rules**: per-zone, follow the domain — no action needed.
 - **TLS certificates**: terminated at Cloudflare, also follows the domain.
 - **GHCR rate limits**: anonymous pulls are limited; the `docker login` in step 6 raises your quota.
-- **Watchtower's docker config**: the file at `/root/.docker/config.json` is created by `docker login` (step 6). If it's missing, Watchtower silently fails to pull and you'll never get auto-deploys.
+- **Deploy secrets**: CD needs `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER` and `DEPLOY_SSH_KEY` as repository secrets, and the matching public key in the deploy user's `~/.ssh/authorized_keys`. Without them the deploy job fails and the images sit in GHCR unreleased.
 
 ---
 
@@ -1906,7 +1901,7 @@ Two workflows in `.github/workflows/`:
 
 **`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which subtree changed. Backend tests (`bun run test`) only run when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed. CI installs Bun via `oven-sh/setup-bun@v1`.
 
-**`cd.yml`** runs on push to `main`. Same path filtering, so only changed images are rebuilt. Backend and frontend build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 300s and recreates the labelled containers, provided its GHCR credentials resolve (see [Watchtower auto-deploy](#watchtower-auto-deploy)).
+**`cd.yml`** runs on push to `main`. Same path filtering, so only changed images are rebuilt. Backend and frontend build jobs run in parallel. Images are tagged `:latest` and `:<sha>` and pushed to GHCR. A final `deploy` job then SSHes to the server, pulls `:latest` and recreates the two app containers (see [Deploying](#deploying)). It is skipped when neither service changed, and a failed gate blocks it.
 
 **Important:** Changing `docker-compose.yml` or other root-level files does **not** trigger an image rebuild — those changes require a manual `git pull` + `docker compose up -d` on the server.
 
