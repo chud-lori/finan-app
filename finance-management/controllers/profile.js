@@ -243,32 +243,35 @@ const exportTransactions = async (req, res) => {
             : 'All time';
         const exportedAt = moment().tz(userTz).format('YYYY-MM-DD HH:mm:ss z');
 
-        const titleBlock = [
-            'Finan App — Transaction Export',
-            `Period:,${periodLabel}`,
-            `Exported on:,${exportedAt}`,
-            `Total records:,${txns.length}`,
-            '',  // blank line before column headers
-        ];
-
-        const header = ['Description', 'Amount', 'Type', 'Category', 'Date & Time', 'Timezone', 'Currency'];
         // CSV formula injection: Excel/Sheets executes a cell starting = + - @, so prefix it with a quote.
         const csvCell = (v) => {
             let s = String(v ?? '');
             if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
             return `"${s.replace(/"/g, '""')}"`;
         };
+
+        const titleBlock = [
+            'Finan App — Transaction Export',
+            `Period:,${csvCell(periodLabel)}`,
+            `Exported on:,${exportedAt}`,
+            `Total records:,${txns.length}`,
+            '',  // blank line before column headers
+        ];
+
+        const header = ['Description', 'Amount', 'Type', 'Category', 'Date & Time', 'Timezone', 'Currency'];
         const rows = txns.map(t => {
             const txTz  = t.transaction_timezone || 'UTC';
             const stamp = moment(t.time).tz(txTz).format('M/D/YYYY H:mm:ss');
-            return [csvCell(t.description), t.amount, t.type, csvCell(t.category), stamp, txTz, (t.currency || 'IDR').toUpperCase()].join(',');
+            return [csvCell(t.description), t.amount, t.type, csvCell(t.category), stamp, csvCell(txTz), (t.currency || 'IDR').toUpperCase()].join(',');
         });
 
         const csv = [...titleBlock, header.join(','), ...rows].join('\n');
-        const filename = period === 'monthly' ? `finan-app-transactions-${month}.csv`
+        const rawFilename = period === 'monthly' ? `finan-app-transactions-${month}.csv`
             : period === 'yearly'  ? `finan-app-transactions-${year}.csv`
             : period === 'range'   ? `finan-app-transactions-${rangeFrom}-to-${rangeTo}.csv`
             : 'finan-app-transactions-all.csv';
+        // The period regexes gate only the Mongo filter, so a value they rejected still reaches this name.
+        const filename = rawFilename.replace(/[^\w.-]/g, '');
 
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

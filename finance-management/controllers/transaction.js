@@ -173,6 +173,11 @@ const addTransaction = async (req, res, next) => {
             return res.status(400).json(BaseResponseDTO.error('Invalid currency code'));
         }
 
+        // moment.tz accepts an unknown zone name and silently ignores it, so the string must be checked here.
+        if (!moment.tz.zone(transactionDTO.transaction_timezone)) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid transaction_timezone'));
+        }
+
         // Validate time format — try common formats
         const transactionTime = parseTransactionTime(transactionDTO.time, transactionDTO.transaction_timezone);
         if (!transactionTime) {
@@ -822,6 +827,11 @@ const importCsv = async (req, res, next) => {
         const balanceExists = await Balance.exists({ user: user.id });
         if (!balanceExists) {
             return res.status(404).json(BaseResponseDTO.error('User balance not found'));
+        }
+
+        // moment.tz accepts an unknown zone name and silently ignores it, so the string must be checked here.
+        if (req.body.userTimezone !== undefined && !moment.tz.zone(req.body.userTimezone)) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid userTimezone'));
         }
 
         // Fallback timezone: user's current browser timezone (sent with the request),

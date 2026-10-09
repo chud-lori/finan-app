@@ -521,7 +521,7 @@ Collection: transactions
 | `currency` | String | required | 3-letter ISO 4217 code (e.g. `IDR`) |
 | `type` | String | enum: `income \| expense` | |
 | `time` | Date | required | stored as UTC; original timezone in `transaction_timezone` |
-| `transaction_timezone` | String | required | IANA identifier (e.g. `Asia/Jakarta`) |
+| `transaction_timezone` | String | required | IANA identifier (e.g. `Asia/Jakarta`); every write path rejects a name `moment.tz.zone()` cannot resolve with a 400, because `moment.tz` itself accepts any string |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
 
