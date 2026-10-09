@@ -319,3 +319,8 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+@keyframes landing-row-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
