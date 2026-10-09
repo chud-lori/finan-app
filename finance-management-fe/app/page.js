@@ -3,7 +3,7 @@ import Image from 'next/image';
 import Reveal from '@/components/Reveal';
 import LandingNav from '@/components/LandingNav';
 import LandingHeroCTA from '@/components/LandingHeroCTA';
-import LandingHeroMotion from '@/components/LandingHeroMotion';
+import LandingAppMotion from '@/components/LandingAppMotion';
 import LandingInsightMotion from '@/components/LandingInsightMotion';
 import ForceLightMode from '@/components/ForceLightMode';
 
@@ -246,7 +246,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <LandingHeroMotion />
+          <LandingAppMotion />
         </section>
 
         {/* ── Features ── */}
