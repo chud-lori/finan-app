@@ -123,3 +123,30 @@ jobs:
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Watchtower used to do this by polling :latest, which meant mounting
+  # /var/run/docker.sock into a long-running container: root-equivalent control
+  # of the host for anything that compromised it. Deploying here instead keeps
+  # the socket off the network and puts the CI gates in front of production.
+  deploy:
+    name: Deploy to production
+    needs: [changes, build-backend, build-frontend]
+    if: >-
+      always() && !cancelled() && !failure() &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and restart on the VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            cd /opt/finan-app
+            docker compose pull backend frontend
+            docker compose up -d backend frontend
+            docker image prune -f
+            docker compose ps
