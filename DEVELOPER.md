@@ -307,6 +307,8 @@ req.cookies.token
 
 A database leak therefore cannot be replayed against the auth endpoints — every consumer-side handler SHA-256s the user-supplied token before `findOne`. The schema migration helper at `helpers/migrateTokenIndexes.js` drops the legacy `token_1` unique index on first startup after this change is deployed.
 
+The password-reset token reaches the backend in a POST body, but the email-verification token is a path parameter of `GET /api/auth/verify-email/:token`, so it would otherwise be written verbatim by both request loggers and reported to Sentry. `helpers/redactUrl.js#redactUrl` rewrites any `/verify-email/<segment>` to `/verify-email/[redacted]`, and it is applied in `middleware/log.js`, in the Morgan stream in `app.js`, and to `event.request.url` in Sentry's `beforeSend`. It matches the path pattern rather than the route, so moving the endpoint does not reopen the leak.
+
 ---
 
 ### Category taxonomy & ML classification
@@ -1921,7 +1923,7 @@ Two separate Sentry projects:
 | Backend (Express) | `@sentry/node` | `SENTRY_DSN` | Runtime — add to `.env`, recreate container |
 | Frontend (Next.js) | `@sentry/nextjs` | `NEXT_PUBLIC_SENTRY_DSN` | **Build-time** — set as GitHub Actions variable, triggers on next image build |
 
-**Backend:** `Sentry.init()` runs before all other imports in `app.js`, guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` registered after all routes. `uncaughtException` also calls `Sentry.captureException()`. Bun runtime is supported by `@sentry/node` via its Node compatibility layer — verify AsyncLocalStorage-based request context still tags errors with `req.user.id` after any future SDK upgrade.
+**Backend:** `Sentry.init()` runs before all other imports in `app.js`, guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` registered after all routes. `uncaughtException` also calls `Sentry.captureException()`. `beforeSend` drops the `authorization`, `cookie` and `set-cookie` headers, replaces any `SCRUB_KEYS` field in the body or query string with `[redacted]`, and redacts the token segment of `request.url`. Bun runtime is supported by `@sentry/node` via its Node compatibility layer — verify AsyncLocalStorage-based request context still tags errors with `req.user.id` after any future SDK upgrade.
 
 **Frontend:** `sentry.client.config.js` initialises Session Replay (5% of sessions, 100% on error). `instrumentation.js` initialises the server SDK via the Next.js instrumentation hook.
 
