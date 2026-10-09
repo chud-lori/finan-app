@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Reveal from '@/components/Reveal';
 import LandingNav from '@/components/LandingNav';
 import LandingHeroCTA from '@/components/LandingHeroCTA';
+import LandingHeroMotion from '@/components/LandingHeroMotion';
 import ForceLightMode from '@/components/ForceLightMode';
 
 const SITE_URL = 'https://finance.lori.my.id';
@@ -248,18 +249,11 @@ export default function LandingPage() {
         <LandingNav />
 
         {/* ── Hero ── */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-teal-50 via-white to-emerald-50 pt-20 pb-24 sm:pt-28 sm:pb-32">
-          <div aria-hidden className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full bg-teal-100/60 blur-3xl" />
-            <div className="absolute -bottom-32 -left-32 w-[400px] h-[400px] rounded-full bg-emerald-100/50 blur-3xl" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-teal-50/80 blur-2xl" />
-          </div>
-
+        <section className="relative overflow-hidden bg-white pt-20 pb-24 sm:pt-28 sm:pb-32">
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
-            <div className="animate-fade-in delay-0 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-100 text-teal-700 text-xs font-semibold mb-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+            <p className="animate-fade-in delay-0 text-xs font-semibold uppercase tracking-widest text-teal-700 mb-6">
               11 financial tools · Free · Multi-currency
-            </div>
+            </p>
 
             <h1 className="animate-fade-in-up delay-75 text-4xl sm:text-5xl lg:text-6xl font-black text-gray-900 leading-tight tracking-tight mb-6">
               Finally know where
@@ -267,7 +261,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="animate-fade-in-up delay-200 text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Track every transaction, spot patterns you&apos;ve been missing, and make smarter money decisions — all in one free, private dashboard. No spreadsheets. No subscriptions.
+              Track every transaction, spot the patterns you have been missing, and make smarter money decisions in one free, private dashboard. No spreadsheets. No subscriptions.
             </p>
 
             <LandingHeroCTA />
@@ -277,70 +271,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* Mock dashboard */}
-          <div className="animate-fade-in-up delay-500 relative max-w-5xl mx-auto px-4 sm:px-6 mt-16">
-            <div className="animate-float relative bg-white rounded-2xl border border-gray-200 shadow-2xl shadow-gray-300/40 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none z-10 rounded-2xl" />
-              {/* Fake navbar */}
-              <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-4">
-                <Image src="/logo.png" alt="Finan App" width={80} height={42} className="h-5 w-auto" />
-                <div className="flex gap-1 flex-1">
-                  {['Dashboard', 'Analytics', 'Reports', 'Planner', 'Insights'].map(n => (
-                    <span key={n} className="text-xs text-gray-400 px-2.5 py-1 rounded-lg hidden sm:block hover:bg-gray-50">{n}</span>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 btn-cta rounded-lg text-white shadow-sm shadow-teal-300/40">
-                  <div className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[8px] font-bold shrink-0">F</div>
-                  <span className="text-[10px] font-semibold hidden sm:block">Open App</span>
-                  <svg className="w-2.5 h-2.5 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
-                </div>
-              </div>
-              {/* Stat cards */}
-              <div className="p-4 sm:p-5 bg-gray-50/80">
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  {[
-                    { label: 'Balance', val: '$8,400',  color: 'text-gray-900' },
-                    { label: 'Income',  val: '$12,000', color: 'text-emerald-600', badge: '📈' },
-                    { label: 'Expense', val: '$3,600',  color: 'text-rose-600',    badge: '📉' },
-                  ].map(({ label, val, color, badge }) => (
-                    <div key={label} className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-xs text-gray-400">{label}</p>
-                        {badge && <span className="text-sm">{badge}</span>}
-                      </div>
-                      <p className={`text-xs sm:text-sm font-bold ${color} tabular-nums`}>{val}</p>
-                    </div>
-                  ))}
-                </div>
-                {/* Fake table */}
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-700">Transactions</span>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">This month</span>
-                  </div>
-                  {[
-                    { desc: 'Freelance project',  cat: 'Income',     amt: '+$12,000', type: 'income'  },
-                    { desc: 'Apartment rent',      cat: 'Housing',    amt: '−$1,200',  type: 'expense' },
-                    { desc: 'Groceries',           cat: 'Food',       amt: '−$340',    type: 'expense' },
-                    { desc: 'Index fund deposit',  cat: 'Investment', amt: '−$2,000',  type: 'expense' },
-                  ].map((r, i) => (
-                    <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">
-                      <span className="text-xs text-gray-300 w-4 font-mono">{i + 1}</span>
-                      <span className="text-xs text-gray-700 flex-1 truncate font-medium">{r.desc}</span>
-                      <span className="text-xs text-gray-400 hidden sm:block px-1.5 py-0.5 bg-gray-100 rounded">{r.cat}</span>
-                      <span className={`text-xs font-semibold tabular-nums ${r.type === 'income' ? 'text-emerald-600' : 'text-gray-700'}`}>{r.amt}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${r.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                        {r.type === 'income' ? '↑' : '↓'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div aria-hidden className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-3/4 h-12 bg-teal-200/40 blur-2xl rounded-full" />
-          </div>
+          <LandingHeroMotion />
         </section>
 
         {/* ── Features ── */}
