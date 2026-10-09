@@ -5,9 +5,9 @@ import { useEffect, useRef, useState } from 'react';
 // The sequence shows the one thing a screenshot cannot: a transaction arriving,
 // being categorised, and the breakdown redistributing around it.
 const ENTRIES = [
-  { label: 'Warung lunch',    amount: '45',  category: 'Food',      share: 34, tone: '#0f766e' },
-  { label: 'Transit top-up',  amount: '20',  category: 'Transport', share: 22, tone: '#14b8a6' },
-  { label: 'Electricity',     amount: '38',  category: 'Bills',     share: 28, tone: '#5eead4' },
+  { label: 'Lunch',           amount: '40',  category: 'Food',      share: 34, tone: '#0f766e' },
+  { label: 'Train fare',      amount: '20',  category: 'Transport', share: 22, tone: '#14b8a6' },
+  { label: 'Electricity bill', amount: '40', category: 'Bills',     share: 28, tone: '#5eead4' },
 ];
 
 const RADIUS = 52;
@@ -16,24 +16,28 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 export default function LandingHeroMotion() {
   const [step, setStep] = useState(-1);
   const [settled, setSettled] = useState(false);
+  const [verdict, setVerdict] = useState(false);
   const timers = useRef([]);
 
   const play = () => {
     timers.current.forEach(clearTimeout);
     timers.current = [];
     setSettled(false);
+    setVerdict(false);
     setStep(-1);
 
     ENTRIES.forEach((_, i) => {
       timers.current.push(setTimeout(() => setStep(i), 350 + i * 900));
     });
-    timers.current.push(setTimeout(() => setSettled(true), 350 + ENTRIES.length * 900));
+    timers.current.push(setTimeout(() => setVerdict(true), 350 + ENTRIES.length * 900 + 250));
+    timers.current.push(setTimeout(() => setSettled(true), 350 + ENTRIES.length * 900 + 700));
   };
 
   useEffect(() => {
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (still) {
       setStep(ENTRIES.length - 1);
+      setVerdict(true);
       setSettled(true);
       return undefined;
     }
@@ -72,7 +76,7 @@ export default function LandingHeroMotion() {
           </svg>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-[11px] uppercase tracking-wider text-gray-400">Tracked</span>
-            <span className="text-xl font-bold tabular-nums text-gray-900">{tracked}</span>
+            <span className="text-xl font-bold tabular-nums text-gray-900">${tracked}</span>
           </div>
         </div>
 
@@ -95,10 +99,24 @@ export default function LandingHeroMotion() {
               >
                 {entry.category}
               </span>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">−{entry.amount}</span>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">−${entry.amount}</span>
             </li>
           ))}
         </ul>
+
+        <div
+          className="sm:col-span-2 border-t border-gray-100 pt-4"
+          style={{
+            opacity: verdict ? 1 : 0,
+            transform: verdict ? 'none' : 'translateY(6px)',
+            transition: 'opacity 500ms ease, transform 500ms cubic-bezier(0.16,1,0.3,1)',
+          }}
+        >
+          <p className="text-sm leading-relaxed text-gray-700">
+            <span className="font-semibold text-teal-700">Food is taking 34% of everything you spend</span>, up
+            from 22% last month. Three entries was enough to notice.
+          </p>
+        </div>
       </div>
 
       <div className="mt-3 flex items-center justify-center gap-3 text-xs text-gray-400">
