@@ -215,6 +215,14 @@ const findOrCreateGoogleUser = async (googleId, email, name) => {
   user = await User.findOne({ email });
   if (user) {
     user.googleId = googleId;
+    // A password on an address nobody proved belongs to them was set by whoever
+    // registered first, so proving the address now retires that credential.
+    if (user.password && user.emailVerified === false) {
+      user.password = undefined;
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
+      logger.warn(`Google link retired an unverified local password for user ${user._id}`);
+    }
+    user.emailVerified = true;
     await user.save();
     return user;
   }
@@ -242,7 +250,12 @@ const verifyGoogleToken = async (req, res) => {
       audience: GOOGLE_CLIENT_ID,
     });
 
-    const { sub: googleId, email, name } = ticket.getPayload();
+    const { sub: googleId, email, name, email_verified: googleVerified } = ticket.getPayload();
+    if (!googleVerified) {
+      logger.warn('Google verify: rejected a token whose email claim is unverified');
+      return res.status(401).json(BaseResponseDTO.error('Authentication failed'));
+    }
+
     const user = await findOrCreateGoogleUser(googleId, email, name);
 
     const token = jwt.sign({ id: user._id, name: user.name, tv: user.tokenVersion || 0 }, SECRET_TOKEN, { expiresIn: '7d' });
@@ -514,4 +527,4 @@ const resendVerification = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, deleteAccount, changePassword, logout, logoutAllDevices, getSessions, revokeSession, forgotPassword, resetPassword, verifyEmail, resendVerification };
+module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, findOrCreateGoogleUser, deleteAccount, changePassword, logout, logoutAllDevices, getSessions, revokeSession, forgotPassword, resetPassword, verifyEmail, resendVerification };
