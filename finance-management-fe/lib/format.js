@@ -15,6 +15,13 @@ export const formatCurrency = (amount, currency = 'IDR', numberFormat = 'dot') =
 // Prefer formatCurrency via the CurrencyContext hook.
 export const formatIDR = (amount) => formatCurrency(amount, 'IDR');
 
+// The bare symbol, for prefixing an input the user is still typing into.
+export const currencySymbol = (currency = 'IDR') => {
+  const locale = CURRENCY_LOCALE[currency] ?? 'en-US';
+  const parts = new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).formatToParts(0);
+  return parts.find(part => part.type === 'currency')?.value ?? currency;
+};
+
 export const formatDate = (dateStr, timezone) => {
   const opts = {
     day: 'numeric', month: 'short', year: 'numeric',

@@ -5,8 +5,8 @@ import Navbar from '@/components/Navbar';
 import AuthGuard from '@/components/AuthGuard';
 import DateTimePicker from '@/components/DateTimePicker';
 import { addTransaction, getCategories, getCategorySuggestions, getTransactions } from '@/lib/api';
-import { toTitleCase, formatDate } from '@/lib/format';
-import { useFormatAmount } from '@/components/CurrencyContext';
+import { toTitleCase, formatDate, currencySymbol } from '@/lib/format';
+import { useFormatAmount, useCurrency } from '@/components/CurrencyContext';
 
 function CategoryCombobox({ value, onChange, categories }) {
   const [open,  setOpen]  = useState(false);
@@ -268,6 +268,7 @@ function SidePanel() {
 
 export default function AddPage() {
   const router = useRouter();
+  const { currency } = useCurrency();
   const [categories, setCategories]   = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [tz] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -379,9 +380,9 @@ export default function AddPage() {
                   </Field>
 
                   {/* Amount — large, prominent */}
-                  <Field label="Amount (IDR)">
+                  <Field label={`Amount (${currency})`}>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">Rp</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">{currencySymbol(currency)}</span>
                       <input
                         type="text"
                         required
