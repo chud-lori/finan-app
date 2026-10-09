@@ -208,7 +208,7 @@ finan-app/                          ← monorepo root
                                └────────────────┘
 ```
 
-**Network isolation:** MongoDB is not exposed to the host. Only the backend (port 3001) and frontend (port 3000) are published. The backend reaches MongoDB via the Docker network hostname `mongo`.
+**Network isolation:** MongoDB is not exposed to the host. The backend (3001) and frontend (3000) are published to `127.0.0.1` only, so nginx on the host is the sole path in and `trust proxy` has exactly one hop in front of it. The backend reaches MongoDB via the Docker network hostname `mongo`.
 
 **Startup order** (enforced by Docker Compose healthchecks):
 

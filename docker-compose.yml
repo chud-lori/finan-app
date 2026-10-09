@@ -60,7 +60,7 @@ services:
     logging: *default-logging
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       NODE_ENV: production
       DB_URI: ${DB_URI:-mongodb://mongo:27017/finan?replicaSet=rs0}
@@ -105,7 +105,7 @@ services:
     logging: *default-logging
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       backend:
         condition: service_healthy
