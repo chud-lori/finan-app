@@ -48,9 +48,11 @@ const invalidateMLInsight = (userId, yearMonth, tz = 'UTC') => {
     return MLInsight.deleteMany({ user: userId, yearMonth: { $in: [...months] } }).catch(() => {});
 };
 
-// Fire-and-forget: update streak fields on the User document when a transaction is logged
-const updateStreak = (userId, txMoment, tz) => {
-    const today = txMoment.clone().tz(tz).format('YYYY-MM-DD');
+// Fire-and-forget: update streak fields on the User document when a transaction is logged.
+// The streak counts days the user logged something, not days the money moved, so it reads
+// the clock rather than the transaction: backdating an entry must not rewrite the run.
+const updateStreak = (userId, tz) => {
+    const today = moment().tz(tz).format('YYYY-MM-DD');
     return User.findById(userId).then(u => {
         if (!u) return;
         if (u.streakLastDate === today) return; // already credited today
@@ -237,7 +239,7 @@ const addTransaction = async (req, res, next) => {
             tz:           transactionDTO.transaction_timezone,
         })); // fire-and-forget
         track(invalidateMLInsight(user.id, txYearMonth, transactionDTO.transaction_timezone)); // fire-and-forget
-        track(updateStreak(user.id, transactionTime, transactionDTO.transaction_timezone)); // fire-and-forget
+        track(updateStreak(user.id, transactionDTO.transaction_timezone)); // fire-and-forget
         track(User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {}));
         logger.info(`Add transaction response: ${user.id} success`);
 

@@ -478,7 +478,7 @@ Collection: users
 | `lastActivityType` | String | | |
 | `tokenVersion` | Number | default 0 | bumped on logout-all / password change |
 | `emailVerified` | Boolean | default true | false for new password-only accounts until verified |
-| `streakDays` | Number | default 0 | current consecutive days with a transaction |
+| `streakDays` | Number | default 0 | current consecutive days on which the user logged a transaction, counted by the logging date rather than the transaction's own date |
 | `streakLastDate` | String | `YYYY-MM-DD` | last day a transaction was logged |
 | `longestStreak` | Number | default 0 | all-time best streak |
 | `createdAt` | Date | auto | |
