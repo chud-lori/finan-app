@@ -1195,7 +1195,22 @@ MongoDB is capped at 512 MB WiredTiger cache (`--wiredTigerCacheSizeGB 0.5`) to 
 
 ### Watchtower auto-deploy
 
-Watchtower polls GHCR every 30 seconds. Only containers with label `com.centurylinklabs.watchtower.enable=true` are watched (backend, frontend). On a new `:latest` image, Watchtower pulls and recreates the container in-place.
+Watchtower polls GHCR every 300 seconds (`WATCHTOWER_POLL_INTERVAL`). Only containers with label `com.centurylinklabs.watchtower.enable=true` are watched (backend, frontend). On a new `:latest` image, Watchtower pulls and recreates the container in-place.
+
+The GHCR packages are private, so every poll needs registry credentials. Watchtower reads them from `$DOCKER_CONFIG/config.json`, which means `DOCKER_CONFIG` must name a **directory**: compose mounts the host's `/root/.docker/config.json` at `/config/config.json` and sets `DOCKER_CONFIG: /config`. Before that fix it was set to the file itself, so the resolved path was `/config.json/config.json`, Watchtower queried the registry anonymously, took a 401 on every manifest request and skipped the container instead of erroring. The symptom was silence: correct labels, correct interval, container never cycled, and every deploy needed a manual `docker compose pull`.
+
+**The deployed `/opt/finan-app/docker-compose.yml` is maintained by hand**, and CD never touches it (see [CI/CD pipeline](#cicd-pipeline)). Merging the repo-side fix therefore does **not** fix production. Edit the same two lines on the server, then recreate the container:
+
+```bash
+# In /opt/finan-app/docker-compose.yml, watchtower service:
+#   volumes:     - /root/.docker/config.json:/config/config.json:ro
+#   environment: DOCKER_CONFIG: /config
+cd /opt/finan-app
+docker compose up -d watchtower
+docker logs --tail 50 finan-watchtower | grep -iE "401|unauthorized|credential|denied"
+```
+
+The credentials have to exist as well. `/root/.docker/config.json` must be the file written by `docker login ghcr.io` with a `read:packages` PAT, not an empty `{}` and not the directory Docker auto-creates when a bind-mount source is missing.
 
 ---
 
@@ -1259,8 +1274,8 @@ This is the end-to-end procedure to move finan-app from VPS A to VPS B. Plan for
 6. **Authenticate to GHCR** so Docker (and Watchtower) can pull the private `ghcr.io/chud-lori/finan-app-*` images. Generate a GitHub PAT with `read:packages` scope at https://github.com/settings/tokens, then:
    ```bash
    echo "<your-pat>" | docker login ghcr.io -u <your-github-username> --password-stdin
-   # Watchtower reads /root/.docker/config.json (the file `docker login` just wrote)
-   # — the compose mount `/root/.docker/config.json:/config.json:ro` handles the rest.
+   # Watchtower reads /root/.docker/config.json (the file `docker login` just wrote);
+   # the compose mount `/root/.docker/config.json:/config/config.json:ro` handles the rest.
    ```
 7. **Clone the repo:**
    ```bash
@@ -1789,7 +1804,7 @@ Two workflows in `.github/workflows/`:
 
 **`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which subtree changed. Backend tests (`bun run test`) only run when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed. CI installs Bun via `oven-sh/setup-bun@v1`.
 
-**`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds changed images. Backend and frontend build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 30s and redeploys automatically.
+**`cd.yml`** runs on push to `main`. Same path filtering, so only changed images are rebuilt. Backend and frontend build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 300s and recreates the labelled containers, provided its GHCR credentials resolve (see [Watchtower auto-deploy](#watchtower-auto-deploy)).
 
 **Important:** Changing `docker-compose.yml` or other root-level files does **not** trigger an image rebuild — those changes require a manual `git pull` + `docker compose up -d` on the server.
 

@@ -126,12 +126,13 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /root/.docker/config.json:/config.json:ro
+      - /root/.docker/config.json:/config/config.json:ro
     environment:
       WATCHTOWER_POLL_INTERVAL: 300
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_CLEANUP: "true"
-      DOCKER_CONFIG: /config.json
+      # DOCKER_CONFIG is a directory; Docker reads credentials from $DOCKER_CONFIG/config.json.
+      DOCKER_CONFIG: /config
       DOCKER_API_VERSION: "1.44"
     networks:
       - finan-net
