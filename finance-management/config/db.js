@@ -25,6 +25,12 @@ const connectDB = async () => {
       } catch (err) {
         console.error(`Goal kind migration error: ${err && err.message}`);
       }
+      try {
+        const { migrateUserEmails } = require('../helpers/migrateUserEmails');
+        await migrateUserEmails();
+      } catch (err) {
+        console.error(`User email migration error: ${err && err.message}`);
+      }
       return response;
     } catch (error) {
       console.error(`Mongo error: ${error}`);

@@ -468,7 +468,7 @@ Collection: users
 |-------|------|-------------|-------|
 | `name` | String | required, max 100 | |
 | `username` | String | required, unique, max 100 | |
-| `email` | String | required, unique | |
+| `email` | String | required, unique, lowercase, trim | the schema setter also normalises query filters, so every lookup matches regardless of how the address was typed |
 | `password` | String | min 8 | nullable — Google OAuth users have no password |
 | `googleId` | String | unique, sparse | null for password accounts |
 | `lastLoginAt` | Date | | |
@@ -481,6 +481,8 @@ Collection: users
 | `longestStreak` | Number | default 0 | all-time best streak |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
+
+`RegisterRequestDTO` trims and lowercases the address on the way in as well, so the duplicate check at registration cannot be sidestepped by capitalising a letter. Rows written before that landed keep whatever case they were typed in, and `helpers/migrateUserEmails.js` lowercases them once on startup. It skips any row whose lowercased form already belongs to a different account and logs the pair instead, because two ledgers behind one address is the owner's call to resolve rather than a migration's.
 
 ---
 
