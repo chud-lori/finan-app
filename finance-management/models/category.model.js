@@ -10,7 +10,7 @@ const CategorySchema = new Schema({
     name: {
         type: String,
         required: true,
-        max: 100
+        maxlength: 100
     },
     type: {
         type: String,
