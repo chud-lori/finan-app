@@ -2,7 +2,7 @@ const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
 const server = require('../app');
-
+const Category = require('../models/category.model');
 const Transaction = require('../models/transaction.model');
 const User = require('../models/user.model');
 
@@ -156,6 +156,78 @@ describe('Input hardening', () => {
 
             expect(res).to.have.status(200);
             expect(res.headers['content-disposition']).to.equal('attachment; filename="finan-app-transactions-2026-08drop.csv"');
+        });
+    });
+
+    describe('String length caps', () => {
+        const txn = (overrides) => ({
+            description: 'Lunch', amount: 25000, category: 'food', type: 'expense',
+            time: '2026-08-01 10:00:00', currency: 'idr', transaction_timezone: 'Asia/Jakarta',
+            ...overrides,
+        });
+
+        it('rejects a registration name longer than 100 characters', async () => {
+            const res = await chai.request(server).post('/api/auth/register').send({
+                name: 'a'.repeat(101), username: 'longname', email: 'longname@example.com', password: 'password123',
+            });
+            expect(res).to.have.status(400);
+            expect(res.body.error.join(' ')).to.contain('100 characters or fewer');
+            expect(await User.countDocuments({ username: 'longname' })).to.equal(0);
+        });
+
+        it('accepts a registration name at the 100 character limit', async () => {
+            const res = await chai.request(server).post('/api/auth/register').send({
+                name: 'a'.repeat(100), username: 'okname', email: 'okname@example.com', password: 'password123',
+            });
+            expect(res).to.have.status(201);
+        });
+
+        it('rejects a transaction description longer than 500 characters', async () => {
+            const { cookie } = await register('desc');
+            const res = await chai.request(server).post('/api/transaction').set('Cookie', cookie)
+                .send(txn({ description: 'a'.repeat(501) }));
+            expect(res).to.have.status(400);
+            expect(res.body.error.join(' ')).to.contain('500 characters or fewer');
+        });
+
+        it('rejects a transaction category longer than 100 characters', async () => {
+            const { cookie } = await register('cat');
+            const res = await chai.request(server).post('/api/transaction').set('Cookie', cookie)
+                .send(txn({ category: 'a'.repeat(101) }));
+            expect(res).to.have.status(400);
+            expect(res.body.error.join(' ')).to.contain('100 characters or fewer');
+            expect(await Category.countDocuments({ name: 'a'.repeat(101) })).to.equal(0);
+        });
+
+        it('accepts a transaction at both limits', async () => {
+            const { cookie } = await register('limit');
+            const res = await chai.request(server).post('/api/transaction').set('Cookie', cookie)
+                .send(txn({ description: 'a'.repeat(500), category: 'a'.repeat(100) }));
+            expect(res).to.have.status(201);
+        });
+
+        it('rejects an over-long description on patch, where schema validators do not run', async () => {
+            const { cookie } = await register('patch');
+            const added = await chai.request(server).post('/api/transaction').set('Cookie', cookie).send(txn({}));
+            const id = added.body.data.transaction.id;
+
+            const rejected = await chai.request(server).patch(`/api/transaction/${id}`).set('Cookie', cookie)
+                .send({ description: 'a'.repeat(501) });
+            expect(rejected).to.have.status(400);
+            expect(rejected.body.message).to.contain('500 characters or fewer');
+
+            const accepted = await chai.request(server).patch(`/api/transaction/${id}`).set('Cookie', cookie)
+                .send({ description: 'Dinner' });
+            expect(accepted).to.have.status(200);
+            expect(accepted.body.data.transaction.description).to.equal('Dinner');
+        });
+
+        it('rejects an over-long category name at the schema', async () => {
+            const user = await User.create({ name: 'Cap', username: 'capuser', email: 'cap@example.com', password: 'x' });
+            const err = await Category.create({ user: user._id, name: 'a'.repeat(101), type: 'expense' })
+                .then(() => null, e => e);
+
+            expect(err && err.name).to.equal('ValidationError');
         });
     });
 });

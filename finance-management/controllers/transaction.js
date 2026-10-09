@@ -96,6 +96,8 @@ const withOptionalTransaction = async (fn) => {
 const path = require('path');
 const fs = require('fs');
 const {
+    MAX_DESCRIPTION_LENGTH,
+    MAX_CATEGORY_LENGTH,
     AddTransactionRequestDTO,
     AddTransactionResponseDTO,
     GetTransactionsResponseDTO,
@@ -459,11 +461,18 @@ const patchTransaction = async (req, res) => {
             if (typeof description !== 'string' || !description.trim()) {
                 return res.status(400).json(BaseResponseDTO.error('description must be a non-empty string'));
             }
+            // findOneAndUpdate skips schema validators, so the cap has to be checked here too.
+            if (description.trim().length > MAX_DESCRIPTION_LENGTH) {
+                return res.status(400).json(BaseResponseDTO.error(`description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer`));
+            }
             update.description = description.trim();
         }
         if (category !== undefined) {
             if (typeof category !== 'string' || !category.trim()) {
                 return res.status(400).json(BaseResponseDTO.error('category must be a non-empty string'));
+            }
+            if (category.trim().length > MAX_CATEGORY_LENGTH) {
+                return res.status(400).json(BaseResponseDTO.error(`category must be ${MAX_CATEGORY_LENGTH} characters or fewer`));
             }
             const catExists = await Category.findOne({ user: req.user.id, name: { $regex: new RegExp(`^${escapeRegex(category.trim())}$`, 'i') } }).lean();
             if (!catExists) {

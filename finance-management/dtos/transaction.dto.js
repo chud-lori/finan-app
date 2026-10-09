@@ -1,5 +1,9 @@
 const { BaseRequestDTO, BaseResponseDTO } = require('./base.dto');
 
+// Mirrors the schema caps on Transaction.description and Category.name.
+const MAX_DESCRIPTION_LENGTH = 500;
+const MAX_CATEGORY_LENGTH = 100;
+
 // Strip HTML tags and null bytes from text — prevents stored XSS
 const sanitizeText = (s) => typeof s === 'string'
   ? s.replace(/<[^>]*>/g, '').replace(/\0/g, '').trim()
@@ -24,12 +28,16 @@ class AddTransactionRequestDTO extends BaseRequestDTO {
         const errors = [];
         if (!this.description || typeof this.description !== 'string') {
             errors.push('Description is required and must be a string');
+        } else if (this.description.length > MAX_DESCRIPTION_LENGTH) {
+            errors.push(`Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer`);
         }
         if (!this.amount || typeof this.amount !== 'number' || this.amount <= 0) {
             errors.push('Amount is required and must be a positive number');
         }
         if (!this.category || typeof this.category !== 'string') {
             errors.push('Category is required and must be a string');
+        } else if (this.category.length > MAX_CATEGORY_LENGTH) {
+            errors.push(`Category must be ${MAX_CATEGORY_LENGTH} characters or fewer`);
         }
         if (!this.type || !['income', 'expense'].includes(this.type)) {
             errors.push('Type is required and must be either "income" or "expense"');
@@ -209,6 +217,8 @@ class MerchantsResponseDTO {
 }
 
 module.exports = {
+    MAX_DESCRIPTION_LENGTH,
+    MAX_CATEGORY_LENGTH,
     AddTransactionRequestDTO,
     TransactionResponseDTO,
     BalanceResponseDTO,

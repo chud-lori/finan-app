@@ -307,6 +307,8 @@ req.cookies.token
 
 A database leak therefore cannot be replayed against the auth endpoints — every consumer-side handler SHA-256s the user-supplied token before `findOne`. The schema migration helper at `helpers/migrateTokenIndexes.js` drops the legacy `token_1` unique index on first startup after this change is deployed.
 
+The password-reset token reaches the backend in a POST body, but the email-verification token is a path parameter of `GET /api/auth/verify-email/:token`, so it would otherwise be written verbatim by both request loggers and reported to Sentry. `helpers/redactUrl.js#redactUrl` rewrites any `/verify-email/<segment>` to `/verify-email/[redacted]`, and it is applied in `middleware/log.js`, in the Morgan stream in `app.js`, and to `event.request.url` in Sentry's `beforeSend`. It matches the path pattern rather than the route, so moving the endpoint does not reopen the leak.
+
 ---
 
 ### Category taxonomy & ML classification
@@ -468,7 +470,7 @@ Collection: users
 |-------|------|-------------|-------|
 | `name` | String | required, max 100 | |
 | `username` | String | required, unique, max 100 | |
-| `email` | String | required, unique | |
+| `email` | String | required, unique, lowercase, trim | the schema setter also normalises query filters, so every lookup matches regardless of how the address was typed |
 | `password` | String | min 8 | nullable — Google OAuth users have no password |
 | `googleId` | String | unique, sparse | null for password accounts |
 | `lastLoginAt` | Date | | |
@@ -481,6 +483,8 @@ Collection: users
 | `longestStreak` | Number | default 0 | all-time best streak |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
+
+`RegisterRequestDTO` trims and lowercases the address on the way in as well, so the duplicate check at registration cannot be sidestepped by capitalising a letter. Rows written before that landed keep whatever case they were typed in, and `helpers/migrateUserEmails.js` lowercases them once on startup. It skips any row whose lowercased form already belongs to a different account and logs the pair instead, because two ledgers behind one address is the owner's call to resolve rather than a migration's.
 
 ---
 
@@ -653,7 +657,7 @@ worthless, because the same rule re-fires with new numbers next month.
 |-------|------|-------------|-------|
 | `user` | ObjectId | ref: User, required | |
 | `kind` | String | required, enum | the six category-scoped `kind`s `lib/insightFeed.js` emits: `category-concentration`, `category-fixed-base`, `category-change`, `category-one-off`, `category-frequency`, `category-top-expense` |
-| `subject` | String | required, ≤120 chars, `sanitizeText` + lowercased + trimmed | the category the insight is about. 120 rather than 64 because category names are user-typed and effectively unbounded (`models/category.model.js` uses `max`, which Mongoose ignores on Strings) — a cap below what a category can be turns the dismiss button into a dead control |
+| `subject` | String | required, ≤120 chars, `sanitizeText` + lowercased + trimmed | the category the insight is about. 120 rather than 64 because it has to clear the 100-char cap on `Category.name`; a cap below what a category can be turns the dismiss button into a dead control |
 | `reason` | String | required, enum: `expected \| not_useful` | closed enum, so the reason is never free text to sanitise |
 | `expiresAt` | Date | required, TTL index | when the insight comes back |
 | `createdAt` / `updatedAt` | Date | auto | `updatedAt` is surfaced as `dismissedAt` |
@@ -1753,6 +1757,22 @@ Use atomic `$inc` — never read-modify-write. Balance is a derived value. `POST
 
 `sanitizeText()` in `transaction.dto.js` strips HTML tags (`/<[^>]*>/g`) and null bytes (`/\0/g`) from all `description` and `category` fields before they reach the database. Prevents stored XSS.
 
+### String length caps
+
+Mongoose's `max` is a Number and Date validator; on a String it is silently ignored, so the schemas that carried `max: 100` had no cap at all and the effective bound was the 100kb body limit. The caps are `maxlength` on the schema plus a check in the DTO:
+
+| Field | Cap | Enforced in |
+|-------|-----|-------------|
+| `User.name` | 100 | `dtos/auth.dto.js` (register), `controllers/profile.js#updateIdentity` (update) |
+| `User.username` | 100 | schema only; `updateIdentity` applies a stricter `^[a-z0-9_]{3,30}$` on update |
+| `Category.name` | 100 | `dtos/transaction.dto.js` (created via a transaction), `controllers/category.js#renameCategory` |
+| `Transaction.description` | 500 | `dtos/transaction.dto.js`, `controllers/transaction.js#patchTransaction` |
+| `Transaction.category` | 100 | same as `Category.name`, the field stores the resolved category name |
+
+`maxlength` only runs on `save()` and on an update passing `runValidators`. Every update path here uses `findOneAndUpdate`, so a cap that must hold on an edit is checked in the handler as well, not only on the schema.
+
+`User.password` carries no cap: the stored value is a bcrypt hash, and the 8-char minimum on the plaintext is enforced where the plaintext exists (`helpers/validator.js` for register, `controllers/auth.js` for change-password and reset).
+
 ### Rate limiting
 
 `rateLimit.js` is an in-process sliding-window limiter. Two strategies:
@@ -1921,7 +1941,7 @@ Two separate Sentry projects:
 | Backend (Express) | `@sentry/node` | `SENTRY_DSN` | Runtime — add to `.env`, recreate container |
 | Frontend (Next.js) | `@sentry/nextjs` | `NEXT_PUBLIC_SENTRY_DSN` | **Build-time** — set as GitHub Actions variable, triggers on next image build |
 
-**Backend:** `Sentry.init()` runs before all other imports in `app.js`, guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` registered after all routes. `uncaughtException` also calls `Sentry.captureException()`. Bun runtime is supported by `@sentry/node` via its Node compatibility layer — verify AsyncLocalStorage-based request context still tags errors with `req.user.id` after any future SDK upgrade.
+**Backend:** `Sentry.init()` runs before all other imports in `app.js`, guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` registered after all routes. `uncaughtException` also calls `Sentry.captureException()`. `beforeSend` drops the `authorization`, `cookie` and `set-cookie` headers, replaces any `SCRUB_KEYS` field in the body or query string with `[redacted]`, and redacts the token segment of `request.url`. Bun runtime is supported by `@sentry/node` via its Node compatibility layer — verify AsyncLocalStorage-based request context still tags errors with `req.user.id` after any future SDK upgrade.
 
 **Frontend:** `sentry.client.config.js` initialises Session Replay (5% of sessions, 100% on error). `instrumentation.js` initialises the server SDK via the Next.js instrumentation hook.
 

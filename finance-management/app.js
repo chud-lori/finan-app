@@ -1,4 +1,6 @@
 const Sentry = require('@sentry/node');
+// Zero-dependency local module, so requiring it here cannot pre-empt Sentry's instrumentation.
+const { redactUrl } = require('./helpers/redactUrl');
 
 // Sentry must be initialised before any other import.
 if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
@@ -25,6 +27,7 @@ if (process.env.NODE_ENV === 'production' && process.env.SENTRY_DSN) {
         ],
         beforeSend(event) {
             if (event.request) {
+                if (event.request.url) event.request.url = redactUrl(event.request.url);
                 if (event.request.headers) {
                     delete event.request.headers.authorization;
                     delete event.request.headers.cookie;
@@ -67,6 +70,7 @@ app.set('trust proxy', 1);
 logger.stream = {
     write: function(message, encoding){
         const data = JSON.parse(message);
+        data.url = redactUrl(data.url);
         return logger.info("accesslog", data);
     }
 };
