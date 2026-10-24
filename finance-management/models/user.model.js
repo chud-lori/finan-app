@@ -5,22 +5,24 @@ const UserSchema = new Schema({
     name: {
         type: String, 
         required: true, 
-        max: 100
+        maxlength: 100
     },
     username: {
         type: String,
         required: true,
         unique: true,
-        max: 100
+        maxlength: 100
     },
     email: {
         type: String, 
         required: true, 
-        unique: true
+        unique: true,
+        // Covers the Google write path and the query filters, which Mongoose runs setters on too.
+        lowercase: true,
+        trim: true
     },
     password: {
-        type: String,
-        min: 8
+        type: String
         // not required — Google OAuth users have no password
     },
     googleId: {

@@ -125,20 +125,45 @@ function AffordTool({ savedBudget }) {
 
   const budget      = parseNum(monthly);
   const canAfford   = result?.canAfford === 1;
-  const alreadyOver = result && result.actualSpend >= budget;
-  const projectedOver = result && result.budgetRemaining < 0;
   const velocity    = result ? (VELOCITY_CONFIG[result.velocityStatus] ?? VELOCITY_CONFIG.on_track) : null;
+
+  // Only the first is about the budget. The rest answer whether the money exists.
+  const VERDICTS = {
+    fits_budget:         { tone: 'good',  icon: '✅', title: 'Go ahead, it fits this month' },
+    from_savings:        { tone: 'mixed', icon: '💰', title: 'Yes, but it comes out of savings' },
+    from_investments:    { tone: 'mixed', icon: '📈', title: 'Yes, by drawing on your investments' },
+    uses_emergency_fund: { tone: 'warn',  icon: '🛡️', title: 'Only by dipping into your emergency fund' },
+    not_enough:          { tone: 'bad',   icon: '❌', title: 'Not enough set aside for this' },
+    over_budget:         { tone: 'warn',  icon: '⚠️', title: 'Over budget for this month' },
+  };
+  const TONE = {
+    good:  { border: 'border-emerald-300 bg-emerald-50', head: 'text-emerald-700', body: 'text-emerald-600' },
+    mixed: { border: 'border-teal-300 bg-teal-50',       head: 'text-teal-700',    body: 'text-teal-600'    },
+    warn:  { border: 'border-amber-300 bg-amber-50',     head: 'text-amber-700',   body: 'text-amber-600'   },
+    bad:   { border: 'border-rose-300 bg-rose-50',       head: 'text-rose-700',    body: 'text-rose-600'    },
+  };
+
+  const verdict = result ? (VERDICTS[result.verdict] ?? VERDICTS.over_budget) : null;
+  const tone    = verdict ? TONE[verdict.tone] : null;
 
   let verdictSub = '';
   if (result) {
-    if (canAfford) {
+    const overBy = formatAmount(Math.abs(result.budgetRemaining - result.desiredSpend));
+    if (result.verdict === 'fits_budget') {
       verdictSub = `You'll have ${formatAmount(result.budgetRemaining - result.desiredSpend)} projected remaining after this`;
-    } else if (alreadyOver) {
-      verdictSub = `You've already spent ${formatAmount(result.actualSpend - budget)} over budget — adding this makes it worse`;
-    } else if (projectedOver) {
-      verdictSub = `Projected ${formatAmount(Math.abs(result.budgetRemaining))} over budget — plus ${formatAmount(result.desiredSpend)} for this purchase`;
+    } else if (result.verdict === 'from_savings') {
+      verdictSub = `${overBy} over this month's budget, but you hold ${formatAmount(result.cashOnHand)} in cash`;
+    } else if (result.verdict === 'from_investments') {
+      verdictSub = `Your ${formatAmount(result.cashOnHand)} in cash doesn't cover it, but your ${formatAmount(result.investments)} in investments does, without touching your safety net`;
+    } else if (result.verdict === 'uses_emergency_fund') {
+      const liquid = result.investments > 0
+        ? `${formatAmount(result.cashOnHand + result.investments)} in cash and investments`
+        : `${formatAmount(result.cashOnHand)} in cash`;
+      verdictSub = `Your ${liquid} doesn't cover it. The rest would come from your ${formatAmount(result.emergencyFund)} safety net`;
+    } else if (result.verdict === 'not_enough') {
+      verdictSub = `You hold ${formatAmount(result.cashOnHand + result.investments + result.emergencyFund)} against a ${formatAmount(result.desiredSpend)} purchase`;
     } else {
-      verdictSub = `This purchase would put you ${formatAmount(Math.abs(result.budgetRemaining - result.desiredSpend))} over budget`;
+      verdictSub = `${overBy} over budget. Add your balances in Net Worth and this can tell you whether you have the money`;
     }
   }
 
@@ -158,12 +183,10 @@ function AffordTool({ savedBudget }) {
 
       {result && (
         <div className="space-y-4">
-          <div className={`rounded-2xl border-2 p-5 text-center ${canAfford ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'}`}>
-            <div className="text-3xl mb-2">{canAfford ? '✅' : '❌'}</div>
-            <h3 className={`font-bold text-lg ${canAfford ? 'text-emerald-700' : 'text-rose-700'}`}>
-              {canAfford ? 'Go ahead — you can afford it' : alreadyOver ? 'Already over budget' : 'Hold off — budget is tight'}
-            </h3>
-            <p className={`text-sm mt-1 ${canAfford ? 'text-emerald-600' : 'text-rose-600'}`}>{verdictSub}</p>
+          <div className={`rounded-2xl border-2 p-5 text-center ${tone.border}`}>
+            <div className="text-3xl mb-2">{verdict.icon}</div>
+            <h3 className={`font-bold text-lg ${tone.head}`}>{verdict.title}</h3>
+            <p className={`text-sm mt-1 ${tone.body}`}>{verdictSub}</p>
           </div>
 
           <ToolCard>
@@ -180,7 +203,9 @@ function AffordTool({ savedBudget }) {
               sub={`${result.daysElapsed} day${result.daysElapsed !== 1 ? 's' : ''} elapsed`} />
             <StatRow label="Daily burn rate" value={`${formatAmount(result.dailyBurnRate)} / day`} />
             <StatRow label="Projected month total" value={formatAmount(result.projectedTotal)}
-              sub={`${result.daysRemaining} days remaining`}
+              sub={result.projectionConfidence === 'low'
+                ? `Rough: only ${result.daysElapsed} days to go on`
+                : `${result.daysRemaining} days remaining`}
               valueClass={result.projectedTotal > budget ? 'text-rose-600' : 'text-gray-900'} />
             <StatRow label="Projected budget left" value={formatAmount(result.budgetRemaining)}
               valueClass={result.budgetRemaining < 0 ? 'text-rose-600' : 'text-emerald-600'} />
@@ -209,6 +234,21 @@ function AffordTool({ savedBudget }) {
               </p>
             )}
           </ToolCard>
+
+          {result.knowsBalances && (
+            <ToolCard>
+              <h4 className="text-sm font-semibold text-gray-700 mb-4">What you have to spend</h4>
+              <StatRow label="Cash on hand" value={formatAmount(result.cashOnHand)} />
+              {result.investments > 0 && (
+                <StatRow label="Investments" value={formatAmount(result.investments)}
+                  sub="Spendable, but days away rather than today" />
+              )}
+              {result.emergencyFund > 0 && (
+                <StatRow label="Emergency fund" value={formatAmount(result.emergencyFund)}
+                  sub="Kept separate. Spending it is a different decision" />
+              )}
+            </ToolCard>
+          )}
 
           <div className={`rounded-2xl border border-gray-200 p-4 flex items-center gap-3 ${velocity.bg}`}>
             <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${velocity.dot}`} />
@@ -627,6 +667,7 @@ function SavingsGoalTool() {
   const [monthly,     setMonthly]     = useState('');
   const [result,      setResult]      = useState(null);
 
+  const [newSaved, setNewSaved] = useState('');
   const [prefillBanner, setPrefillBanner] = useState(null);
 
   const reloadGoals = () =>
@@ -647,8 +688,8 @@ function SavingsGoalTool() {
     if (!newName.trim() || !price) { setAddError('Name and amount are required'); return; }
     setAdding(true); setAddError('');
     try {
-      await addGoal(newName.trim(), price);
-      setNewName(''); setNewAmount(''); setPrefillBanner(null);
+      await addGoal(newName.trim(), price, 'general', parseNum(newSaved));
+      setNewName(''); setNewAmount(''); setNewSaved(''); setPrefillBanner(null);
       reloadGoals();
     } catch (err) {
       setAddError(err.message || 'Failed to save goal');
@@ -673,6 +714,7 @@ function SavingsGoalTool() {
     if (!result) return;
     setNewName(result.name !== 'My Goal' ? result.name : '');
     setNewAmount(fmtInput(String(result.target)));
+    setNewSaved(result.current ? fmtInput(String(result.current)) : '');
     setPrefillBanner(result.name);
     document.getElementById('my-goals-card')?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -735,6 +777,7 @@ function SavingsGoalTool() {
             placeholder="e.g. New laptop, Holiday, Emergency fund"
             className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
           <AmountInput label="" value={newAmount} onChange={setNewAmount} placeholder="Target amount" />
+          <AmountInput label="" value={newSaved} onChange={setNewSaved} placeholder="Already saved (optional)" />
           {addError && <p className="text-xs text-red-500">{addError}</p>}
           <button type="submit" disabled={adding}
             className="w-full py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">

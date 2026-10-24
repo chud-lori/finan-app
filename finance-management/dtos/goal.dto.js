@@ -7,6 +7,7 @@ class AddGoalRequestDTO extends BaseRequestDTO {
         super(data);
         this.description = data.description;
         this.price = data.price;
+        this.savedAmount = data.savedAmount;
         // Outside the allowlist falls back to 'general' rather than erroring — it's a hint, not user text.
         this.kind = GOAL_KINDS.includes(data.kind) ? data.kind : 'general';
     }
@@ -18,6 +19,9 @@ class AddGoalRequestDTO extends BaseRequestDTO {
         }
         if (this.price === undefined || typeof this.price !== 'number' || this.price <= 0) {
             errors.push('Price is required and must be a positive number');
+        }
+        if (this.savedAmount !== undefined && (typeof this.savedAmount !== 'number' || this.savedAmount < 0)) {
+            errors.push('savedAmount must be a non-negative number');
         }
         return errors;
     }

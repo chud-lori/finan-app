@@ -28,6 +28,7 @@ const nativeMl = require('../services/ml');
 const nativeMlRecurring = require('../services/ml/recurring');
 const { topMerchants } = require('../services/ml/merchants');
 const NetWorthSnapshot = require('../models/netWorthSnapshot.model');
+const NetWorth = require('../models/netWorth.model');
 const { buildRecap } = require('../services/ml/recap');
 const { computeRunway } = require('../services/ml/runway');
 const { computeHealth } = require('./gamification');
@@ -47,9 +48,11 @@ const invalidateMLInsight = (userId, yearMonth, tz = 'UTC') => {
     return MLInsight.deleteMany({ user: userId, yearMonth: { $in: [...months] } }).catch(() => {});
 };
 
-// Fire-and-forget: update streak fields on the User document when a transaction is logged
-const updateStreak = (userId, txMoment, tz) => {
-    const today = txMoment.clone().tz(tz).format('YYYY-MM-DD');
+// Fire-and-forget: update streak fields on the User document when a transaction is logged.
+// The streak counts days the user logged something, not days the money moved, so it reads
+// the clock rather than the transaction: backdating an entry must not rewrite the run.
+const updateStreak = (userId, tz) => {
+    const today = moment().tz(tz).format('YYYY-MM-DD');
     return User.findById(userId).then(u => {
         if (!u) return;
         if (u.streakLastDate === today) return; // already credited today
@@ -95,6 +98,8 @@ const withOptionalTransaction = async (fn) => {
 const path = require('path');
 const fs = require('fs');
 const {
+    MAX_DESCRIPTION_LENGTH,
+    MAX_CATEGORY_LENGTH,
     AddTransactionRequestDTO,
     AddTransactionResponseDTO,
     GetTransactionsResponseDTO,
@@ -172,6 +177,11 @@ const addTransaction = async (req, res, next) => {
             return res.status(400).json(BaseResponseDTO.error('Invalid currency code'));
         }
 
+        // moment.tz accepts an unknown zone name and silently ignores it, so the string must be checked here.
+        if (!moment.tz.zone(transactionDTO.transaction_timezone)) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid transaction_timezone'));
+        }
+
         // Validate time format — try common formats
         const transactionTime = parseTransactionTime(transactionDTO.time, transactionDTO.transaction_timezone);
         if (!transactionTime) {
@@ -229,7 +239,7 @@ const addTransaction = async (req, res, next) => {
             tz:           transactionDTO.transaction_timezone,
         })); // fire-and-forget
         track(invalidateMLInsight(user.id, txYearMonth, transactionDTO.transaction_timezone)); // fire-and-forget
-        track(updateStreak(user.id, transactionTime, transactionDTO.transaction_timezone)); // fire-and-forget
+        track(updateStreak(user.id, transactionDTO.transaction_timezone)); // fire-and-forget
         track(User.findByIdAndUpdate(user.id, { lastActivityAt: new Date(), lastActivityType: 'Added transaction' }).catch(() => {}));
         logger.info(`Add transaction response: ${user.id} success`);
 
@@ -453,11 +463,18 @@ const patchTransaction = async (req, res) => {
             if (typeof description !== 'string' || !description.trim()) {
                 return res.status(400).json(BaseResponseDTO.error('description must be a non-empty string'));
             }
+            // findOneAndUpdate skips schema validators, so the cap has to be checked here too.
+            if (description.trim().length > MAX_DESCRIPTION_LENGTH) {
+                return res.status(400).json(BaseResponseDTO.error(`description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer`));
+            }
             update.description = description.trim();
         }
         if (category !== undefined) {
             if (typeof category !== 'string' || !category.trim()) {
                 return res.status(400).json(BaseResponseDTO.error('category must be a non-empty string'));
+            }
+            if (category.trim().length > MAX_CATEGORY_LENGTH) {
+                return res.status(400).json(BaseResponseDTO.error(`category must be ${MAX_CATEGORY_LENGTH} characters or fewer`));
             }
             const catExists = await Category.findOne({ user: req.user.id, name: { $regex: new RegExp(`^${escapeRegex(category.trim())}$`, 'i') } }).lean();
             if (!catExists) {
@@ -570,6 +587,10 @@ const getRecommendation = async (req, res, next) => {
         if (!monthlyBudget || monthlyBudget <= 0) {
             return res.status(400).json(BaseResponseDTO.error('Invalid monthly budget'));
         }
+        // Unchecked, a negative amount came back as "go ahead".
+        if (!Number.isFinite(desiredSpend) || desiredSpend < 0) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid spend amount'));
+        }
 
         const userTz = validTz(req.query.tz);
         const now = moment().tz(userTz);
@@ -579,18 +600,59 @@ const getRecommendation = async (req, res, next) => {
         const daysElapsed = Math.max(now.date(), 1);
         const daysRemaining = daysInMonth - daysElapsed;
 
-        // Fetch all expense transactions this month
-        const transactions = await Transaction.find({
-            user: req.user.id,
-            type: 'expense',
-            time: { $gte: startOfMonth, $lte: endOfMonth }
-        }).exec();
+        const [transactions, savingsNames, netWorth, balanceDoc] = await Promise.all([
+            Transaction.find({
+                user: req.user.id,
+                type: 'expense',
+                time: { $gte: startOfMonth, $lte: endOfMonth }
+            }).exec(),
+            getSavingsCategoryNames(req.user.id),
+            NetWorth.findOne({ user: req.user.id }).lean(),
+            Balance.findOne({ user: req.user.id }).select('amount').lean(),
+        ]);
 
-        const actualSpend = transactions.reduce((sum, t) => sum + t.amount, 0);
+        // Savings transfers are retained, not spent, so counting them inflates the burn rate.
+        const actualSpend = transactions
+            .filter(t => !savingsNames.has((t.category || '').toLowerCase()))
+            .reduce((sum, t) => sum + t.amount, 0);
         const dailyBurnRate = actualSpend / daysElapsed;
         const projectedTotal = Math.round(actualSpend + dailyBurnRate * daysRemaining);
         const budgetRemaining = Math.round(monthlyBudget - projectedTotal);
-        const canAfford = budgetRemaining >= desiredSpend ? 1 : 0;
+        const fitsBudget = budgetRemaining >= desiredSpend;
+
+        // A net worth cash row is seeded from Balance, so the two are alternatives and never summed.
+        const assets = netWorth?.assets || [];
+        const cashRows = assets.filter(a => a.type === 'cash');
+        const cashOnHand = cashRows.length
+            ? cashRows.reduce((sum, a) => sum + (a.amount || 0), 0)
+            : Math.max(Math.round(balanceDoc?.amount ?? 0), 0);
+        // Property, vehicle and receivable rows stay out: none turns into money on the timescale of a purchase decision.
+        const investments = assets
+            .filter(a => a.type === 'investment')
+            .reduce((sum, a) => sum + (a.amount || 0), 0);
+        const emergencyFund = assets
+            .filter(a => a.type === 'emergency_fund')
+            .reduce((sum, a) => sum + (a.amount || 0), 0);
+
+        const coveredByCash = desiredSpend <= cashOnHand;
+        const coveredByInvestments = !coveredByCash && desiredSpend <= cashOnHand + investments;
+        const coveredWithEmergency = !coveredByCash && !coveredByInvestments
+            && desiredSpend <= cashOnHand + investments + emergencyFund;
+        const knowsBalances = cashOnHand > 0 || investments > 0 || emergencyFund > 0;
+
+        // Only the first verdict is about the budget. The rest ask whether the money exists.
+        let verdict;
+        if (fitsBudget) verdict = 'fits_budget';
+        else if (!knowsBalances) verdict = 'over_budget';
+        else if (coveredByCash) verdict = 'from_savings';
+        else if (coveredByInvestments) verdict = 'from_investments';
+        else if (coveredWithEmergency) verdict = 'uses_emergency_fund';
+        else verdict = 'not_enough';
+
+        const canAfford = (fitsBudget || coveredByCash || coveredByInvestments) ? 1 : 0;
+
+        // A line drawn from a handful of days is noise; early spend is front-loaded by rent.
+        const projectionConfidence = daysElapsed >= 10 ? 'ok' : 'low';
 
         // Savings rate with and without the purchase
         const savingsRateWithout = monthlyBudget > 0
@@ -617,6 +679,12 @@ const getRecommendation = async (req, res, next) => {
             savingsRateWith,
             velocityStatus,
             canAfford,
+            verdict,
+            cashOnHand,
+            investments,
+            emergencyFund,
+            knowsBalances,
+            projectionConfidence,
         });
 
         res.status(200).json(BaseResponseDTO.success('Budget recommendation', responseDTO));
@@ -770,6 +838,11 @@ const importCsv = async (req, res, next) => {
         const balanceExists = await Balance.exists({ user: user.id });
         if (!balanceExists) {
             return res.status(404).json(BaseResponseDTO.error('User balance not found'));
+        }
+
+        // moment.tz accepts an unknown zone name and silently ignores it, so the string must be checked here.
+        if (req.body.userTimezone !== undefined && !moment.tz.zone(req.body.userTimezone)) {
+            return res.status(400).json(BaseResponseDTO.error('Invalid userTimezone'));
         }
 
         // Fallback timezone: user's current browser timezone (sent with the request),
@@ -1212,12 +1285,14 @@ const getExplainability = async (req, res) => {
             periodStart = now.clone().startOf('month').toDate();
             periodEnd   = now.clone().endOf('month').toDate();
         }
-        const prevStart = moment(periodStart).subtract(1, 'month').toDate();
+        // moment(Date) lands in the server's zone, so month arithmetic has to be
+        // pinned to the user's or a server west of them steps into the wrong month.
+        const prevStart = moment(periodStart).tz(userTz).subtract(1, 'month').toDate();
         // Trailing complete months (the current, possibly-partial month is excluded)
         // used to classify each category's volatility and to supply the month-over-
         // month baseline. Six months is enough to be stable while staying recent
         // enough to reflect the user's current life.
-        const historyStart = moment(periodStart).subtract(6, 'month').toDate();
+        const historyStart = moment(periodStart).tz(userTz).subtract(6, 'month').toDate();
 
         const [currentTxnsRaw, historyTxnsRaw, savingsNames, changesPaused] = await Promise.all([
             Transaction.find({ user: req.user.id, type: 'expense', time: { $gte: periodStart, $lte: periodEnd } }).lean(),

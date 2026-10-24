@@ -43,6 +43,46 @@ describe('Goal Integration Tests', () => {
     });
 
     describe('POST /api/goal/add', () => {
+        it('keeps an amount already saved instead of starting the goal at zero', async () => {
+            const res = await chai.request(server)
+                .post('/api/goal/add')
+                .set('Cookie', authCookie)
+                .send({ description: 'Holiday', price: 10000000, savedAmount: 3000000 });
+
+            expect(res).to.have.status(201);
+            expect(res.body.data.goal).to.have.property('savedAmount', 3000000);
+            expect(res.body.data.goal).to.have.property('progress', 30);
+            expect(res.body.data.goal).to.have.property('achieve', 0);
+        });
+
+        it('starts at zero when no saved amount is given', async () => {
+            const res = await chai.request(server)
+                .post('/api/goal/add')
+                .set('Cookie', authCookie)
+                .send({ description: 'Laptop', price: 10000000 });
+
+            expect(res.body.data.goal).to.have.property('savedAmount', 0);
+        });
+
+        it('marks a goal achieved when it is already fully funded', async () => {
+            const res = await chai.request(server)
+                .post('/api/goal/add')
+                .set('Cookie', authCookie)
+                .send({ description: 'Already there', price: 5000000, savedAmount: 5000000 });
+
+            expect(res.body.data.goal).to.have.property('achieve', 1);
+            expect(res.body.data.goal).to.have.property('progress', 100);
+        });
+
+        it('rejects a negative saved amount', async () => {
+            const res = await chai.request(server)
+                .post('/api/goal/add')
+                .set('Cookie', authCookie)
+                .send({ description: 'Bad', price: 10000000, savedAmount: -1 });
+
+            expect(res).to.have.status(400);
+        });
+
         it('should create a new goal successfully', async () => {
             const res = await chai.request(server)
                 .post('/api/goal/add')

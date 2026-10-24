@@ -3,6 +3,8 @@ import Image from 'next/image';
 import Reveal from '@/components/Reveal';
 import LandingNav from '@/components/LandingNav';
 import LandingHeroCTA from '@/components/LandingHeroCTA';
+import LandingAppMotion from '@/components/LandingAppMotion';
+import LandingInsightMotion from '@/components/LandingInsightMotion';
 import ForceLightMode from '@/components/ForceLightMode';
 
 const SITE_URL = 'https://finance.lori.my.id';
@@ -72,29 +74,6 @@ const STEPS = [
   { n: '4', title: 'Plan with confidence',  desc: 'Use 11 built-in tools to make smarter decisions every month.' },
 ];
 
-const TESTIMONIALS = [
-  {
-    name: 'Rina S.',
-    role: 'Freelance Designer',
-    avatar: 'RS',
-    text: 'I finally know where my money goes every month. The FIRE calculator alone changed how I think about saving.',
-    anim: 'left',
-  },
-  {
-    name: 'Budi H.',
-    role: 'Software Engineer',
-    avatar: 'BH',
-    text: 'Imported 3 months of bank CSV in one go, categories auto-filled. The AI anomaly detection caught a duplicate charge I missed.',
-    anim: 'up',
-  },
-  {
-    name: 'Dewi P.',
-    role: 'Small Business Owner',
-    avatar: 'DP',
-    text: 'The tax estimator saves me from surprises every year. Everything is free — I keep waiting for the upsell that never comes.',
-    anim: 'right',
-  },
-];
 
 const SECURITY_POINTS = [
   { icon: '🔐', title: 'Passwords hashed with bcrypt',     desc: 'Your password is never stored in plaintext. We use bcrypt — the industry standard for secure password storage.' },
@@ -164,7 +143,7 @@ function ToolPill({ icon, name, desc, delay }) {
 
 function LandingFooter() {
   return (
-    <footer className="bg-gray-950">
+    <footer className="bg-teal-950">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
           <div className="lg:col-span-2">
@@ -174,15 +153,12 @@ function LandingFooter() {
               </Link>
             </div>
             <p className="text-sm leading-relaxed text-gray-400 max-w-xs mb-3">
-              A free personal finance tracker built to help you take full control of your money — without complexity, ads, or paywalls.
+              A free personal finance tracker built to help you take full control of your money, without complexity, ads, or paywalls.
             </p>
             <p className="text-sm leading-relaxed text-gray-400 max-w-xs">
               11 planning tools, multi-currency support, AI insights, CSV import/export. Free forever.
             </p>
-            <div className="flex items-center gap-2 mt-5">
-              <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-              <span className="text-xs text-teal-400 font-medium">Free · No ads · No paywalls</span>
-            </div>
+            <p className="mt-5 text-xs font-medium text-teal-400">Free · No ads · No paywalls</p>
           </div>
           {Object.entries(FOOTER_LINKS).map(([section, links]) => (
             <div key={section}>
@@ -198,15 +174,15 @@ function LandingFooter() {
           ))}
         </div>
       </div>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6"><div className="border-t border-gray-800" /></div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6"><div className="border-t border-teal-900" /></div>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-4 text-xs text-gray-500">
+        <div className="flex items-center gap-4 text-xs text-gray-400">
           <span>© {new Date().getFullYear()} Finan App</span>
           <Link href="/privacy" className="hover:text-teal-400 transition-colors">Privacy Policy</Link>
           <Link href="/terms"   className="hover:text-teal-400 transition-colors">Terms</Link>
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span>Built with Hehe · by</span>
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <span>Built by</span>
           <a href="https://profile.lori.my.id/" target="_blank" rel="noopener noreferrer"
             className="text-teal-400 font-semibold hover:text-teal-300 transition-colors">Lori</a>
         </div>
@@ -251,18 +227,11 @@ export default function LandingPage() {
         <LandingNav />
 
         {/* ── Hero ── */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-teal-50 via-white to-emerald-50 pt-20 pb-24 sm:pt-28 sm:pb-32">
-          <div aria-hidden className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full bg-teal-100/60 blur-3xl" />
-            <div className="absolute -bottom-32 -left-32 w-[400px] h-[400px] rounded-full bg-emerald-100/50 blur-3xl" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-teal-50/80 blur-2xl" />
-          </div>
-
+        <section className="relative overflow-hidden bg-white pt-20 pb-24 sm:pt-28 sm:pb-32">
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
-            <div className="animate-fade-in delay-0 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-100 text-teal-700 text-xs font-semibold mb-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+            <p className="animate-fade-in delay-0 text-xs font-semibold uppercase tracking-widest text-teal-700 mb-6">
               11 financial tools · Free · Multi-currency
-            </div>
+            </p>
 
             <h1 className="animate-fade-in-up delay-75 text-4xl sm:text-5xl lg:text-6xl font-black text-gray-900 leading-tight tracking-tight mb-6">
               Finally know where
@@ -270,7 +239,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="animate-fade-in-up delay-200 text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Track every transaction, spot patterns you&apos;ve been missing, and make smarter money decisions — all in one free, private dashboard. No spreadsheets. No subscriptions.
+              Track every transaction, spot the patterns you have been missing, and make smarter money decisions in one free, private dashboard. No spreadsheets. No subscriptions.
             </p>
 
             <LandingHeroCTA />
@@ -280,70 +249,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* Mock dashboard */}
-          <div className="animate-fade-in-up delay-500 relative max-w-5xl mx-auto px-4 sm:px-6 mt-16">
-            <div className="animate-float relative bg-white rounded-2xl border border-gray-200 shadow-2xl shadow-gray-300/40 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none z-10 rounded-2xl" />
-              {/* Fake navbar */}
-              <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-4">
-                <Image src="/logo.png" alt="Finan App" width={80} height={42} className="h-5 w-auto" />
-                <div className="flex gap-1 flex-1">
-                  {['Dashboard', 'Analytics', 'Reports', 'Planner', 'Insights'].map(n => (
-                    <span key={n} className="text-xs text-gray-400 px-2.5 py-1 rounded-lg hidden sm:block hover:bg-gray-50">{n}</span>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 btn-cta rounded-lg text-white shadow-sm shadow-teal-300/40">
-                  <div className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[8px] font-bold shrink-0">F</div>
-                  <span className="text-[10px] font-semibold hidden sm:block">Open App</span>
-                  <svg className="w-2.5 h-2.5 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
-                </div>
-              </div>
-              {/* Stat cards */}
-              <div className="p-4 sm:p-5 bg-gray-50/80">
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  {[
-                    { label: 'Balance', val: '$8,400',  color: 'text-gray-900' },
-                    { label: 'Income',  val: '$12,000', color: 'text-emerald-600', badge: '📈' },
-                    { label: 'Expense', val: '$3,600',  color: 'text-rose-600',    badge: '📉' },
-                  ].map(({ label, val, color, badge }) => (
-                    <div key={label} className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-xs text-gray-400">{label}</p>
-                        {badge && <span className="text-sm">{badge}</span>}
-                      </div>
-                      <p className={`text-xs sm:text-sm font-bold ${color} tabular-nums`}>{val}</p>
-                    </div>
-                  ))}
-                </div>
-                {/* Fake table */}
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-700">Transactions</span>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">This month</span>
-                  </div>
-                  {[
-                    { desc: 'Freelance project',  cat: 'Income',     amt: '+$12,000', type: 'income'  },
-                    { desc: 'Apartment rent',      cat: 'Housing',    amt: '−$1,200',  type: 'expense' },
-                    { desc: 'Groceries',           cat: 'Food',       amt: '−$340',    type: 'expense' },
-                    { desc: 'Index fund deposit',  cat: 'Investment', amt: '−$2,000',  type: 'expense' },
-                  ].map((r, i) => (
-                    <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">
-                      <span className="text-xs text-gray-300 w-4 font-mono">{i + 1}</span>
-                      <span className="text-xs text-gray-700 flex-1 truncate font-medium">{r.desc}</span>
-                      <span className="text-xs text-gray-400 hidden sm:block px-1.5 py-0.5 bg-gray-100 rounded">{r.cat}</span>
-                      <span className={`text-xs font-semibold tabular-nums ${r.type === 'income' ? 'text-emerald-600' : 'text-gray-700'}`}>{r.amt}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${r.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                        {r.type === 'income' ? '↑' : '↓'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div aria-hidden className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-3/4 h-12 bg-teal-200/40 blur-2xl rounded-full" />
-          </div>
+          <LandingAppMotion />
         </section>
 
         {/* ── Features ── */}
@@ -375,7 +281,7 @@ export default function LandingPage() {
                     {/* Dynamic island */}
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 w-24 h-6 bg-gray-950 rounded-full z-20" />
                     {/* Screen */}
-                    <div className="bg-gray-50 rounded-[2.4rem] overflow-hidden" style={{ height: 480 }}>
+                    <div className="relative bg-gray-50 rounded-[2.4rem] overflow-hidden" style={{ height: 480 }}>
                       {/* App top bar */}
                       <div className="bg-white border-b border-gray-100 px-4 pt-9 pb-2.5 flex items-center justify-between">
                         <span className="text-[11px] font-black text-teal-600 tracking-tight">Finan App</span>
@@ -390,25 +296,25 @@ export default function LandingPage() {
                         {/* Balance card */}
                         <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
                           <p className="text-[8px] text-gray-400 mb-0.5">Balance</p>
-                          <p className="text-[15px] font-bold text-gray-900 tabular-nums">Rp 8.400.000</p>
+                          <p className="text-[15px] font-bold text-gray-900 tabular-nums">$8,400</p>
                         </div>
                         {/* Income/Expense row */}
                         <div className="grid grid-cols-2 gap-2">
                           <div className="bg-white rounded-xl border border-gray-200 p-2.5">
                             <p className="text-[7px] text-gray-400">Income</p>
-                            <p className="text-[11px] font-bold text-emerald-600">Rp 12jt</p>
+                            <p className="text-[11px] font-bold text-emerald-600">$12,000</p>
                           </div>
                           <div className="bg-white rounded-xl border border-gray-200 p-2.5">
                             <p className="text-[7px] text-gray-400">Expense</p>
-                            <p className="text-[11px] font-bold text-rose-500">Rp 3.6jt</p>
+                            <p className="text-[11px] font-bold text-rose-500">$3,600</p>
                           </div>
                         </div>
                         {/* Transaction list */}
                         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                           {[
-                            { desc: 'Freelance project', amt: '+12.000.000', type: 'income' },
-                            { desc: 'Apartment rent',    amt: '−1.200.000',  type: 'expense' },
-                            { desc: 'Groceries',         amt: '−340.000',    type: 'expense' },
+                            { desc: 'Freelance project', amt: '+12,000', type: 'income' },
+                            { desc: 'Apartment rent',    amt: '−1,200',  type: 'expense' },
+                            { desc: 'Groceries',         amt: '−340',    type: 'expense' },
                           ].map((r, i) => (
                             <div key={i} className="flex items-center gap-2 px-2.5 py-2 border-b border-gray-50 last:border-0">
                               <div className={`w-1 self-stretch rounded-full shrink-0 ${r.type === 'income' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
@@ -589,39 +495,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── Testimonials ── */}
-        <section className="py-24 bg-white">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6">
-            <Reveal variant="blur" className="text-center mb-14">
-              <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Stories</p>
-              <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">What people are saying</h2>
-              <p className="text-gray-500 max-w-xl mx-auto">Real people, real finances — finally under control.</p>
-            </Reveal>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              {TESTIMONIALS.map(({ name, role, avatar, text, anim }, i) => (
-                <Reveal key={name} delay={`${i * 100}ms`} variant={anim}>
-                  <div className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-200 hover:border-teal-200 hover:shadow-lg hover:shadow-teal-100/50 transition-all duration-300 h-full">
-                    <div className="flex items-center gap-1">
-                      {[...Array(5)].map((_, s) => (
-                        <svg key={s} className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                    </div>
-                    <p className="text-sm text-gray-600 leading-relaxed flex-1">&ldquo;{text}&rdquo;</p>
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center shrink-0">{avatar}</div>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-800">{name}</p>
-                        <p className="text-xs text-gray-400">{role}</p>
-                      </div>
-                    </div>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </section>
 
         {/* ── Trust & Security ── */}
         <section className="py-24 relative overflow-hidden">
@@ -646,6 +519,31 @@ export default function LandingPage() {
                   </div>
                 </Reveal>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── How an insight is reached ── */}
+        <section className="py-24 bg-white">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
+              <Reveal variant="left">
+                <p className="text-xs font-semibold text-teal-600 uppercase tracking-widest mb-3">Anomaly detection</p>
+                <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">
+                  Unusual for you, not unusual in general
+                </h2>
+                <p className="text-gray-500 leading-relaxed mb-4">
+                  A fixed threshold flags the wrong things. Someone who spends 2 million a month on
+                  groceries is not having an emergency, and someone who spends 200 thousand suddenly is.
+                </p>
+                <p className="text-gray-500 leading-relaxed">
+                  Each category is measured against its own recent months, and categories that move
+                  around a lot need a bigger jump before anything is said. Quiet months stay quiet.
+                </p>
+              </Reveal>
+              <Reveal variant="right">
+                <LandingInsightMotion />
+              </Reveal>
             </div>
           </div>
         </section>

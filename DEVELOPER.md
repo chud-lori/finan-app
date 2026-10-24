@@ -62,6 +62,10 @@ finan-app/                          ← monorepo root
 ├── README.md                       ← product overview
 ├── DEVELOPER.md                    ← this file
 │
+├── scripts/
+│   ├── backup.sh                   ← one-shot migration tarball (mongodump + redacted .env)
+│   └── mongo-backup/               ← daily mongodump: host script + systemd service/timer
+│
 ├── finance-management/             ← Backend (Bun + Express.js + MongoDB)
 │   ├── app.js                      ← Express entry point (CORS, Helmet, Sentry, routes)
 │   ├── Dockerfile
@@ -208,7 +212,7 @@ finan-app/                          ← monorepo root
                                └────────────────┘
 ```
 
-**Network isolation:** MongoDB is not exposed to the host. Only the backend (port 3001) and frontend (port 3000) are published. The backend reaches MongoDB via the Docker network hostname `mongo`.
+**Network isolation:** MongoDB is not exposed to the host. The backend (3001) and frontend (3000) are published to `127.0.0.1` only, so nginx on the host is the sole path in and `trust proxy` has exactly one hop in front of it. The backend reaches MongoDB via the Docker network hostname `mongo`.
 
 **Startup order** (enforced by Docker Compose healthchecks):
 
@@ -302,6 +306,8 @@ req.cookies.token
 | Email verification | `EmailVerification` | Email body (24h TTL) | `tokenHash` |
 
 A database leak therefore cannot be replayed against the auth endpoints — every consumer-side handler SHA-256s the user-supplied token before `findOne`. The schema migration helper at `helpers/migrateTokenIndexes.js` drops the legacy `token_1` unique index on first startup after this change is deployed.
+
+The password-reset token reaches the backend in a POST body, but the email-verification token is a path parameter of `GET /api/auth/verify-email/:token`, so it would otherwise be written verbatim by both request loggers and reported to Sentry. `helpers/redactUrl.js#redactUrl` rewrites any `/verify-email/<segment>` to `/verify-email/[redacted]`, and it is applied in `middleware/log.js`, in the Morgan stream in `app.js`, and to `event.request.url` in Sentry's `beforeSend`. It matches the path pattern rather than the route, so moving the endpoint does not reopen the leak.
 
 ---
 
@@ -464,7 +470,7 @@ Collection: users
 |-------|------|-------------|-------|
 | `name` | String | required, max 100 | |
 | `username` | String | required, unique, max 100 | |
-| `email` | String | required, unique | |
+| `email` | String | required, unique, lowercase, trim | the schema setter also normalises query filters, so every lookup matches regardless of how the address was typed |
 | `password` | String | min 8 | nullable — Google OAuth users have no password |
 | `googleId` | String | unique, sparse | null for password accounts |
 | `lastLoginAt` | Date | | |
@@ -472,11 +478,13 @@ Collection: users
 | `lastActivityType` | String | | |
 | `tokenVersion` | Number | default 0 | bumped on logout-all / password change |
 | `emailVerified` | Boolean | default true | false for new password-only accounts until verified |
-| `streakDays` | Number | default 0 | current consecutive days with a transaction |
+| `streakDays` | Number | default 0 | current consecutive days on which the user logged a transaction, counted by the logging date rather than the transaction's own date |
 | `streakLastDate` | String | `YYYY-MM-DD` | last day a transaction was logged |
 | `longestStreak` | Number | default 0 | all-time best streak |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
+
+`RegisterRequestDTO` trims and lowercases the address on the way in as well, so the duplicate check at registration cannot be sidestepped by capitalising a letter. Rows written before that landed keep whatever case they were typed in, and `helpers/migrateUserEmails.js` lowercases them once on startup. It skips any row whose lowercased form already belongs to a different account and logs the pair instead, because two ledgers behind one address is the owner's call to resolve rather than a migration's.
 
 ---
 
@@ -517,7 +525,7 @@ Collection: transactions
 | `currency` | String | required | 3-letter ISO 4217 code (e.g. `IDR`) |
 | `type` | String | enum: `income \| expense` | |
 | `time` | Date | required | stored as UTC; original timezone in `transaction_timezone` |
-| `transaction_timezone` | String | required | IANA identifier (e.g. `Asia/Jakarta`) |
+| `transaction_timezone` | String | required | IANA identifier (e.g. `Asia/Jakarta`); every write path rejects a name `moment.tz.zone()` cannot resolve with a 400, because `moment.tz` itself accepts any string |
 | `createdAt` | Date | auto | |
 | `updatedAt` | Date | auto | |
 
@@ -649,7 +657,7 @@ worthless, because the same rule re-fires with new numbers next month.
 |-------|------|-------------|-------|
 | `user` | ObjectId | ref: User, required | |
 | `kind` | String | required, enum | the six category-scoped `kind`s `lib/insightFeed.js` emits: `category-concentration`, `category-fixed-base`, `category-change`, `category-one-off`, `category-frequency`, `category-top-expense` |
-| `subject` | String | required, ≤120 chars, `sanitizeText` + lowercased + trimmed | the category the insight is about. 120 rather than 64 because category names are user-typed and effectively unbounded (`models/category.model.js` uses `max`, which Mongoose ignores on Strings) — a cap below what a category can be turns the dismiss button into a dead control |
+| `subject` | String | required, ≤120 chars, `sanitizeText` + lowercased + trimmed | the category the insight is about. 120 rather than 64 because it has to clear the 100-char cap on `Category.name`; a cap below what a category can be turns the dismiss button into a dead control |
 | `reason` | String | required, enum: `expected \| not_useful` | closed enum, so the reason is never free text to sanitise |
 | `expiresAt` | Date | required, TTL index | when the insight comes back |
 | `createdAt` / `updatedAt` | Date | auto | `updatedAt` is surfaced as `dismissedAt` |
@@ -1196,7 +1204,22 @@ MongoDB is capped at 512 MB WiredTiger cache (`--wiredTigerCacheSizeGB 0.5`) to 
 
 ### Watchtower auto-deploy
 
-Watchtower polls GHCR every 30 seconds. Only containers with label `com.centurylinklabs.watchtower.enable=true` are watched (backend, frontend). On a new `:latest` image, Watchtower pulls and recreates the container in-place.
+Watchtower polls GHCR every 300 seconds (`WATCHTOWER_POLL_INTERVAL`). Only containers with label `com.centurylinklabs.watchtower.enable=true` are watched (backend, frontend). On a new `:latest` image, Watchtower pulls and recreates the container in-place.
+
+The GHCR packages are private, so every poll needs registry credentials. Watchtower reads them from `$DOCKER_CONFIG/config.json`, which means `DOCKER_CONFIG` must name a **directory**: compose mounts the host's `/root/.docker/config.json` at `/config/config.json` and sets `DOCKER_CONFIG: /config`. Before that fix it was set to the file itself, so the resolved path was `/config.json/config.json`, Watchtower queried the registry anonymously, took a 401 on every manifest request and skipped the container instead of erroring. The symptom was silence: correct labels, correct interval, container never cycled, and every deploy needed a manual `docker compose pull`.
+
+**The deployed `/opt/finan-app/docker-compose.yml` is maintained by hand**, and CD never touches it (see [CI/CD pipeline](#cicd-pipeline)). Merging the repo-side fix therefore does **not** fix production. Edit the same two lines on the server, then recreate the container:
+
+```bash
+# In /opt/finan-app/docker-compose.yml, watchtower service:
+#   volumes:     - /root/.docker/config.json:/config/config.json:ro
+#   environment: DOCKER_CONFIG: /config
+cd /opt/finan-app
+docker compose up -d watchtower
+docker logs --tail 50 finan-watchtower | grep -iE "401|unauthorized|credential|denied"
+```
+
+The credentials have to exist as well. `/root/.docker/config.json` must be the file written by `docker login ghcr.io` with a `read:packages` PAT, not an empty `{}` and not the directory Docker auto-creates when a bind-mount source is missing.
 
 ---
 
@@ -1225,6 +1248,104 @@ The script uses `mongodump`'s live archive stream — no container downtime need
 ```
 
 The tarball is the only thing that needs to leave the host. Move it to encrypted storage (S3 with KMS, an encrypted external drive, your laptop's FileVault disk, etc.) — the redacted `.env` is safe, but the database dump still contains user PII and transaction history.
+
+### Daily automated backup (systemd timer)
+
+`scripts/mongo-backup/` holds a host script plus a systemd service and timer that dump the `finan` database every day at 03:00 WIB. It covers the database only. Use `scripts/backup.sh` when you also need the `.env` and compose file for a migration.
+
+Each run:
+
+- runs `mongodump --archive --gzip` inside `finan-mongo` and writes `/var/backups/finan/finan-YYYYMMDD-HHMMSSZ.archive.gz` (directory and files are root-only)
+- writes to a `.partial` name and renames it only after the dump succeeded, is non-empty and passes `gzip -t`. A failed or empty dump exits non-zero and leaves no file behind
+- deletes local dumps older than `BACKUP_RETENTION_DAYS`, but only after a good dump, so a broken run never eats the last good backups
+- copies the new dump off-site with `rclone copy` when `BACKUP_RCLONE_REMOTE` is set, otherwise logs a warning that the backup exists on this host only
+- posts to `BACKUP_DISCORD_WEBHOOK` when anything above fails, including a systemd timeout kill
+
+`Persistent=true` on the timer means a run missed while the host was down fires at the next boot.
+
+Settings live in `/etc/finan-backup.env` (template: `scripts/mongo-backup/backup.env.example`). All are optional:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MONGO_CONTAINER` | `finan-mongo` | Container that runs mongod |
+| `MONGO_DB` | `finan` | Database to dump |
+| `MONGO_BACKUP_URI` | empty (no auth) | Connection string once Mongo has auth, e.g. `mongodb://backup:<password>@localhost:27017/?authSource=admin&directConnection=true`. No database in the path; percent-encode special characters in the password. It reaches mongodump through a config file on stdin, so it never appears in `ps` or the journal |
+| `BACKUP_DIR` | `/var/backups/finan` | Where dumps land on the host |
+| `BACKUP_RETENTION_DAYS` | `14` | Local dumps older than this many days are deleted |
+| `BACKUP_RCLONE_REMOTE` | empty (local only) | rclone destination, e.g. `r2:finan-backups` |
+| `BACKUP_DISCORD_WEBHOOK` | empty (no alert) | Discord webhook URL that receives a message on failure. Never logged |
+
+#### Install on the server
+
+The files are not deployed by CD. Copy them from a checkout:
+
+```bash
+# from your laptop, in the repo root
+scp scripts/mongo-backup/{backup-mongo.sh,finan-backup.service,finan-backup.timer,backup.env.example} ubuntu@your-vps:/tmp/
+```
+
+```bash
+# on the server
+sudo install -m 755 /tmp/backup-mongo.sh /usr/local/sbin/finan-backup-mongo
+sudo install -m 644 /tmp/finan-backup.service /tmp/finan-backup.timer /etc/systemd/system/
+sudo install -m 600 /tmp/backup.env.example /etc/finan-backup.env   # then edit to set the webhook / remote
+rm /tmp/backup-mongo.sh /tmp/finan-backup.service /tmp/finan-backup.timer /tmp/backup.env.example
+sudo systemctl daemon-reload
+sudo systemctl enable --now finan-backup.timer
+```
+
+To update later, repeat the `scp` and the first two `install` lines, then `sudo systemctl daemon-reload`.
+
+#### Run it manually and verify
+
+```bash
+sudo systemctl start finan-backup.service          # blocks until the dump finishes
+systemctl status finan-backup.service --no-pager   # expect status=0/SUCCESS
+journalctl -u finan-backup -n 30 --no-pager
+systemctl list-timers finan-backup.timer           # NEXT should be 03:00 WIB
+sudo ls -lh /var/backups/finan/
+```
+
+Check that the newest dump is readable and lists the expected collections. `--dryRun` writes nothing:
+
+```bash
+F=$(sudo sh -c 'ls -t /var/backups/finan/finan-*.archive.gz | head -1')
+sudo gzip -t "$F" && echo gzip ok
+sudo cat "$F" | sudo docker exec -i finan-mongo mongorestore --archive --gzip --dryRun --verbose 2>&1 | grep 'found collection'
+```
+
+#### Restore
+
+`--drop` replaces every `finan.*` collection with the dump's contents. Stop the backend first so nothing writes mid-restore:
+
+```bash
+F=/var/backups/finan/finan-YYYYMMDD-HHMMSSZ.archive.gz
+cd /opt/finan-app && sudo docker compose stop backend
+sudo cat "$F" | sudo docker exec -i finan-mongo mongorestore --archive --gzip --drop --nsInclude='finan.*'
+sudo docker compose start backend
+```
+
+To restore an off-site copy, fetch it first with `sudo rclone copy r2:finan-backups/finan-YYYYMMDD-HHMMSSZ.archive.gz /var/backups/finan/` and use the same commands.
+
+#### Set up off-site copies to Cloudflare R2 (later)
+
+1. In the Cloudflare dashboard, create an R2 bucket (e.g. `finan-backups`), then an R2 API token with **Object Read & Write** scoped to that bucket. Note the access key ID, the secret, and the S3 endpoint `https://<account_id>.r2.cloudflarestorage.com`.
+2. On the server, install rclone and create the remote interactively, so the secret stays out of shell history:
+
+   ```bash
+   sudo apt-get install -y rclone
+   sudo rclone config
+   # n (new remote) → name: r2 → storage: s3 → provider: Cloudflare
+   # env_auth: false → access_key_id / secret_access_key from step 1
+   # region: auto → endpoint: https://<account_id>.r2.cloudflarestorage.com → accept the rest
+   sudo rclone config update r2 no_check_bucket true   # a bucket-scoped token cannot create buckets
+   sudo rclone ls r2:finan-backups                      # no error = credentials work
+   ```
+
+   This writes `/root/.config/rclone/rclone.conf`, which is where `finan-backup.service` points `RCLONE_CONFIG`.
+3. Set `BACKUP_RCLONE_REMOTE=r2:finan-backups` in `/etc/finan-backup.env`, run `sudo systemctl start finan-backup.service`, and confirm the file shows in `sudo rclone ls r2:finan-backups`.
+
+The script never deletes anything off-site. Add an object lifecycle rule on the bucket (e.g. delete after 90 days) to bound its size.
 
 ---
 
@@ -1260,8 +1381,8 @@ This is the end-to-end procedure to move finan-app from VPS A to VPS B. Plan for
 6. **Authenticate to GHCR** so Docker (and Watchtower) can pull the private `ghcr.io/chud-lori/finan-app-*` images. Generate a GitHub PAT with `read:packages` scope at https://github.com/settings/tokens, then:
    ```bash
    echo "<your-pat>" | docker login ghcr.io -u <your-github-username> --password-stdin
-   # Watchtower reads /root/.docker/config.json (the file `docker login` just wrote)
-   # — the compose mount `/root/.docker/config.json:/config.json:ro` handles the rest.
+   # Watchtower reads /root/.docker/config.json (the file `docker login` just wrote);
+   # the compose mount `/root/.docker/config.json:/config/config.json:ro` handles the rest.
    ```
 7. **Clone the repo:**
    ```bash
@@ -1552,7 +1673,7 @@ docker exec finan-be bun scripts/sendMonthlyReport.js --to=you@example.com --for
 | POST | `/api/transaction/category` | — | ✓ | Seed default categories (idempotent) |
 | GET | `/api/transaction/date/:date` | — | ✓ | Transactions on a specific date; `YYYY-MM-DD` |
 | GET | `/api/transaction/range/:start/:end` | 60/min | ✓ | Transactions in date range (`YYYY-MM-DD`) with income/expense summary. Unpaginated — the whole range comes back, which is what the spending calendar needs. Query: `?tz=IANA` bounds the range in the user's zone (defaults to UTC) |
-| GET | `/api/transaction/recommendation/:monthly/:spend` | — | ✓ | Budget affordability check (legacy calculator) |
+| GET | `/api/transaction/recommendation/:monthly/:spend` | 30/min per user | ✓ | Affordability verdict. Reads `Balance` and `NetWorth` alongside the budget and returns `verdict` as one of `fits_budget`, `from_savings`, `from_investments`, `uses_emergency_fund`, `not_enough`, or `over_budget` when no balances are recorded. Spendable money is cash, then investments, then the emergency fund; property, vehicle and receivable are excluded. Response also carries `cashOnHand`, `investments`, `emergencyFund`, `knowsBalances` and `projectionConfidence`. `canAfford` is true for the first three verdicts, so read `verdict` when the distinction matters |
 
 **CSV import column mapping (case-insensitive):**
 
@@ -1718,6 +1839,22 @@ Use atomic `$inc` — never read-modify-write. Balance is a derived value. `POST
 
 `sanitizeText()` in `transaction.dto.js` strips HTML tags (`/<[^>]*>/g`) and null bytes (`/\0/g`) from all `description` and `category` fields before they reach the database. Prevents stored XSS.
 
+### String length caps
+
+Mongoose's `max` is a Number and Date validator; on a String it is silently ignored, so the schemas that carried `max: 100` had no cap at all and the effective bound was the 100kb body limit. The caps are `maxlength` on the schema plus a check in the DTO:
+
+| Field | Cap | Enforced in |
+|-------|-----|-------------|
+| `User.name` | 100 | `dtos/auth.dto.js` (register), `controllers/profile.js#updateIdentity` (update) |
+| `User.username` | 100 | schema only; `updateIdentity` applies a stricter `^[a-z0-9_]{3,30}$` on update |
+| `Category.name` | 100 | `dtos/transaction.dto.js` (created via a transaction), `controllers/category.js#renameCategory` |
+| `Transaction.description` | 500 | `dtos/transaction.dto.js`, `controllers/transaction.js#patchTransaction` |
+| `Transaction.category` | 100 | same as `Category.name`, the field stores the resolved category name |
+
+`maxlength` only runs on `save()` and on an update passing `runValidators`. Every update path here uses `findOneAndUpdate`, so a cap that must hold on an edit is checked in the handler as well, not only on the schema.
+
+`User.password` carries no cap: the stored value is a bcrypt hash, and the 8-char minimum on the plaintext is enforced where the plaintext exists (`helpers/validator.js` for register, `controllers/auth.js` for change-password and reset).
+
 ### Rate limiting
 
 `rateLimit.js` is an in-process sliding-window limiter. Two strategies:
@@ -1871,7 +2008,7 @@ Two workflows in `.github/workflows/`:
 
 **`ci.yml`** — runs on pull requests to `main`. Uses `dorny/paths-filter` to detect which subtree changed. Backend tests (`bun run test`) only run when `finance-management/**` changed; frontend build check only runs when `finance-management-fe/**` changed. CI installs Bun via `oven-sh/setup-bun@v1`.
 
-**`cd.yml`** — runs on push to `main`. Same path filtering — only rebuilds changed images. Backend and frontend build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 30s and redeploys automatically.
+**`cd.yml`** runs on push to `main`. Same path filtering, so only changed images are rebuilt. Backend and frontend build jobs run in parallel. Images tagged `:latest` pushed to GHCR. Watchtower on the server polls GHCR every 300s and recreates the labelled containers, provided its GHCR credentials resolve (see [Watchtower auto-deploy](#watchtower-auto-deploy)).
 
 **Important:** Changing `docker-compose.yml` or other root-level files does **not** trigger an image rebuild — those changes require a manual `git pull` + `docker compose up -d` on the server.
 
@@ -1886,7 +2023,7 @@ Two separate Sentry projects:
 | Backend (Express) | `@sentry/node` | `SENTRY_DSN` | Runtime — add to `.env`, recreate container |
 | Frontend (Next.js) | `@sentry/nextjs` | `NEXT_PUBLIC_SENTRY_DSN` | **Build-time** — set as GitHub Actions variable, triggers on next image build |
 
-**Backend:** `Sentry.init()` runs before all other imports in `app.js`, guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` registered after all routes. `uncaughtException` also calls `Sentry.captureException()`. Bun runtime is supported by `@sentry/node` via its Node compatibility layer — verify AsyncLocalStorage-based request context still tags errors with `req.user.id` after any future SDK upgrade.
+**Backend:** `Sentry.init()` runs before all other imports in `app.js`, guarded by `NODE_ENV === 'production' && SENTRY_DSN`. `Sentry.setupExpressErrorHandler(app)` registered after all routes. `uncaughtException` also calls `Sentry.captureException()`. `beforeSend` drops the `authorization`, `cookie` and `set-cookie` headers, replaces any `SCRUB_KEYS` field in the body or query string with `[redacted]`, and redacts the token segment of `request.url`. Bun runtime is supported by `@sentry/node` via its Node compatibility layer — verify AsyncLocalStorage-based request context still tags errors with `req.user.id` after any future SDK upgrade.
 
 **Frontend:** `sentry.client.config.js` initialises Session Replay (5% of sessions, 100% on error). `instrumentation.js` initialises the server SDK via the Next.js instrumentation hook.
 

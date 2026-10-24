@@ -8,11 +8,13 @@ const TransactionSchema = new Schema({
     },
     description: {
         type: String,
-        required: true
+        required: true,
+        maxlength: 500
     },
     category: {
         type: String,
-        required: true
+        required: true,
+        maxlength: 100
     },
     amount: {
         type: Number,

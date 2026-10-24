@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
 
   # ── MongoDB ────────────────────────────────────────────────
@@ -6,6 +12,7 @@ services:
   mongo:
     image: mongo:7
     container_name: finan-mongo
+    logging: *default-logging
     restart: unless-stopped
     # Cap WiredTiger cache to 512 MB so MongoDB doesn't consume all RAM on a small VPS.
     # Default is 50% of (system RAM - 1 GB) which can be 1.5-3 GB on a 4-8 GB server.
@@ -31,6 +38,7 @@ services:
   mongo-init:
     image: mongo:7
     container_name: finan-mongo-init
+    logging: *default-logging
     restart: "no"
     depends_on:
       mongo:
@@ -49,9 +57,10 @@ services:
       context: ./finance-management
       dockerfile: Dockerfile
     container_name: finan-be
+    logging: *default-logging
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       NODE_ENV: production
       DB_URI: ${DB_URI:-mongodb://mongo:27017/finan?replicaSet=rs0}
@@ -94,9 +103,10 @@ services:
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
     container_name: finan-fe
+    logging: *default-logging
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       backend:
         condition: service_healthy
@@ -113,15 +123,17 @@ services:
   watchtower:
     image: containrrr/watchtower
     container_name: finan-watchtower
+    logging: *default-logging
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /root/.docker/config.json:/config.json:ro
+      - /root/.docker/config.json:/config/config.json:ro
     environment:
       WATCHTOWER_POLL_INTERVAL: 300
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_CLEANUP: "true"
-      DOCKER_CONFIG: /config.json
+      # DOCKER_CONFIG is a directory; Docker reads credentials from $DOCKER_CONFIG/config.json.
+      DOCKER_CONFIG: /config
       DOCKER_API_VERSION: "1.44"
     networks:
       - finan-net
