@@ -39,8 +39,8 @@
     "jsonwebtoken": "^9.0.2",
     "moment-timezone": "^0.5.45",
     "mongoose": "^8.4.5",
-    "morgan": "^1.11.0",
-    "multer": "^2.4.0",
+    "morgan": "^1.12.1",
+    "multer": "^2.5.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "resend": "^6.16.0",
@@ -59,12 +59,12 @@
     "mongodb-memory-server": "^10.2.1"
   },
   "overrides": {
-    "serialize-javascript": "7.0.5",
     "diff": "8.0.3",
-    "body-parser": "1.20.6",
+    "body-parser": "1.20.9",
     "brace-expansion": "1.1.21",
     "js-yaml": "4.3.2",
     "qs": "^6.16.0",
-    "proxy-addr": "2.0.8"
+    "proxy-addr": "2.0.8",
+    "serialize-javascript": "7.1.4"
   }
 }
