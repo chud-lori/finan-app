@@ -21,6 +21,7 @@ module.exports = {
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
   GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/api/auth/google/callback',
   FE_URL: process.env.FE_URL || 'http://localhost:3000',
+  PUBLIC_URL: process.env.PUBLIC_URL || process.env.FE_URL || 'http://localhost:3000',
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   FROM_EMAIL:     process.env.FROM_EMAIL || 'noreply@lori.my.id',
   REPORT_FROM_EMAIL: process.env.REPORT_FROM_EMAIL || process.env.FROM_EMAIL || 'noreply@lori.my.id',
