@@ -335,8 +335,7 @@ function GoalRing({ goal, index, onDismiss }) {
             }}
           />
         </svg>
-        {/* Percentage label — counter-rotate the text so it reads upright */}
-        <span className="absolute inset-0 flex items-center justify-center text-xs font-black text-gray-800 rotate-90">
+        <span className="absolute inset-0 flex items-center justify-center text-xs font-black text-gray-800">
           {goal.progress}%
         </span>
       </div>
