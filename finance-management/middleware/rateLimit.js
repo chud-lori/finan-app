@@ -7,6 +7,7 @@ const SWEEP_RETENTION_MS = 60 * 60 * 1000; // 1 hour — generous headroom
 class RateLimiter {
     constructor() {
         this._buckets = new Map(); // key -> [timestamp, ...]
+        this._scopes = 0;
         setInterval(() => this._sweep(), WINDOW_MS).unref();
     }
 
@@ -37,12 +38,16 @@ class RateLimiter {
         };
     }
 
+    // Each limiter gets its own bucket, or every route sharing a caller would
+    // spend one counter and the app's smallest limit would cap all of them.
     byIp(max) {
-        return this._middleware(max, (req) => `ip:${req.ip}`);
+        const scope = `ip${++this._scopes}`;
+        return this._middleware(max, (req) => `${scope}:${req.ip}`);
     }
 
     byUser(max) {
-        return this._middleware(max, (req) => `user:${req.user?.id ?? req.ip}`);
+        const scope = `user${++this._scopes}`;
+        return this._middleware(max, (req) => `${scope}:${req.user?.id ?? req.ip}`);
     }
 
     // For limiting on a parsed body field, which middleware can't see. True = allowed.

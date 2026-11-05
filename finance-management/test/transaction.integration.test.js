@@ -331,8 +331,10 @@ describe('Transaction Integration Tests', () => {
 
     describe('GET /api/transaction/recommendation/{monthly}/{spend}', () => {
         beforeEach(async () => {
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
+            // Recent, but never earlier than the 1st: the verdict reads month-to-date
+            // spend, so a seed in the previous month is invisible to it.
+            const recent = new Date();
+            recent.setDate(Math.max(recent.getDate() - 7, 1));
 
             await Transaction.create({
                 user: userId,
@@ -341,7 +343,7 @@ describe('Transaction Integration Tests', () => {
                 category: 'Food & Dining',
                 type: 'expense',
                 currency: 'IDR',
-                time: weekAgo,
+                time: recent,
                 transaction_timezone: 'Asia/Jakarta'
             });
         });

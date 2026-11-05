@@ -44,6 +44,7 @@
     "body-parser": "1.20.9",
     "brace-expansion": "1.1.21",
     "diff": "8.0.3",
+    "follow-redirects": "1.16.2",
     "js-yaml": "4.3.2",
     "proxy-addr": "2.0.8",
     "qs": "^6.16.0",
@@ -342,7 +343,7 @@
 
     "fn.name": ["fn.name@1.1.0", "", {}, ""],
 
-    "follow-redirects": ["follow-redirects@1.16.1", "", {}, ""],
+    "follow-redirects": ["follow-redirects@1.16.2", "", {}, "sha512-/kVP2U8z596Ia0gwFrwyIeo74ta5aVmSeU1FfAUMAmcEP5EP7zydmag3SLiN64NaRKef3lxsq7i/g7ltJQDGow=="],
 
     "foreground-child": ["foreground-child@3.3.1", "", { "dependencies": { "cross-spawn": "^7.0.6", "signal-exit": "^4.0.1" } }, ""],
 
@@ -764,8 +765,6 @@
 
     "chalk/supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, ""],
 
-    "cliui/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, ""],
-
     "color/color-convert": ["color-convert@3.1.3", "", { "dependencies": { "color-name": "^2.0.0" } }, ""],
 
     "color-string/color-name": ["color-name@2.1.1", "", {}, ""],
@@ -778,55 +777,21 @@
 
     "finalhandler/debug": ["debug@2.6.9", "", { "dependencies": { "ms": "2.0.0" } }, ""],
 
-    "https-proxy-agent/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
-
-    "jsonwebtoken/ms": ["ms@2.1.3", "", {}, ""],
-
     "logform/@colors/colors": ["@colors/colors@1.6.0", "", {}, ""],
-
-    "logform/ms": ["ms@2.1.3", "", {}, ""],
 
     "make-dir/semver": ["semver@6.3.1", "", { "bin": "bin/semver.js" }, ""],
 
-    "mongodb-memory-server-core/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
-
     "mongodb-memory-server-core/mongodb": ["mongodb@6.21.0", "", { "dependencies": { "@mongodb-js/saslprep": "^1.3.0", "bson": "^6.10.4", "mongodb-connection-string-url": "^3.0.2" }, "peerDependencies": { "@aws-sdk/credential-providers": "^3.188.0", "@mongodb-js/zstd": "^1.1.0 || ^2.0.0", "gcp-metadata": "^5.2.0", "kerberos": "^2.0.1", "mongodb-client-encryption": ">=6.0.0 <7", "snappy": "^7.3.2", "socks": "^2.7.1" }, "optionalPeers": ["@aws-sdk/credential-providers", "@mongodb-js/zstd", "gcp-metadata", "kerberos", "mongodb-client-encryption", "snappy", "socks"] }, ""],
-
-    "mongoose/ms": ["ms@2.1.3", "", {}, ""],
 
     "morgan/debug": ["debug@2.6.9", "", { "dependencies": { "ms": "2.0.0" } }, ""],
 
-    "mquery/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
-
-    "new-find-package-json/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
-
     "pkg-dir/find-up": ["find-up@4.1.0", "", { "dependencies": { "locate-path": "^5.0.0", "path-exists": "^4.0.0" } }, ""],
-
-    "require-in-the-middle/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
 
     "send/debug": ["debug@2.6.9", "", { "dependencies": { "ms": "2.0.0" } }, ""],
 
     "send/mime": ["mime@1.6.0", "", { "bin": "cli.js" }, ""],
 
-    "send/ms": ["ms@2.1.3", "", {}, ""],
-
-    "string-width/strip-ansi": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, ""],
-
-    "string-width-cjs/emoji-regex": ["emoji-regex@8.0.0", "", {}, ""],
-
-    "string-width-cjs/strip-ansi": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, ""],
-
-    "strip-ansi-cjs/ansi-regex": ["ansi-regex@5.0.1", "", {}, ""],
-
-    "superagent/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
-
     "swagger-jsdoc/glob": ["glob@11.1.0", "", { "dependencies": { "foreground-child": "^3.3.1", "jackspeak": "^4.1.1", "minimatch": "^10.1.1", "minipass": "^7.1.2", "package-json-from-dist": "^1.0.0", "path-scurry": "^2.0.0" }, "bin": "dist/esm/bin.mjs" }, ""],
-
-    "wrap-ansi/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, ""],
-
-    "wrap-ansi-cjs/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, ""],
-
-    "wrap-ansi-cjs/strip-ansi": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, ""],
 
     "@isaacs/cliui/string-width/emoji-regex": ["emoji-regex@9.2.2", "", {}, ""],
 
@@ -836,8 +801,6 @@
 
     "body-parser/debug/ms": ["ms@2.0.0", "", {}, ""],
 
-    "cliui/string-width/emoji-regex": ["emoji-regex@8.0.0", "", {}, ""],
-
     "color/color-convert/color-name": ["color-name@2.1.1", "", {}, ""],
 
     "express-session/debug/ms": ["ms@2.0.0", "", {}, ""],
@@ -846,39 +809,17 @@
 
     "finalhandler/debug/ms": ["ms@2.0.0", "", {}, ""],
 
-    "https-proxy-agent/debug/ms": ["ms@2.1.3", "", {}, ""],
-
-    "mongodb-memory-server-core/debug/ms": ["ms@2.1.3", "", {}, ""],
-
     "morgan/debug/ms": ["ms@2.0.0", "", {}, ""],
-
-    "mquery/debug/ms": ["ms@2.1.3", "", {}, ""],
-
-    "new-find-package-json/debug/ms": ["ms@2.1.3", "", {}, ""],
 
     "pkg-dir/find-up/locate-path": ["locate-path@5.0.0", "", { "dependencies": { "p-locate": "^4.1.0" } }, ""],
 
-    "require-in-the-middle/debug/ms": ["ms@2.1.3", "", {}, ""],
-
     "send/debug/ms": ["ms@2.0.0", "", {}, ""],
-
-    "string-width-cjs/strip-ansi/ansi-regex": ["ansi-regex@5.0.1", "", {}, ""],
-
-    "string-width/strip-ansi/ansi-regex": ["ansi-regex@5.0.1", "", {}, ""],
-
-    "superagent/debug/ms": ["ms@2.1.3", "", {}, ""],
 
     "swagger-jsdoc/glob/jackspeak": ["jackspeak@4.2.3", "", { "dependencies": { "@isaacs/cliui": "^9.0.0" } }, ""],
 
     "swagger-jsdoc/glob/minimatch": ["minimatch@10.2.6", "", { "dependencies": { "brace-expansion": "^5.0.8" } }, ""],
 
     "swagger-jsdoc/glob/path-scurry": ["path-scurry@2.0.2", "", { "dependencies": { "lru-cache": "^11.0.0", "minipass": "^7.1.2" } }, ""],
-
-    "wrap-ansi-cjs/string-width/emoji-regex": ["emoji-regex@8.0.0", "", {}, ""],
-
-    "wrap-ansi-cjs/strip-ansi/ansi-regex": ["ansi-regex@5.0.1", "", {}, ""],
-
-    "wrap-ansi/string-width/emoji-regex": ["emoji-regex@8.0.0", "", {}, ""],
 
     "pkg-dir/find-up/locate-path/p-locate": ["p-locate@4.1.0", "", { "dependencies": { "p-limit": "^2.2.0" } }, ""],
 
