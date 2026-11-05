@@ -1720,34 +1720,19 @@ const getMLInsights = async (req, res) => {
     }
 };
 
-// Refresh: serve cache if still fresh; rerun analyzer only when txCount changed or ?force=true
+// Refresh always reruns the analyzer. Asking to refresh is the signal; the
+// transaction count cannot tell us the code that produced the cache changed.
 const refreshMLInsights = async (req, res) => {
     const userId = req.user.id;
     const tz     = validTz(req.query.tz);
-    const force  = req.query.force === 'true';
 
     try {
         const now       = moment.tz(tz);
         const yearMonth = now.format('YYYY-MM');
 
-        const [cached, currentCount] = await Promise.all([
-            MLInsight.findOne({ user: userId, yearMonth }).lean(),
-            Transaction.countDocuments({
-                user: userId,
-                type: 'expense',
-                time: {
-                    $gte: moment.tz(yearMonth + '-01', tz).startOf('day').toDate(),
-                    $lte: moment.tz(yearMonth + '-01', tz).endOf('month').toDate(),
-                },
-            }),
-        ]);
+        // Kept only to serve as the fallback when the analyzer fails below.
+        const cached = await MLInsight.findOne({ user: userId, yearMonth }).lean();
 
-        // Cache still fresh and not forcing — no need to rerun the analyzer
-        if (!force && cached && currentCount === cached.txCountSnapshot) {
-            return res.status(200).json(BaseResponseDTO.success('ML insights (already up to date)', _serveCache(cached, false)));
-        }
-
-        // Rerun analyzer
         try {
             const { aiData, currentMonthTxCount } = await _runMLPipeline(userId, tz);
 
