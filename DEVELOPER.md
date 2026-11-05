@@ -46,7 +46,7 @@ Technical reference for the Finan App monorepo: architecture, data schemas, API 
 | Frontend | Next.js 16 (App Router), React, Tailwind CSS v4 |
 | Charts | Recharts |
 | Frontend testing | Playwright E2E |
-| Smart insights | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, median/MAD anomaly detector, linear-regression forecast, gated recurring/subscription detector |
+| Smart insights | `finance-management/services/ml/` — zero-dep JS modules: keyword + TF-IDF classifier, median/MAD anomaly detector, month-end spend forecast, gated recurring/subscription detector |
 | Container | Docker + Docker Compose |
 | CI/CD | GitHub Actions → GHCR → Watchtower (auto-deploy) |
 
@@ -114,7 +114,7 @@ finan-app/                          ← monorepo root
 │   │       ├── anomaly.js          ← per-category median/MAD outlier detector
 │   │       ├── recurring.js        ← subscription/bill detection (category + amount + cadence gate)
 │   │       ├── merchants.js        ← top-merchants aggregation (shared merchantKey, one-off roll-up)
-│   │       ├── forecast.js         ← linear-regression month-end forecast
+│   │       ├── forecast.js         ← month-end forecast: everyday pace plus bills still due
 │   │       └── keywords.js         ← bilingual EN/ID taxonomy
 │   ├── helpers/
 │   │   ├── categoryClassifier.js   ← user-override pre-resolver; delegates remaining names to services/ml
@@ -425,7 +425,7 @@ GET /api/transaction/ml-insights
         │
         ├─ services/ml.analyze({ transactions, daily_totals, current_day, days_in_month, budget }) — in-process, synchronous
         │    ├─ detectAnomalies()        → per-category median/MAD (modified z ≥ 3.5, samples ≥ 3)
-        │    └─ forecastMonthSpend()     → closed-form least-squares on cumulative daily spend
+        │    └─ forecastMonthSpend()     → everyday pace across the days left, plus bills still due
         │
         ├─ Store result in MLInsight collection
         │   (auto-expires after 24h via TTL index)
@@ -984,24 +984,29 @@ Returns top 10 results sorted by anomaly score, each with `severity` (high/mediu
 
 ### Forecast (`services/ml/forecast.js`)
 
-Closed-form least-squares linear regression on cumulative daily spend:
+A month is a recurring bill paid once plus everyday spending repeated daily, so the two are projected separately:
 
 ```
-X = [day_1, day_2, ..., current_day]
-y = cumulative_spend[X]
-predict at day = days_in_month
-result = max(prediction, spent_so_far)  ← can't be less than already spent
+variable  = spent_so_far - fixed_paid        ← recurring charges already posted this month
+pace      = variable / current_day
+result    = max(spent_so_far + pace * days_left + due_later, spent_so_far)
 ```
 
-| R² | Confidence |
+`fixed_paid` and `due_later` come from `services/ml/recurring.js`, split by `services/ml/index.js#splitRecurringForMonth`: a detected charge whose `lastDate` is in this month is set aside from the pace, and one whose `nextDue` still falls inside this month is added back once. Savings-group transactions are filtered out before the detector runs, so a transfer cannot enter the forecast through it.
+
+It replaced a least-squares fit on cumulative spend, which read a bill paid early in the month as a daily rate and charged it for every remaining day: rent paid on the 2nd projected a month-end total several times the real one.
+
+| Days tracked | Confidence |
 |----|-----------|
-| ≥ 0.85 | high |
-| ≥ 0.55 | medium |
-| < 0.55 | low |
+| ≥ 14 | high |
+| ≥ 7 | medium |
+| < 7 | low |
+
+The trend compares the mean of the first half of the elapsed days with the second half, and reports `early` below 6 days rather than guessing a direction.
 
 Requires ≥ 4 days of data. Returns `{ available: false, reason, days_tracked }` otherwise.
 
-**API:** `analyze({ transactions, daily_totals, current_day, days_in_month, budget? })` → `{ anomalies, anomaly_count, forecast }`
+**API:** `analyze({ transactions, daily_totals, current_day, days_in_month, budget?, seasonal?, as_of?, utility_categories? })` → `{ anomalies, anomaly_count, forecast }`. Without `as_of` the recurring split is skipped and the forecast is pace-only.
 
 ---
 

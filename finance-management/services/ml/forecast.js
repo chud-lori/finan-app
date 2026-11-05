@@ -1,36 +1,17 @@
-
 const MIN_DAYS = 4;
+const TREND_MIN_DAYS = 6;
 
-const fitLinear = (xs, ys) => {
-  const n = xs.length;
-  const sumX = xs.reduce((a, b) => a + b, 0);
-  const sumY = ys.reduce((a, b) => a + b, 0);
-  const meanX = sumX / n;
-  const meanY = sumY / n;
-
-  let sxx = 0;
-  let sxy = 0;
-  let syy = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = xs[i] - meanX;
-    const dy = ys[i] - meanY;
-    sxx += dx * dx;
-    sxy += dx * dy;
-    syy += dy * dy;
-  }
-  const slope = sxx === 0 ? 0 : sxy / sxx;
-  const intercept = meanY - slope * meanX;
-  // SST=0 (constant y): sklearn's r2_score returns 1.0 when the predictions match exactly.
-  let sse = 0;
-  for (let i = 0; i < n; i++) {
-    const pred = slope * xs[i] + intercept;
-    sse += (ys[i] - pred) ** 2;
-  }
-  const r2 = syy === 0 ? 1 : 1 - sse / syy;
-  return { slope, intercept, r2 };
-};
-
-const forecastMonthSpend = ({ daily_totals, current_day, days_in_month, budget = null }) => {
+// A month is a recurring bill paid once plus everyday spending repeated daily.
+// Projecting the two together is what made rent paid on the 2nd read as a rate
+// and bill the user for it every remaining day of the month.
+const forecastMonthSpend = ({
+  daily_totals,
+  current_day,
+  days_in_month,
+  budget = null,
+  fixed_paid = 0,
+  due_later = 0,
+}) => {
   if (!Array.isArray(daily_totals) || daily_totals.length === 0 || current_day < MIN_DAYS) {
     return {
       available:    false,
@@ -41,16 +22,10 @@ const forecastMonthSpend = ({ daily_totals, current_day, days_in_month, budget =
 
   const spendByDay = {};
   for (const d of daily_totals) spendByDay[d.day] = d.amount;
-  const days = [];
-  const cumulative = [];
-  let running = 0;
-  for (let day = 1; day <= current_day; day++) {
-    running += spendByDay[day] || 0;
-    days.push(day);
-    cumulative.push(running);
-  }
+  const series = [];
+  for (let day = 1; day <= current_day; day++) series.push(spendByDay[day] || 0);
 
-  const spentSoFar = running;
+  const spentSoFar = series.reduce((a, b) => a + b, 0);
   if (spentSoFar === 0) {
     return {
       available:    false,
@@ -59,33 +34,43 @@ const forecastMonthSpend = ({ daily_totals, current_day, days_in_month, budget =
     };
   }
 
-  const { slope, intercept, r2 } = fitLinear(days, cumulative);
-
-  const rawForecast = slope * days_in_month + intercept;
-  const forecast = Math.max(rawForecast, spentSoFar);
-
-  const dailyAverage = spentSoFar / current_day;
+  // Everyday spend is what is left once the month's recurring charges are set
+  // aside; only that part repeats.
+  const variableSpend = Math.max(spentSoFar - fixed_paid, 0);
+  const pace = variableSpend / current_day;
   const daysLeft = days_in_month - current_day;
+  const forecast = Math.max(spentSoFar + pace * daysLeft + due_later, spentSoFar);
 
-  const confidence = r2 >= 0.85 ? 'high' : r2 >= 0.55 ? 'medium' : 'low';
+  const confidence = current_day >= 14 ? 'high' : current_day >= 7 ? 'medium' : 'low';
 
-  const expectedSlope = dailyAverage;
-  let trend;
-  let trendLabel;
-  if (slope > expectedSlope * 1.25)      { trend = 'accelerating'; trendLabel = 'spending is picking up'; }
-  else if (slope < expectedSlope * 0.75) { trend = 'decelerating'; trendLabel = 'spending is slowing down'; }
-  else                                    { trend = 'steady';       trendLabel = 'spending is steady'; }
+  // Halves of the variable series, so a bill landing in one half cannot read as
+  // a change of habit.
+  let trend = 'early';
+  let trendLabel = 'too early to call a direction';
+  if (current_day >= TREND_MIN_DAYS) {
+    const split = Math.floor(current_day / 2);
+    const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const earlier = mean(series.slice(0, split));
+    const later = mean(series.slice(split));
+    if (earlier === 0) {
+      trend = later > 0 ? 'accelerating' : 'steady';
+      trendLabel = later > 0 ? 'spending is picking up' : 'spending is steady';
+    } else if (later > earlier * 1.25) { trend = 'accelerating'; trendLabel = 'spending is picking up'; }
+    else if (later < earlier * 0.75)   { trend = 'decelerating'; trendLabel = 'spending is slowing down'; }
+    else                               { trend = 'steady';       trendLabel = 'spending is steady'; }
+  }
 
   const result = {
     available:     true,
     forecast:      Math.round(forecast),
     spent_so_far:  Math.round(spentSoFar),
-    daily_average: Math.round(dailyAverage),
+    daily_average: Math.round(pace),
+    fixed_paid:    Math.round(fixed_paid),
+    due_later:     Math.round(due_later),
     days_left:     daysLeft,
     confidence,
     trend,
     trend_label:   trendLabel,
-    r2:            Math.round(r2 * 1000) / 1000,
   };
 
   if (budget != null && budget > 0) {
