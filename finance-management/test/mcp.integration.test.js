@@ -3,7 +3,7 @@ const chaiHttp = require('chai-http');
 const { expect } = require('chai');
 const crypto = require('crypto');
 const moment = require('moment-timezone');
-const server = require('../app');
+const server = require('./server');
 
 const User = require('../models/user.model');
 const OAuthClient = require('../models/oauthClient.model');
