@@ -1580,13 +1580,20 @@ const _runMLPipeline = async (userId, tz) => {
         Budget.findOne({ user: userId, yearMonth }).lean(),
         getSavingsCategoryNames(userId),
         // Category group feeds the ML anomaly detector's lumpiness gate (gotcha#566).
-        Category.find({ user: userId }).select('name group').lean(),
+        Category.find({ user: userId }).select('name group isUtility').lean(),
         // Monthly history for Seasonal Radar suppression.
         Snapshot.find({ user: userId }).select('yearMonth expense').lean(),
     ]);
 
     const catGroup = {};
     categories.forEach(c => { if (c.name) catGroup[c.name] = c.group; });
+
+    // The same seed-plus-flagged union getRecurring builds, so the forecast and
+    // the recurring card agree on which bills vary with usage.
+    const utilityCategories = new Set([
+        ...DEFAULT_UTILITY_CATEGORY_NAMES,
+        ...categories.filter(c => c.isUtility && c.name).map(c => c.name.toLowerCase()),
+    ]);
 
     const isSavings = (tx) => savingsNames.has((tx.category || '').toLowerCase());
 
@@ -1629,6 +1636,8 @@ const _runMLPipeline = async (userId, tz) => {
         days_in_month: now.daysInMonth(),
         budget:        budgetDoc?.amount ?? null,
         seasonal:      { active: season.isSeasonal, multiplier: season.multiplier },
+        as_of:         now.format('YYYY-MM-DD'),
+        utility_categories: utilityCategories,
     };
 
     const aiData = nativeMl.analyze(analyzePayload);

@@ -162,6 +162,7 @@ const TREND_CONFIG = {
   accelerating: { label: 'Spending up',   color: 'text-rose-600',    bg: 'bg-rose-50 dark:bg-rose-950/30',    icon: '↑' },
   decelerating: { label: 'Spending down', color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30', icon: '↓' },
   steady:       { label: 'Steady pace',   color: 'text-gray-500',    bg: 'bg-gray-50 dark:bg-slate-800',      icon: '→' },
+  early:        { label: 'Too early',     color: 'text-gray-500',    bg: 'bg-gray-50 dark:bg-slate-800',      icon: '·' },
 };
 const CONF_COLOR = { high: 'text-emerald-600', medium: 'text-amber-500', low: 'text-gray-400' };
 
@@ -244,15 +245,21 @@ function ForecastCard({ data }) {
       )}
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800">
+      <div className={`grid ${data.due_later > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-3 pt-3 border-t border-gray-100 dark:border-slate-800`}>
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Daily average</p>
+          <p className="text-xs text-gray-400 mb-0.5">Everyday pace</p>
           <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.daily_average)}/day</p>
         </div>
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Days remaining</p>
           <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{data.days_left} days</p>
         </div>
+        {data.due_later > 0 && (
+          <div>
+            <p className="text-xs text-gray-400 mb-0.5">Bills still due</p>
+            <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.due_later)}</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1183,7 +1190,7 @@ export default function InsightsPage() {
                 title="📈 Month Forecast"
                 subtitle="Predicted spend by end of month based on your current trajectory"
                 tag="Smart"
-                tooltip="Uses linear regression on your daily spending pattern to project your month-end total. The two-layer progress bar shows what you've spent (solid) vs. where you're headed (light)."
+                tooltip="Carries your everyday pace across the days left, then adds any recurring bill not yet paid this month. A bill already paid counts once, never as a daily rate. The two-layer progress bar shows what you've spent (solid) vs. where you're headed (light)."
                 headerRight={mlHeaderRight}
                 loading={loading.ml}
                 error={undefined}
