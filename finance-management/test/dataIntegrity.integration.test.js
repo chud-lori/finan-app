@@ -1,7 +1,7 @@
 const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
-const server = require('../app');
+const server = require('./server');
 
 const Balance     = require('../models/balance.model');
 const Transaction = require('../models/transaction.model');
