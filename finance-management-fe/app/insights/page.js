@@ -805,9 +805,11 @@ function HealthScoreCard({ health }) {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          {/* Wraps rather than overflows: at phone width the title, the band chip
+              and the tooltip cannot share one line. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">Financial Health</h2>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${band.chip}`}>{band.label}</span>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${band.chip}`}>{band.label}</span>
             <Tooltip text="A 0–100 score from four pillars: your savings rate, emergency-fund coverage, budget adherence, and goal progress. Pillars you haven't set up yet are left out, not counted against you." align="left" fixed />
           </div>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
