@@ -16,6 +16,32 @@ const run = (mw, userId) => {
     return status;
 };
 
+describe('Rate limiter failure budget', () => {
+    const WINDOW = 15 * 60 * 1000;
+
+    it('does not spend the budget on the attempts it only reads', () => {
+        buildAsProd((l) => {
+            for (let i = 0; i < 20; i++) expect(l.peek('login:a', 5, WINDOW)).to.equal(true);
+        });
+    });
+
+    it('refuses the attempt after the budget is filled', () => {
+        buildAsProd((l) => {
+            for (let i = 0; i < 5; i++) l.check('login:b', 5, WINDOW);
+
+            expect(l.peek('login:b', 5, WINDOW)).to.equal(false);
+        });
+    });
+
+    it('keeps one identifier out of another identifier\'s budget', () => {
+        buildAsProd((l) => {
+            for (let i = 0; i < 6; i++) l.check('login:c', 5, WINDOW);
+
+            expect(l.peek('login:d', 5, WINDOW)).to.equal(true);
+        });
+    });
+});
+
 describe('Rate limiter buckets', () => {
     it('does not let a busy endpoint spend another endpoint\'s budget', () => {
         const browse = buildAsProd(l => l.byUser(60));

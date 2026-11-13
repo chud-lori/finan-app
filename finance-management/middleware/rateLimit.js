@@ -50,6 +50,15 @@ class RateLimiter {
         return this._middleware(max, (req) => `${scope}:${req.user?.id ?? req.ip}`);
     }
 
+    // Reads a bucket without filling it, so a success need not spend a budget
+    // that only failures should consume. True = allowed.
+    peek(key, max, windowMs) {
+        if (process.env.NODE_ENV === 'test') return true;
+        const cutoff = Date.now() - windowMs;
+        const hits = (this._buckets.get(key) || []).filter(t => t > cutoff);
+        return hits.length < max;
+    }
+
     // For limiting on a parsed body field, which middleware can't see. True = allowed.
     check(key, max, windowMs) {
         if (process.env.NODE_ENV === 'test') return true;
