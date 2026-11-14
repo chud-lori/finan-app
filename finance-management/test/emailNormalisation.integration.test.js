@@ -45,7 +45,7 @@ describe('Email normalisation', () => {
         const res = await register({ username: 'differentuser', email: 'NAME@example.com' });
 
         expect(res).to.have.status(409);
-        expect(res.body.message).to.include('Email already exists');
+        expect(res.body.message).to.include('That account cannot be created');
         expect(await User.countDocuments({ email: 'name@example.com' })).to.equal(1);
     });
 

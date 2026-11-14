@@ -28,6 +28,12 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 // Tokens are stored hashed — the raw token only ever lives in the user's inbox.
 const hashToken = (raw) => crypto.createHash('sha256').update(raw).digest('hex');
 
+// Keyed on the identifier alone, so rotating source IPs cannot reset the budget.
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+
+const REGISTER_CONFLICT_MESSAGE = 'That account cannot be created. If you already have one, sign in or reset your password.';
+
 const COOKIE_OPTS = {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
@@ -74,18 +80,15 @@ const registerUser = async (req, res, next) => {
       return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
     }
 
+    // One reply for every conflict: naming the field that clashed confirms which
+    // usernames and addresses exist to anyone who asks.
+    const conflict = () => res.status(409).json(BaseResponseDTO.error(REGISTER_CONFLICT_MESSAGE));
+
     const existingUserByUsername = await User.findOne({ username: registerDTO.username });
-    if (existingUserByUsername) {
-      return res.status(409).json(BaseResponseDTO.error("Username already exists"));
-    }
+    if (existingUserByUsername) return conflict();
 
     const existingUserByEmail = await User.findOne({ email: registerDTO.email });
-    if (existingUserByEmail) {
-      if (existingUserByEmail.googleId) {
-        return res.status(409).json(BaseResponseDTO.error("This email is already registered via Google. Please sign in with Google."));
-      }
-      return res.status(409).json(BaseResponseDTO.error("Email already exists"));
-    }
+    if (existingUserByEmail) return conflict();
 
     const isTest = process.env.NODE_ENV === 'test';
 
@@ -151,6 +154,13 @@ const loginUser = async (req, res, next) => {
       return res.status(400).json(BaseResponseDTO.error('Validation failed', validationErrors));
     }
 
+    // Checked before the lookup so a throttled identifier cannot be told apart
+    // from an unthrottled one, and recorded only on a failed credential check.
+    const throttleKey = `login:${loginDTO.identifier.trim().toLowerCase()}`;
+    if (!limiter.peek(throttleKey, LOGIN_MAX_FAILURES, LOGIN_FAILURE_WINDOW_MS)) {
+      return res.status(429).json(BaseResponseDTO.error('Too many failed sign-in attempts — try again in 15 minutes'));
+    }
+
     // Anti-enumeration: "no such user" and "wrong password" must return the same generic 401.
     const isEmail = loginDTO.identifier.includes('@');
     const user = isEmail
@@ -158,6 +168,7 @@ const loginUser = async (req, res, next) => {
       : await User.findOne({ username: loginDTO.identifier });
 
     const invalid = () => {
+      limiter.check(throttleKey, LOGIN_MAX_FAILURES, LOGIN_FAILURE_WINDOW_MS);
       logger.warn('Auth Login: invalid credentials');
       return res.status(401).json(BaseResponseDTO.error('Invalid credentials'));
     };

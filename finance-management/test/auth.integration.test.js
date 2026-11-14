@@ -65,7 +65,7 @@ describe('Auth Integration Tests', () => {
 
             expect(res).to.have.status(409);
             expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Username already exists');
+            expect(res.body.message).to.equal('That account cannot be created. If you already have one, sign in or reset your password.');
         });
 
         it('should return 409 for duplicate email', async () => {
@@ -80,7 +80,21 @@ describe('Auth Integration Tests', () => {
 
             expect(res).to.have.status(409);
             expect(res.body).to.have.property('status', 0);
-            expect(res.body.message).to.include('Email already exists');
+            expect(res.body.message).to.equal('That account cannot be created. If you already have one, sign in or reset your password.');
+        });
+
+        it('answers a taken username and a taken email identically', async () => {
+            await chai.request(server).post('/api/auth/register').send(testUser);
+
+            const takenUsername = await chai.request(server)
+                .post('/api/auth/register')
+                .send({ ...testUser, email: 'different@example.com' });
+            const takenEmail = await chai.request(server)
+                .post('/api/auth/register')
+                .send({ ...testUser, username: 'differentuser' });
+
+            expect(takenUsername.status).to.equal(takenEmail.status);
+            expect(takenUsername.body).to.deep.equal(takenEmail.body);
         });
     });
 

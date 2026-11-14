@@ -294,8 +294,11 @@ req.cookies.token
 | Endpoint | Behavior |
 |----------|----------|
 | `POST /login` | Returns generic `401 Invalid credentials` for both "no such user" and "wrong password". `EMAIL_NOT_VERIFIED` (403) is distinguishable so the FE can show a resend-verification CTA. Google-only accounts get a distinct 400 (UX exception) |
+| `POST /register` | Every conflict answers one identical 409 (`That account cannot be created…`). A per-field message confirmed which usernames and addresses exist, in a single unauthenticated request |
 | `POST /forgot-password` | Always returns 200, regardless of whether the email is registered |
 | `POST /resend-verification` | Always returns 200, regardless of whether the email is registered or already verified |
+
+**Login failure budget.** `POST /login` carries a second limit beside its per-IP one: 5 failed credential checks per identifier per 15 minutes, answered with a 429. The per-IP limit alone does nothing against credential stuffing spread over many addresses, which is the whole shape of that attack, so the budget is keyed on the identifier alone. It is read with `limiter.peek()` before the user lookup — before, so a throttled identifier cannot be told apart from an unthrottled one, and `peek` rather than `check` so a correct password never spends a budget only failures should fill. The accepted cost is that someone who knows an identifier can hold it at 429 in 15-minute stretches; a lockout that an attacker can trigger is still cheaper than a password they can reach.
 
 **Token hashing — all bearer-style tokens are stored as SHA-256 hashes:**
 
@@ -1522,7 +1525,7 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | Method | Path | Rate limit | Auth | Description |
 |--------|------|-----------|------|-------------|
 | POST | `/api/auth/register` | 10/min per IP | — | Create account; returns user + balance |
-| POST | `/api/auth/login` | 10/min per IP | — | Credentials login — sets HttpOnly session cookie |
+| POST | `/api/auth/login` | 10/min per IP, plus 5 failures/15 min per identifier | — | Credentials login — sets HttpOnly session cookie |
 | GET | `/api/auth/check` | — | ✓ | Verify session validity; returns current user |
 | POST | `/api/auth/google/verify` | 20/min per IP | — | Verify Google `id_token` — sets HttpOnly session cookie |
 | POST | `/api/auth/logout` | — | ✓ | Delete current session + clear cookie |
