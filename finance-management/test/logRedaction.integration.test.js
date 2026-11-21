@@ -2,7 +2,7 @@ const chai = require('chai');
 const chaiHttp = require('chai-http');
 const { expect } = require('chai');
 const crypto = require('crypto');
-const server = require('../app');
+const server = require('./server');
 const logger = require('../helpers/logger');
 const { redactUrl } = require('../helpers/redactUrl');
 

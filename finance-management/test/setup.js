@@ -4,6 +4,7 @@ require('dotenv').config({ path: __dirname + '/test.env' });
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const { drainBackgroundJobs } = require('../helpers/backgroundJobs');
+const httpServer = require('./server');
 
 let mongoServer;
 
@@ -29,6 +30,7 @@ const cleanupCollections = async () => {
 
 before(async () => {
     await setupTestDB();
+    await new Promise(resolve => httpServer.listen(0, resolve));
 });
 
 afterEach(async () => {
@@ -38,6 +40,7 @@ afterEach(async () => {
 });
 
 after(async () => {
+    await new Promise(resolve => httpServer.close(resolve));
     await teardownTestDB();
 });
 
