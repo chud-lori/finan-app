@@ -1,6 +1,7 @@
 // Unreadable income cadence (variable / gig) degrades to a rolling-30-day runway with no payday horizon.
 
 const { materialityFloor, isMaterial } = require('../../helpers/materiality');
+const { projectBalance } = require('./projection');
 
 const DAY_MS = 86400000;
 const DEFAULT_HORIZON = 120; // days to simulate forward
@@ -69,50 +70,48 @@ const materialPriceChanges = (changes, recurringMonthlyTotal) => {
     .sort((a, b) => (b.to - b.from) - (a.to - a.from));
 };
 
+const PROJECTION_DAYS = 90;
+
 const computeRunway = (input = {}) => {
   const asOf = input.asOf || new Date().toISOString().slice(0, 10);
   const balance = Number(input.balance) || 0;
   const discretionaryDaily = Math.max(0, Math.round(Number(input.discretionaryDaily) || 0));
   const horizon = input.horizonDays || DEFAULT_HORIZON;
 
-  const upcomingBills = (input.bills || [])
-    .filter((b) => b && b.dueDate && daysBetween(asOf, b.dueDate) >= 0 && Number(b.amount) > 0)
-    .map((b) => ({ merchant: b.merchant, dueDate: b.dueDate, amount: Math.round(Number(b.amount)) }))
-    .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+  const bills = (input.bills || []).filter((b) => b && b.dueDate && Number(b.amount) > 0);
+  const daysLate = (b) => daysBetween(b.dueDate, asOf);
+
+  // A charge that has not posted is named, not projected on a date already gone; past one full cycle it reads as ended.
+  const overdueBills = bills
+    .filter((b) => daysLate(b) > 0 && daysLate(b) <= (b.intervalDays || 31))
+    .map((b) => ({ merchant: b.merchant, dueDate: b.dueDate, amount: Math.round(Number(b.amount)), daysLate: daysLate(b) }))
+    .sort((a, b) => b.amount - a.amount);
+  const liveBills = bills.filter((b) => daysLate(b) <= (b.intervalDays || 0));
 
   const priceChanges = materialPriceChanges(input.priceChanges, input.recurringMonthlyTotal);
 
   const cad = detectIncomeCadence(input.incomeEvents, asOf);
   const mode = cad.regular ? 'payday' : 'rolling';
 
-  const payDates = [];
-  if (cad.regular && cad.nextIncomeDate) {
-    let d = cad.nextIncomeDate;
-    let guard = 0;
-    while (daysBetween(asOf, d) <= horizon && guard < 60) {
-      payDates.push(d);
-      d = addDays(d, cad.medGap);
-      guard++;
-    }
-  }
-  const payDateSet = new Map(payDates.map((d) => [d, cad.typicalIncome]));
-  const billByDate = new Map();
-  for (const b of upcomingBills) billByDate.set(b.dueDate, (billByDate.get(b.dueDate) || 0) + b.amount);
+  const walkInput = {
+    asOf,
+    balance,
+    dailyPace: discretionaryDaily,
+    bills: liveBills,
+    income: cad.regular ? { nextDate: cad.nextIncomeDate, intervalDays: cad.medGap, amount: cad.typicalIncome } : null,
+  };
+  const walk = projectBalance({ ...walkInput, horizonDays: horizon });
+  const runwayDays = walk.runsOut ? walk.runsOut.day : null;
+  const runwayDate = walk.runsOut ? walk.runsOut.date : null;
+  const occurrences = walk.bills.map((b) => ({ merchant: b.merchant, dueDate: b.date, amount: b.amount }));
+  const seen = new Set();
+  const nextOfEachBill = occurrences.filter((b) => !seen.has(b.merchant) && seen.add(b.merchant));
 
-  let running = balance;
-  let runwayDays = null;
-  let runwayDate = null;
-  for (let day = 1; day <= horizon; day++) {
-    const date = addDays(asOf, day);
-    if (payDateSet.has(date)) running += payDateSet.get(date);
-    if (billByDate.has(date)) running -= billByDate.get(date);
-    running -= discretionaryDaily;
-    if (running < 0 && runwayDays === null) {
-      runwayDays = day;
-      runwayDate = date;
-      break;
-    }
-  }
+  const projection = {
+    ...projectBalance({ ...walkInput, horizonDays: PROJECTION_DAYS }),
+    incomeAssumed: !!cad.regular,
+    overdueBills,
+  };
 
   let daysUntilIncome = null;
   let nextIncomeDate = null;
@@ -126,14 +125,14 @@ const computeRunway = (input = {}) => {
     nextIncomeDate = cad.nextIncomeDate;
     daysUntilIncome = Math.max(0, daysBetween(asOf, nextIncomeDate));
     expectedIncome = cad.typicalIncome;
-    billsBeforeIncome = upcomingBills.filter((b) => daysBetween(asOf, b.dueDate) <= daysUntilIncome);
+    billsBeforeIncome = occurrences.filter((b) => daysBetween(asOf, b.dueDate) <= daysUntilIncome);
     billsTotal = billsBeforeIncome.reduce((s, b) => s + b.amount, 0);
     // Spendable today while still reaching payday non-negative after bills and run-rate.
     safeToSpend = Math.round(balance - billsTotal - discretionaryDaily * daysUntilIncome);
     safeToSpendPerDay = daysUntilIncome > 0 ? Math.round(safeToSpend / daysUntilIncome) : safeToSpend;
   } else {
     // No payday horizon: safe-to-spend is just the runway cushion.
-    billsBeforeIncome = upcomingBills.slice(0, 8);
+    billsBeforeIncome = nextOfEachBill.slice(0, 8);
     billsTotal = billsBeforeIncome.reduce((s, b) => s + b.amount, 0);
     safeToSpend = Math.round(balance - billsTotal);
   }
@@ -168,6 +167,7 @@ const computeRunway = (input = {}) => {
     runwayDays,
     runwayDate,
     horizonDays: horizon,
+    projection,
     status,
     note: 'A guide, not a guarantee — income timing and bills are estimated.',
   };

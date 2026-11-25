@@ -9,8 +9,7 @@ import { capitalizeFirst as cap } from '@/lib/format';
 import { buildInsights, MATERIALITY_FLOOR, selectTopInsights } from '@/lib/insightFeed';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
-import MoneyRecap from '@/components/MoneyRecap';
-import PaydayRunway from '@/components/PaydayRunway';
+import CashFlowCard from '@/components/CashFlowCard';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 import CategorySpendRow from '@/components/CategorySpendRow';
 import { InsightDismissButton, InsightDismissGutter, InsightDismissPanel, DismissedInsightsPanel, NoInsightsLeft } from '@/components/InsightDismiss';
@@ -153,171 +152,6 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading, dismissals
       </div>
       {!top.length && <NoInsightsLeft />}
       <DismissedInsightsPanel dismissals={dismissals} onRestore={onRestore} />
-    </div>
-  );
-}
-
-
-const TREND_CONFIG = {
-  accelerating: { label: 'Spending up',   color: 'text-rose-600',    bg: 'bg-rose-50 dark:bg-rose-950/30',    icon: '↑' },
-  decelerating: { label: 'Spending down', color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30', icon: '↓' },
-  steady:       { label: 'Steady pace',   color: 'text-gray-500',    bg: 'bg-gray-50 dark:bg-slate-800',      icon: '→' },
-  early:        { label: 'Too early',     color: 'text-gray-500',    bg: 'bg-gray-50 dark:bg-slate-800',      icon: '·' },
-};
-const CONF_COLOR = { high: 'text-emerald-600', medium: 'text-amber-500', low: 'text-gray-400' };
-
-function ForecastCard({ data }) {
-  const formatAmount = useFormatAmount();
-
-  if (!data.available) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-3xl mb-3">🔭</p>
-        <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Forecast not ready yet</p>
-        <p className="text-xs text-gray-400 mt-1">{data.reason}</p>
-      </div>
-    );
-  }
-
-  const hasBudget  = data.budget != null;
-  const barSpent   = hasBudget ? Math.min((data.spent_so_far / data.budget) * 100, 100) : 0;
-  const barForecast = hasBudget ? Math.min((data.forecast / data.budget) * 100, 100) : 0;
-  const trend = TREND_CONFIG[data.trend] ?? TREND_CONFIG.steady;
-
-  return (
-    <div className="p-5">
-      {/* Main forecast number.
-          Stacked under sm: a 3xl currency figure plus the trend pill and the
-          confidence label cannot share one row on a 390px card — the card has
-          overflow-hidden, so they were being clipped at the right edge. */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-5 gap-2 sm:gap-3">
-        <div className="min-w-0">
-          <p className="text-xs text-gray-400 mb-1">Projected month-end spend</p>
-          <p className={`text-2xl sm:text-3xl font-black tabular-nums ${data.over_budget ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-slate-100'}`}>
-            {formatAmount(data.forecast)}
-          </p>
-          {hasBudget && (
-            <p className={`text-xs font-semibold mt-1 ${data.over_budget ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-              {data.over_budget
-                ? `${formatAmount(data.variance)} over budget`
-                : `${formatAmount(Math.abs(data.variance))} under budget`}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 sm:block sm:text-right shrink-0">
-          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${trend.bg} ${trend.color}`}>
-            {trend.icon} {trend.label}
-          </span>
-          <p className={`text-xs sm:mt-1.5 whitespace-nowrap ${CONF_COLOR[data.confidence]}`}>
-            {data.confidence} confidence
-          </p>
-        </div>
-      </div>
-
-      {/* Budget progress bar */}
-      {hasBudget && (
-        <div className="mb-5">
-          <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-            <span>{formatAmount(data.spent_so_far)} spent</span>
-            <span>Budget: {formatAmount(data.budget)}</span>
-          </div>
-          <div className="relative w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
-            {/* Forecast bar (lighter, behind) */}
-            <div
-              className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${data.over_budget ? 'bg-rose-200 dark:bg-rose-900/50' : 'bg-teal-100 dark:bg-teal-900/40'}`}
-              style={{ width: `${barForecast}%` }}
-            />
-            {/* Spent bar (solid, in front) */}
-            <div
-              className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${data.over_budget ? 'bg-rose-500' : 'bg-teal-500'}`}
-              style={{ width: `${barSpent}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span className="flex items-center gap-1">
-              <span className={`w-2 h-2 rounded-sm inline-block ${data.over_budget ? 'bg-rose-500' : 'bg-teal-500'}`} /> spent so far
-            </span>
-            <span className="flex items-center gap-1">
-              <span className={`w-2 h-2 rounded-sm inline-block ${data.over_budget ? 'bg-rose-200' : 'bg-teal-100'}`} /> projected
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Stats row */}
-      <div className={`grid ${data.due_later > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-3 pt-3 border-t border-gray-100 dark:border-slate-800`}>
-        <div>
-          <p className="text-xs text-gray-400 mb-0.5">Everyday pace</p>
-          <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.daily_average)}/day</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-400 mb-0.5">Days remaining</p>
-          <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{data.days_left} days</p>
-        </div>
-        {data.due_later > 0 && (
-          <div>
-            <p className="text-xs text-gray-400 mb-0.5">Bills still due</p>
-            <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.due_later)}</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-
-const TTZ_CONFIG = {
-  safe:         { label: 'Safe',            bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-400', text: 'text-emerald-700 dark:text-emerald-400' },
-  warning:      { label: 'Warning',         bg: 'bg-amber-50 dark:bg-amber-950/30',     border: 'border-amber-200 dark:border-amber-800',     dot: 'bg-amber-400',   text: 'text-amber-700 dark:text-amber-400'   },
-  critical:     { label: 'Critical',        bg: 'bg-rose-50 dark:bg-rose-950/30',       border: 'border-rose-200 dark:border-rose-800',       dot: 'bg-rose-400',    text: 'text-rose-700 dark:text-rose-400'     },
-  already_zero: { label: 'Balance at zero', bg: 'bg-rose-50 dark:bg-rose-950/30',       border: 'border-rose-200 dark:border-rose-800',       dot: 'bg-rose-500',    text: 'text-rose-700 dark:text-rose-400'     },
-  no_spend:     { label: 'No recent spend', bg: 'bg-gray-50 dark:bg-slate-800',         border: 'border-gray-200 dark:border-slate-700',      dot: 'bg-gray-300',    text: 'text-gray-600 dark:text-slate-400'    },
-};
-
-function TimeToZeroCard({ data }) {
-  const formatAmount = useFormatAmount();
-  const cfg = TTZ_CONFIG[data.status] ?? TTZ_CONFIG.safe;
-  return (
-    <div className="p-4">
-      <div className={`rounded-2xl border p-5 ${cfg.bg} ${cfg.border}`}>
-        <div className="flex items-center gap-2 mb-4">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
-          <h4 className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>{cfg.label}</h4>
-        </div>
-        {data.daysToZero !== null ? (
-          <>
-            <p className={`text-5xl font-black mb-1 tabular-nums ${cfg.text}`}>{data.daysToZero}</p>
-            <p className={`text-sm font-medium mb-0.5 ${cfg.text} opacity-80`}>days until balance hits zero</p>
-            <p className="text-xs text-gray-500 mb-5">at your current spending rate</p>
-            {data.projectedZeroDate && (
-              <p className="text-xs text-gray-500">
-                Projected date:{' '}
-                <span className="font-semibold text-gray-700 dark:text-slate-300">
-                  {new Date(data.projectedZeroDate).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </span>
-              </p>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-gray-500 mt-2">No spending in the last 30 days — nothing to project.</p>
-        )}
-        <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 grid grid-cols-2 gap-3">
-          <div>
-            <div className="flex items-center gap-1 mb-0.5">
-              <p className="text-xs text-gray-400">Current balance</p>
-              <Tooltip text="Net balance: total income minus total expenses across all time." align="left" fixed />
-            </div>
-            <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.balance)}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-1 mb-0.5">
-              <p className="text-xs text-gray-400">Daily burn</p>
-              <Tooltip text="Average daily spending over the last 30 days." align="right" fixed />
-            </div>
-            <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.dailyBurnRate)}/day</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1166,9 +1000,12 @@ export default function InsightsPage() {
 
           {health?.score != null && <HealthScoreCard health={health} />}
 
-          <PaydayRunway />
-
-          <MoneyRecap />
+          <CashFlowCard
+            forecast={ml?.forecast}
+            mlLoading={loading.ml}
+            mlAvailable={mlAvailable}
+            headerRight={mlHeaderRight}
+          />
 
           <InsightFeed
             explain={explain} ttz={ttz} anomaly={anomaly} ml={ml} recurring={recurring}
@@ -1186,53 +1023,22 @@ export default function InsightsPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {/* Month Forecast — ML */}
-            <div id="forecast" className="lg:col-span-2">
+            {/* Where It's Going */}
+            <div className="lg:col-span-2">
               <Section
-                title="📈 Month Forecast"
-                subtitle="Predicted spend by end of month based on your current trajectory"
-                tag="Smart"
-                tooltip="Carries your everyday pace across the days left, then adds any recurring bill not yet paid this month. A bill already paid counts once, never as a daily rate. The two-layer progress bar shows what you've spent (solid) vs. where you're headed (light)."
-                headerRight={mlHeaderRight}
-                loading={loading.ml}
-                error={undefined}
+                id="where-its-going"
+                title="🧠 Where It's Going"
+                subtitle="Top categories driving your spending this month"
+                tooltip="Your top expense categories sorted by total. Changes are shown in money against the 30 days before — a percentage only when the two totals compare directly. Categories you only buy from occasionally get no change at all."
+                loading={loading.explain}
+                error={errors.explain}
               >
-                {mlAvailable && ml.forecast && <ForecastCard data={ml.forecast} />}
-                {!mlAvailable && !loading.ml && (
-                  <div className="p-8 text-center space-y-1">
-                    <p className="text-sm text-gray-500 dark:text-slate-400">No forecast yet</p>
-                    <p className="text-xs text-gray-400 dark:text-slate-500">Add a few transactions and hit Refresh to generate your first forecast.</p>
-                  </div>
+                {explain && (explain.topCategories?.length > 0
+                  ? <ExplainCard data={explain} />
+                  : <div className="p-8 text-center text-sm text-gray-500">No spending data this month yet.</div>
                 )}
               </Section>
             </div>
-
-            {/* Runway */}
-            <Section
-              id="runway"
-              title="⏳ Runway"
-              subtitle="How long until your balance runs out at current burn rate"
-              tooltip="Current net balance ÷ average daily spending over the last 30 days."
-              loading={loading.ttz}
-              error={errors.ttz}
-            >
-              {ttz && <TimeToZeroCard data={ttz} />}
-            </Section>
-
-            {/* Where It's Going */}
-            <Section
-              id="where-its-going"
-              title="🧠 Where It's Going"
-              subtitle="Top categories driving your spending this month"
-              tooltip="Your top expense categories sorted by total. Changes are shown in money against the 30 days before — a percentage only when the two totals compare directly. Categories you only buy from occasionally get no change at all."
-              loading={loading.explain}
-              error={errors.explain}
-            >
-              {explain && (explain.topCategories?.length > 0
-                ? <ExplainCard data={explain} />
-                : <div className="p-8 text-center text-sm text-gray-500">No spending data this month yet.</div>
-              )}
-            </Section>
 
             {/* Spending by Category Group */}
             <div className="lg:col-span-2">

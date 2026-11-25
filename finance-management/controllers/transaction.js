@@ -1949,7 +1949,7 @@ const getRunway = async (req, res) => {
         // Upcoming recurring bills become scheduled outflows in the projection.
         const bills = recurringResult.recurring
             .filter(r => r.nextDue)
-            .map(r => ({ merchant: r.merchant, dueDate: r.nextDue, amount: r.typicalAmount }));
+            .map(r => ({ merchant: r.merchant, dueDate: r.nextDue, amount: r.typicalAmount, intervalDays: r.intervalDays }));
 
         // Discretionary run-rate: last-30-day expense minus the recurring monthly
         // share, so bills aren't double-counted against the everyday burn.

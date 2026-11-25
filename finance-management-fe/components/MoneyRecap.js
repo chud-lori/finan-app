@@ -38,7 +38,7 @@ function Tile({ tile, recapFloor, formatAmount }) {
         <p className="text-sm font-bold text-gray-900 dark:text-slate-100 truncate">{tile.text}</p>
       ) : null}
       <div className="flex items-baseline gap-1.5 flex-wrap">
-        <p className={`text-lg font-black tabular-nums ${tile.text ? 'text-gray-500 dark:text-slate-400 text-sm' : tone}`}>{main}</p>
+        <p className={`font-black tabular-nums whitespace-nowrap ${tile.text ? 'text-gray-500 dark:text-slate-400 text-sm' : `text-base sm:text-lg ${tone}`}`}>{main}</p>
         {change.material && (
           <span className={`text-xs font-semibold tabular-nums ${CHANGE_TONE[tile.tone] || CHANGE_TONE.neutral}`}>
             {change.direction === 'up' ? '+' : '−'}{formatAmount(Math.abs(change.change))}
@@ -124,7 +124,7 @@ export default function MoneyRecap() {
       </ul>
 
       {/* Stat tiles — the FE formats currency here */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
         {data.tiles.map((t) => <Tile key={t.key} tile={t} recapFloor={data.materialityFloor || 0} formatAmount={formatAmount} />)}
       </div>
     </div>
