@@ -10,7 +10,7 @@ import { buildInsights, MATERIALITY_FLOOR, selectTopInsights } from '@/lib/insig
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
 import MoneyRecap from '@/components/MoneyRecap';
-import PaydayRunway from '@/components/PaydayRunway';
+import CashFlowCard from '@/components/CashFlowCard';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 import CategorySpendRow from '@/components/CategorySpendRow';
 import { InsightDismissButton, InsightDismissGutter, InsightDismissPanel, DismissedInsightsPanel, NoInsightsLeft } from '@/components/InsightDismiss';
@@ -153,114 +153,6 @@ function InsightFeed({ explain, ttz, anomaly, ml, recurring, loading, dismissals
       </div>
       {!top.length && <NoInsightsLeft />}
       <DismissedInsightsPanel dismissals={dismissals} onRestore={onRestore} />
-    </div>
-  );
-}
-
-
-const TREND_CONFIG = {
-  accelerating: { label: 'Spending up',   color: 'text-rose-600',    bg: 'bg-rose-50 dark:bg-rose-950/30',    icon: '↑' },
-  decelerating: { label: 'Spending down', color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30', icon: '↓' },
-  steady:       { label: 'Steady pace',   color: 'text-gray-500',    bg: 'bg-gray-50 dark:bg-slate-800',      icon: '→' },
-  early:        { label: 'Too early',     color: 'text-gray-500',    bg: 'bg-gray-50 dark:bg-slate-800',      icon: '·' },
-};
-const CONF_COLOR = { high: 'text-emerald-600', medium: 'text-amber-500', low: 'text-gray-400' };
-
-function ForecastCard({ data }) {
-  const formatAmount = useFormatAmount();
-
-  if (!data.available) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-3xl mb-3">🔭</p>
-        <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Forecast not ready yet</p>
-        <p className="text-xs text-gray-400 mt-1">{data.reason}</p>
-      </div>
-    );
-  }
-
-  const hasBudget  = data.budget != null;
-  const barSpent   = hasBudget ? Math.min((data.spent_so_far / data.budget) * 100, 100) : 0;
-  const barForecast = hasBudget ? Math.min((data.forecast / data.budget) * 100, 100) : 0;
-  const trend = TREND_CONFIG[data.trend] ?? TREND_CONFIG.steady;
-
-  return (
-    <div className="p-5">
-      {/* Main forecast number.
-          Stacked under sm: a 3xl currency figure plus the trend pill and the
-          confidence label cannot share one row on a 390px card — the card has
-          overflow-hidden, so they were being clipped at the right edge. */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-5 gap-2 sm:gap-3">
-        <div className="min-w-0">
-          <p className="text-xs text-gray-400 mb-1">Projected month-end spend</p>
-          <p className={`text-2xl sm:text-3xl font-black tabular-nums ${data.over_budget ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-slate-100'}`}>
-            {formatAmount(data.forecast)}
-          </p>
-          {hasBudget && (
-            <p className={`text-xs font-semibold mt-1 ${data.over_budget ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-              {data.over_budget
-                ? `${formatAmount(data.variance)} over budget`
-                : `${formatAmount(Math.abs(data.variance))} under budget`}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 sm:block sm:text-right shrink-0">
-          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${trend.bg} ${trend.color}`}>
-            {trend.icon} {trend.label}
-          </span>
-          <p className={`text-xs sm:mt-1.5 whitespace-nowrap ${CONF_COLOR[data.confidence]}`}>
-            {data.confidence} confidence
-          </p>
-        </div>
-      </div>
-
-      {/* Budget progress bar */}
-      {hasBudget && (
-        <div className="mb-5">
-          <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-            <span>{formatAmount(data.spent_so_far)} spent</span>
-            <span>Budget: {formatAmount(data.budget)}</span>
-          </div>
-          <div className="relative w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
-            {/* Forecast bar (lighter, behind) */}
-            <div
-              className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${data.over_budget ? 'bg-rose-200 dark:bg-rose-900/50' : 'bg-teal-100 dark:bg-teal-900/40'}`}
-              style={{ width: `${barForecast}%` }}
-            />
-            {/* Spent bar (solid, in front) */}
-            <div
-              className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${data.over_budget ? 'bg-rose-500' : 'bg-teal-500'}`}
-              style={{ width: `${barSpent}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span className="flex items-center gap-1">
-              <span className={`w-2 h-2 rounded-sm inline-block ${data.over_budget ? 'bg-rose-500' : 'bg-teal-500'}`} /> spent so far
-            </span>
-            <span className="flex items-center gap-1">
-              <span className={`w-2 h-2 rounded-sm inline-block ${data.over_budget ? 'bg-rose-200' : 'bg-teal-100'}`} /> projected
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Stats row */}
-      <div className={`grid ${data.due_later > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-3 pt-3 border-t border-gray-100 dark:border-slate-800`}>
-        <div>
-          <p className="text-xs text-gray-400 mb-0.5">Everyday pace</p>
-          <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.daily_average)}/day</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-400 mb-0.5">Days remaining</p>
-          <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{data.days_left} days</p>
-        </div>
-        {data.due_later > 0 && (
-          <div>
-            <p className="text-xs text-gray-400 mb-0.5">Bills still due</p>
-            <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.due_later)}</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -1109,7 +1001,12 @@ export default function InsightsPage() {
 
           {health?.score != null && <HealthScoreCard health={health} />}
 
-          <PaydayRunway />
+          <CashFlowCard
+            forecast={ml?.forecast}
+            mlLoading={loading.ml}
+            mlAvailable={mlAvailable}
+            headerRight={mlHeaderRight}
+          />
 
           <MoneyRecap />
 
@@ -1128,27 +1025,6 @@ export default function InsightsPage() {
           {(recurring?.count > 0 || recurring?.frequent?.length > 0) && <RecurringCard data={recurring} />}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-            {/* Month Forecast — ML */}
-            <div id="forecast" className="lg:col-span-2">
-              <Section
-                title="📈 Month Forecast"
-                subtitle="Predicted spend by end of month based on your current trajectory"
-                tag="Smart"
-                tooltip="Carries your everyday pace across the days left, then adds any recurring bill not yet paid this month. A bill already paid counts once, never as a daily rate. The two-layer progress bar shows what you've spent (solid) vs. where you're headed (light)."
-                headerRight={mlHeaderRight}
-                loading={loading.ml}
-                error={undefined}
-              >
-                {mlAvailable && ml.forecast && <ForecastCard data={ml.forecast} />}
-                {!mlAvailable && !loading.ml && (
-                  <div className="p-8 text-center space-y-1">
-                    <p className="text-sm text-gray-500 dark:text-slate-400">No forecast yet</p>
-                    <p className="text-xs text-gray-400 dark:text-slate-500">Add a few transactions and hit Refresh to generate your first forecast.</p>
-                  </div>
-                )}
-              </Section>
-            </div>
 
             {/* Where It's Going */}
             <div className="lg:col-span-2">
