@@ -160,8 +160,13 @@ export const getCategorySuggestions = (type = null) => {
   return apiFetch(`/api/transaction/category/suggestions?${qs}`);
 };
 
-export const getCategories = (type = null) =>
-  apiFetch(`/api/transaction/category${type ? `?type=${type}` : ''}`);
+export const getCategories = (type = null, { recent = false } = {}) => {
+  const qs = new URLSearchParams();
+  if (type) qs.set('type', type);
+  if (recent) { qs.set('sort', 'recent'); qs.set('tz', browserTz()); }
+  const q = qs.toString();
+  return apiFetch(`/api/transaction/category${q ? `?${q}` : ''}`);
+};
 
 export const getAnalytics = (year, month = null) => {
   const qs = new URLSearchParams({ year, tz: browserTz() });
