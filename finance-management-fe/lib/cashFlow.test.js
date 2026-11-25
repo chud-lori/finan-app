@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runwayBreakdown, forecastBreakdown, budgetStatus } from './cashFlow';
+import { runwayBreakdown, forecastBreakdown, budgetStatus, billSchedule } from './cashFlow';
 
 const total = (b) => b.rows.reduce((s, r) => s + r.amount, 0);
 
@@ -84,5 +84,23 @@ describe('budgetStatus', () => {
 
   it('is absent for someone with no budget set', () => {
     expect(budgetStatus({ available: true, forecast: 1, spent_so_far: 1 })).to.equal(null);
+  });
+});
+
+describe('billSchedule', () => {
+  it('folds repeat charges into one row per bill, in the order they first land', () => {
+    const rows = billSchedule([
+      { merchant: 'netflix', date: '2026-08-20', amount: 200_000 },
+      { merchant: 'rent', date: '2026-09-01', amount: 3_000_000 },
+      { merchant: 'netflix', date: '2026-09-19', amount: 200_000 },
+    ]);
+    expect(rows).to.deep.equal([
+      { merchant: 'netflix', dates: ['2026-08-20', '2026-09-19'], total: 400_000 },
+      { merchant: 'rent', dates: ['2026-09-01'], total: 3_000_000 },
+    ]);
+  });
+
+  it('is empty when nothing recurs', () => {
+    expect(billSchedule([])).to.deep.equal([]);
   });
 });

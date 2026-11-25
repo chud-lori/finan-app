@@ -241,6 +241,7 @@ const detectRecurring = (transactions, opts = {}) => {
       monthlyEquivalent: Math.round(monthlyEquivalent),
       lastDate: last.date,
       nextDue,
+      intervalDays: Math.round(medGap),
       occurrences: sorted.length,
       amountStable: amountCv <= AMOUNT_STABLE_CV,
       confidence,

@@ -47,7 +47,7 @@ const FEATURES = [
   { icon: '📊', title: 'Smart Dashboard',   desc: 'Balance, income, and expenses at a glance. Filter by month, search, and sort — all in real time.' },
   { icon: '📈', title: 'Deep Analytics',    desc: 'Monthly & yearly breakdowns, category trends, and savings rate history. Know where money actually goes.' },
   { icon: '📅', title: 'Custom Reports',    desc: 'Query any date range. Income vs expense summaries, category breakdowns, export everything as CSV.' },
-  { icon: '🔍', title: 'AI Insights',       desc: 'Money Recap, Payday Runway safe-to-spend, seasonal-aware anomaly detection, explainability, and time-to-zero projections.' },
+  { icon: '🔍', title: 'AI Insights',       desc: 'Money Recap, safe-to-spend before payday, 90-day balance projections, seasonal-aware anomaly detection, and explainability.' },
   { icon: '💡', title: '11 Planning Tools', desc: 'Debt snowball, FIRE calculator, 50/30/20 budgeting, tax estimator, windfall & zakat planners — all built-in.' },
   { icon: '🔒', title: 'Secure & Private',  desc: 'bcrypt passwords, JWT token versioning, Google OAuth. Your financial data is never sold or shared.' },
   { icon: '🔌', title: 'Connect to Claude',  desc: 'Add Finan as a custom connector and ask about your own money in plain language. Read-only, scoped, and revocable from Settings whenever you want.' },

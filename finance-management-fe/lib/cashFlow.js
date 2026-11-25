@@ -56,3 +56,15 @@ export function budgetStatus(forecast) {
     projectedPct: pct(forecast.forecast),
   };
 }
+
+// One row per bill with every date it is expected in the window, so the assumption reads as a schedule.
+export function billSchedule(bills) {
+  const byMerchant = new Map();
+  for (const b of bills || []) {
+    const row = byMerchant.get(b.merchant) ?? { merchant: b.merchant, dates: [], total: 0 };
+    row.dates.push(b.date);
+    row.total += b.amount;
+    byMerchant.set(b.merchant, row);
+  }
+  return [...byMerchant.values()];
+}

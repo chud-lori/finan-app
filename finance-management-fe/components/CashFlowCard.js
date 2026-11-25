@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { getRunway } from '@/lib/api';
 import { useFormatAmount } from '@/components/CurrencyContext';
 import Tooltip from '@/components/Tooltip';
-import { runwayBreakdown, forecastBreakdown, budgetStatus } from '@/lib/cashFlow';
+import { runwayBreakdown, forecastBreakdown, budgetStatus, billSchedule } from '@/lib/cashFlow';
+import BalanceProjectionChart from '@/components/charts/BalanceProjectionChart';
 
 const STATUS = {
   healthy:  { label: 'On track', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-400', text: 'text-emerald-700 dark:text-emerald-400' },
@@ -38,7 +39,7 @@ function Ledger({ rows, totalLabel, total, formatAmount, signed = true }) {
             {r.detail && <span className="block text-[11px] text-gray-400 dark:text-slate-500">{r.detail}</span>}
           </dt>
           <dd className="font-semibold text-gray-800 dark:text-slate-200 tabular-nums whitespace-nowrap">
-            {signed && r.amount < 0 ? '− ' : signed && r.key !== rows[0].key ? '+ ' : ''}{formatAmount(Math.abs(r.amount))}
+            {signed && r.key !== rows[0].key ? (r.amount < 0 || Object.is(r.amount, -0) ? '− ' : '+ ') : r.amount < 0 ? '−' : ''}{formatAmount(Math.abs(r.amount))}
           </dd>
         </div>
       ))}
@@ -47,6 +48,78 @@ function Ledger({ rows, totalLabel, total, formatAmount, signed = true }) {
         <dd className="font-black text-gray-900 dark:text-slate-100 tabular-nums whitespace-nowrap">{formatAmount(total)}</dd>
       </div>
     </dl>
+  );
+}
+
+function Projection({ projection, cadence, expectedIncome, formatAmount }) {
+  const schedule = billSchedule(projection.bills);
+  const now = projection.points[0].balance;
+  return (
+    <div className="mt-5">
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">Next {projection.horizonDays} days</p>
+        <p className="text-[11px] text-gray-400 dark:text-slate-500 whitespace-nowrap">projected balance</p>
+      </div>
+
+      <BalanceProjectionChart points={projection.points} checkpoints={projection.checkpoints} />
+
+      <ul className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {projection.checkpoints.map((c) => {
+          const change = c.balance - now;
+          return (
+            <li key={c.day} className="flex items-baseline justify-between gap-3 sm:block rounded-xl bg-gray-50 dark:bg-slate-800/50 px-3 py-2 min-w-0">
+              <p className="text-xs text-gray-400 dark:text-slate-500 whitespace-nowrap">In {c.day} days <span className="text-gray-300 dark:text-slate-600">·</span> {fmtDate(c.date)}</p>
+              <div className="text-right sm:text-left min-w-0">
+                <p className={`text-sm font-bold tabular-nums whitespace-nowrap ${c.balance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-slate-100'}`}>{formatAmount(c.balance)}</p>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 tabular-nums whitespace-nowrap">
+                  {change < 0 ? '−' : '+'}{formatAmount(Math.abs(change))} from today
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {projection.overdueBills?.map((b) => (
+        <div key={b.merchant} className="mt-3 flex gap-2.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5">
+          <span className="text-amber-500 shrink-0" aria-hidden="true">⚠</span>
+          <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed min-w-0">
+            <span className="font-semibold">{cap(b.merchant)}</span> was due {fmtDate(b.dueDate)} and hasn&apos;t posted. That charge isn&apos;t in the projection; if it still lands, every figure here is {formatAmount(b.amount)} lower.
+          </p>
+        </div>
+      ))}
+
+      <div className="mt-3 rounded-xl border border-dashed border-gray-200 dark:border-slate-700 px-3 py-2.5">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 dark:text-slate-500 mb-1.5">What this assumes</p>
+        <ul className="space-y-1 text-xs text-gray-600 dark:text-slate-300">
+          <li className="flex gap-2"><span className="text-teal-500 shrink-0">•</span><span>Everyday spending of <span className="font-semibold tabular-nums">{formatAmount(projection.dailyPace)}</span> a day, your last 30 days with recurring bills taken out.</span></li>
+          <li className="flex gap-2"><span className="text-teal-500 shrink-0">•</span>
+            {projection.incomeAssumed && projection.income.length > 0
+              ? <span>Income of <span className="font-semibold tabular-nums">{formatAmount(expectedIncome)}</span> {cadence}, on {projection.income.map((i) => fmtDate(i.date)).join(', ')}.</span>
+              : <span>No income. Yours doesn&apos;t arrive on a regular schedule, so this is the balance if nothing comes in.</span>}
+          </li>
+          {schedule.length === 0 && (
+            <li className="flex gap-2"><span className="text-teal-500 shrink-0">•</span><span>No recurring bills, so the line falls at the everyday pace alone.</span></li>
+          )}
+        </ul>
+        {schedule.length > 0 && (
+          <ul className="mt-2 divide-y divide-gray-100 dark:divide-slate-800">
+            {schedule.map((row) => (
+              <li key={row.merchant} className="flex items-start justify-between gap-3 py-1.5">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-800 dark:text-slate-200 truncate">{cap(row.merchant)}</p>
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500">
+                    {row.dates.length > 1 && <span className="tabular-nums">{row.dates.length} × {formatAmount(row.total / row.dates.length)} · </span>}
+                    {row.dates.map(fmtDate).join(', ')}
+                  </p>
+                </div>
+                <p className="text-xs font-bold text-gray-800 dark:text-slate-200 tabular-nums whitespace-nowrap">{formatAmount(row.total)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -67,7 +140,7 @@ function MonthEnd({ forecast, mlLoading, mlAvailable, formatAmount }) {
 
   return (
     <>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col-reverse items-start gap-2 sm:flex-row sm:justify-between sm:gap-3">
         <div className="min-w-0">
           <p className="text-xs text-gray-500 dark:text-slate-400 mb-0.5">Projected month-end spend</p>
           <p className={`text-2xl font-black tabular-nums ${budget?.over ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-slate-100'}`}>
@@ -194,6 +267,10 @@ export default function CashFlowCard({ forecast, mlLoading, mlAvailable, headerR
               </p>
             </div>
           </div>
+
+          {data.projection?.points?.length > 1 && (
+            <Projection projection={data.projection} cadence={data.cadence} expectedIncome={data.expectedIncome} formatAmount={formatAmount} />
+          )}
         </>
       )}
 
@@ -202,7 +279,7 @@ export default function CashFlowCard({ forecast, mlLoading, mlAvailable, headerR
         <MonthEnd forecast={forecast} mlLoading={mlLoading} mlAvailable={mlAvailable} formatAmount={formatAmount} />
       </div>
 
-      {data?.billsBeforeIncome?.length > 0 && (
+      {data?.billsBeforeIncome?.length > 0 && !(data.projection?.points?.length > 1) && (
         <div className="mt-4">
           <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2">
             {isPayday ? 'Bills before payday' : 'Upcoming bills'}
