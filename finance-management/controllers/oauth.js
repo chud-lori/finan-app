@@ -86,7 +86,7 @@ const consentPage = ({ user, client, scope, params }) => `<!doctype html>
     <p style="margin:18px 0 0;font-size:13px;line-height:20px;color:#8a94a3">
       Anything it reads leaves this server and reaches ${escapeHtml(client.clientName)}, which will return to
       <strong style="color:#1a2230">${escapeHtml(new URL(params.redirect_uri).host)}</strong>.
-      Signing out of all devices in Settings revokes this access.
+      You can disconnect it at any time under Authorised connectors in Settings.
     </p>
     <form method="POST" action="/oauth/authorize" style="margin:24px 0 0">
       ${Object.entries(params).map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`).join('')}
@@ -336,6 +336,7 @@ const refresh = async (req, res, client) => {
 
   const tokens = await issueTokenPair({
     user: existing.user, clientId: existing.clientId, scope: existing.scope, resource: existing.resource,
+    authorisedAt: existing.authorisedAt || existing.createdAt, lastUsedAt: existing.lastUsedAt,
   });
   return res.json(tokens);
 };

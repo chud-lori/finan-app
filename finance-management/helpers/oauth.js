@@ -33,7 +33,7 @@ const verifyPkce = (verifier, challenge) => {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 };
 
-const issueTokenPair = async ({ user, clientId, scope, resource }) => {
+const issueTokenPair = async ({ user, clientId, scope, resource, authorisedAt = new Date(), lastUsedAt = null }) => {
   const access = randomToken();
   const refresh = randomToken();
   const now = Date.now();
@@ -41,8 +41,8 @@ const issueTokenPair = async ({ user, clientId, scope, resource }) => {
   const pairId = randomToken();
 
   await OAuthToken.create([
-    { tokenHash: hashToken(access), type: 'access', user, clientId, scope, resource, pairId, expiresAt: new Date(now + ACCESS_TTL_MS) },
-    { tokenHash: hashToken(refresh), type: 'refresh', user, clientId, scope, resource, pairId, expiresAt: new Date(now + REFRESH_TTL_MS) },
+    { tokenHash: hashToken(access), type: 'access', user, clientId, scope, resource, pairId, authorisedAt, lastUsedAt, expiresAt: new Date(now + ACCESS_TTL_MS) },
+    { tokenHash: hashToken(refresh), type: 'refresh', user, clientId, scope, resource, pairId, authorisedAt, lastUsedAt, expiresAt: new Date(now + REFRESH_TTL_MS) },
   ]);
 
   return {

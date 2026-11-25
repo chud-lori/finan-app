@@ -88,6 +88,12 @@ export const getSessions = () =>
 export const revokeSession = (id) =>
   apiFetch(`/api/auth/sessions/${id}`, { method: 'DELETE' });
 
+export const getConnectors = () =>
+  apiFetch('/api/auth/connectors');
+
+export const revokeConnector = (clientId) =>
+  apiFetch(`/api/auth/connectors/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+
 export const verifyEmail = (token) =>
   fetch(`${BASE_URL}/api/auth/verify-email/${encodeURIComponent(token)}`, {
     credentials: 'include',
@@ -160,8 +166,13 @@ export const getCategorySuggestions = (type = null) => {
   return apiFetch(`/api/transaction/category/suggestions?${qs}`);
 };
 
-export const getCategories = (type = null) =>
-  apiFetch(`/api/transaction/category${type ? `?type=${type}` : ''}`);
+export const getCategories = (type = null, { recent = false } = {}) => {
+  const qs = new URLSearchParams();
+  if (type) qs.set('type', type);
+  if (recent) { qs.set('sort', 'recent'); qs.set('tz', browserTz()); }
+  const q = qs.toString();
+  return apiFetch(`/api/transaction/category${q ? `?${q}` : ''}`);
+};
 
 export const getAnalytics = (year, month = null) => {
   const qs = new URLSearchParams({ year, tz: browserTz() });

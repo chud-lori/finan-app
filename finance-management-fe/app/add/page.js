@@ -284,9 +284,9 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Filtered by type so income categories don't show while adding an expense.
+  // Filtered by type so income categories don't show while adding an expense; most recently used first.
   useEffect(() => {
-    getCategories(form.type || null)
+    getCategories(form.type || null, { recent: true })
       .then(res => setCategories(res.data?.categories || []))
       .catch(() => {});
   }, [form.type]);

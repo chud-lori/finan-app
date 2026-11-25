@@ -349,6 +349,26 @@ router.post('/category', authenticateJWT, limiter.byUser(10), seedCategory)
  *           type: string
  *         description: Search term to filter categories (case insensitive)
  *         example: "food"
+ *       - in: query
+ *         name: type
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [income, expense]
+ *       - in: query
+ *         name: sort
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [recent]
+ *         description: Categories used today come first, then by use over the last 90 days weighted by recency (14-day half-life), ties by name. Unused categories follow in their default order.
+ *       - in: query
+ *         name: tz
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: IANA timezone that decides what "today" means for sort=recent (default UTC)
+ *         example: "Asia/Jakarta"
  *     responses:
  *       200:
  *         description: Categories retrieved successfully
