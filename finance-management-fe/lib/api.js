@@ -88,6 +88,12 @@ export const getSessions = () =>
 export const revokeSession = (id) =>
   apiFetch(`/api/auth/sessions/${id}`, { method: 'DELETE' });
 
+export const getConnectors = () =>
+  apiFetch('/api/auth/connectors');
+
+export const revokeConnector = (clientId) =>
+  apiFetch(`/api/auth/connectors/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+
 export const verifyEmail = (token) =>
   fetch(`${BASE_URL}/api/auth/verify-email/${encodeURIComponent(token)}`, {
     credentials: 'include',

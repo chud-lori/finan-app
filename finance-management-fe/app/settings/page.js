@@ -13,6 +13,8 @@ import {
   logoutAllDevices,
   getSessions,
   revokeSession,
+  getConnectors,
+  revokeConnector,
   deleteAccount,
 } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
@@ -127,6 +129,12 @@ export default function SettingsPage() {
   const [revokingId,      setRevokingId]      = useState(null);
   const [sessionError,    setSessionError]    = useState(null);
 
+  const [connectors,          setConnectors]          = useState([]);
+  const [connectorsLoading,   setConnectorsLoading]   = useState(true);
+  const [connectorError,      setConnectorError]      = useState(null);
+  const [confirmConnector,    setConfirmConnector]    = useState(null);
+  const [revokingConnectorId, setRevokingConnectorId] = useState(null);
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
@@ -134,6 +142,11 @@ export default function SettingsPage() {
       .then(res => setSessions(res.data?.sessions || []))
       .catch(() => {})
       .finally(() => setSessionsLoading(false));
+
+    getConnectors()
+      .then(res => setConnectors(res.data?.connectors || []))
+      .catch(e => setConnectorError(e.message || 'Failed to load connectors'))
+      .finally(() => setConnectorsLoading(false));
 
     getProfile()
       .then(res => setProfile(res.data))
@@ -193,6 +206,21 @@ export default function SettingsPage() {
     }
   };
 
+  const handleRevokeConnector = async () => {
+    const { id } = confirmConnector;
+    setRevokingConnectorId(id);
+    setConnectorError(null);
+    try {
+      await revokeConnector(id);
+      setConnectors(prev => prev.filter(c => c.id !== id));
+    } catch (e) {
+      setConnectorError(e.message || 'Failed to revoke connector');
+    } finally {
+      setRevokingConnectorId(null);
+      setConfirmConnector(null);
+    }
+  };
+
   const handleDeleteConfirmed = () => {
     try { localStorage.removeItem('username'); } catch {}
     clearCurrency();
@@ -214,11 +242,23 @@ export default function SettingsPage() {
       {showLogoutAllConfirm && (
         <ConfirmModal
           title="Sign out all devices?"
-          message="This will end all active sessions including this one. You'll need to sign in again on every device."
+          message="This will end all active sessions including this one and disconnect every authorised connector. You'll need to sign in again on every device."
           confirmLabel="Sign out all"
           loading={logoutAllLoading}
           onCancel={() => setShowLogoutAllConfirm(false)}
           onConfirm={handleLogoutAll}
+        />
+      )}
+
+      {confirmConnector && (
+        <ConfirmModal
+          title={`Disconnect ${confirmConnector.name}?`}
+          message="It loses access to your finances straight away. To use it again you'll need to connect it and approve access again."
+          confirmLabel="Revoke"
+          danger
+          loading={revokingConnectorId === confirmConnector.id}
+          onCancel={() => setConfirmConnector(null)}
+          onConfirm={handleRevokeConnector}
         />
       )}
 
@@ -238,7 +278,7 @@ export default function SettingsPage() {
             </Link>
             <h1 className="text-xl font-bold text-gray-900 mt-2">Security &amp; account</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Password, signed-in devices and account deletion.
+              Password, signed-in devices, connectors and account deletion.
             </p>
           </div>
 
@@ -366,6 +406,48 @@ export default function SettingsPage() {
                           {revokingId === s.id ? '…' : 'Revoke'}
                         </button>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card title="Authorised connectors" subtitle="Apps you've allowed to read or add to your finances">
+              {connectorError && (
+                <p className="text-xs text-rose-600 mb-3">{connectorError}</p>
+              )}
+              {connectorsLoading ? (
+                <div className="space-y-3">
+                  {[0, 1].map(i => (
+                    <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : connectors.length === 0 ? (
+                !connectorError && <p className="text-sm text-gray-400 text-center py-4">No apps are connected to your account.</p>
+              ) : (
+                <div className="space-y-2">
+                  {connectors.map(c => (
+                    <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm bg-gray-200 dark:bg-slate-700">
+                        🔌
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 dark:text-slate-200 truncate">{c.name}</p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
+                          {c.scopes?.includes('finan:write') ? 'Read and add transactions' : 'Read only'}
+                          {' · '}<span className="whitespace-nowrap">Authorised {timeAgo(c.authorisedAt)}</span>
+                        </p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500">
+                          {c.lastUsedAt ? `Last used ${timeAgo(c.lastUsedAt)}` : 'Not used yet'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setConfirmConnector(c)}
+                        disabled={revokingConnectorId === c.id}
+                        className="shrink-0 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-xs font-medium text-gray-500 dark:text-slate-400 hover:border-red-300 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40 transition-colors"
+                      >
+                        {revokingConnectorId === c.id ? '…' : 'Revoke'}
+                      </button>
                     </div>
                   ))}
                 </div>
