@@ -12,6 +12,7 @@ import { useToast } from '@/components/ToastContext';
 import SwipeToDelete from '@/components/SwipeToDelete';
 import GamificationBanner from '@/components/GamificationBanner';
 import SmartNudges from '@/components/SmartNudges';
+import MonthTurnRecap from '@/components/MonthTurnRecap';
 
 const MONTH_LABELS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LIMIT = 20;
@@ -391,6 +392,7 @@ export default function DashboardPage() {
 
           <GamificationBanner />
           <SmartNudges />
+          <MonthTurnRecap />
 
           {/* Stats */}
           {loading && !data.transactions.length ? <SkeletonStatCards /> : (

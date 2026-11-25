@@ -9,7 +9,6 @@ import { capitalizeFirst as cap } from '@/lib/format';
 import { buildInsights, MATERIALITY_FLOOR, selectTopInsights } from '@/lib/insightFeed';
 import { SkeletonLine, SkeletonBox } from '@/components/Skeleton';
 import Tooltip from '@/components/Tooltip';
-import MoneyRecap from '@/components/MoneyRecap';
 import CashFlowCard from '@/components/CashFlowCard';
 import TransactionDrilldownModal from '@/components/TransactionDrilldownModal';
 import CategorySpendRow from '@/components/CategorySpendRow';
@@ -1007,8 +1006,6 @@ export default function InsightsPage() {
             mlAvailable={mlAvailable}
             headerRight={mlHeaderRight}
           />
-
-          <MoneyRecap />
 
           <InsightFeed
             explain={explain} ttz={ttz} anomaly={anomaly} ml={ml} recurring={recurring}
