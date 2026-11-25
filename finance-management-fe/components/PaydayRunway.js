@@ -44,7 +44,7 @@ export default function PaydayRunway() {
   const isPayday = data.mode === 'payday';
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm p-5 mb-6">
+    <div id="runway" className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm p-5 mb-6">
       <div className="flex items-center gap-2 mb-3">
         <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">🛟 Payday Runway</h2>
         <Tooltip

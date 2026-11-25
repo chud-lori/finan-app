@@ -266,63 +266,6 @@ function ForecastCard({ data }) {
 }
 
 
-const TTZ_CONFIG = {
-  safe:         { label: 'Safe',            bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-400', text: 'text-emerald-700 dark:text-emerald-400' },
-  warning:      { label: 'Warning',         bg: 'bg-amber-50 dark:bg-amber-950/30',     border: 'border-amber-200 dark:border-amber-800',     dot: 'bg-amber-400',   text: 'text-amber-700 dark:text-amber-400'   },
-  critical:     { label: 'Critical',        bg: 'bg-rose-50 dark:bg-rose-950/30',       border: 'border-rose-200 dark:border-rose-800',       dot: 'bg-rose-400',    text: 'text-rose-700 dark:text-rose-400'     },
-  already_zero: { label: 'Balance at zero', bg: 'bg-rose-50 dark:bg-rose-950/30',       border: 'border-rose-200 dark:border-rose-800',       dot: 'bg-rose-500',    text: 'text-rose-700 dark:text-rose-400'     },
-  no_spend:     { label: 'No recent spend', bg: 'bg-gray-50 dark:bg-slate-800',         border: 'border-gray-200 dark:border-slate-700',      dot: 'bg-gray-300',    text: 'text-gray-600 dark:text-slate-400'    },
-};
-
-function TimeToZeroCard({ data }) {
-  const formatAmount = useFormatAmount();
-  const cfg = TTZ_CONFIG[data.status] ?? TTZ_CONFIG.safe;
-  return (
-    <div className="p-4">
-      <div className={`rounded-2xl border p-5 ${cfg.bg} ${cfg.border}`}>
-        <div className="flex items-center gap-2 mb-4">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
-          <h4 className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>{cfg.label}</h4>
-        </div>
-        {data.daysToZero !== null ? (
-          <>
-            <p className={`text-5xl font-black mb-1 tabular-nums ${cfg.text}`}>{data.daysToZero}</p>
-            <p className={`text-sm font-medium mb-0.5 ${cfg.text} opacity-80`}>days until balance hits zero</p>
-            <p className="text-xs text-gray-500 mb-5">at your current spending rate</p>
-            {data.projectedZeroDate && (
-              <p className="text-xs text-gray-500">
-                Projected date:{' '}
-                <span className="font-semibold text-gray-700 dark:text-slate-300">
-                  {new Date(data.projectedZeroDate).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </span>
-              </p>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-gray-500 mt-2">No spending in the last 30 days — nothing to project.</p>
-        )}
-        <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 grid grid-cols-2 gap-3">
-          <div>
-            <div className="flex items-center gap-1 mb-0.5">
-              <p className="text-xs text-gray-400">Current balance</p>
-              <Tooltip text="Net balance: total income minus total expenses across all time." align="left" fixed />
-            </div>
-            <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.balance)}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-1 mb-0.5">
-              <p className="text-xs text-gray-400">Daily burn</p>
-              <Tooltip text="Average daily spending over the last 30 days." align="right" fixed />
-            </div>
-            <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{formatAmount(data.dailyBurnRate)}/day</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 function ExplainCard({ data }) {
   const formatAmount = useFormatAmount();
   const maxPct = Math.max(...data.topCategories.map(c => c.pct), 1);
@@ -1207,32 +1150,22 @@ export default function InsightsPage() {
               </Section>
             </div>
 
-            {/* Runway */}
-            <Section
-              id="runway"
-              title="⏳ Runway"
-              subtitle="How long until your balance runs out at current burn rate"
-              tooltip="Current net balance ÷ average daily spending over the last 30 days."
-              loading={loading.ttz}
-              error={errors.ttz}
-            >
-              {ttz && <TimeToZeroCard data={ttz} />}
-            </Section>
-
             {/* Where It's Going */}
-            <Section
-              id="where-its-going"
-              title="🧠 Where It's Going"
-              subtitle="Top categories driving your spending this month"
-              tooltip="Your top expense categories sorted by total. Changes are shown in money against the 30 days before — a percentage only when the two totals compare directly. Categories you only buy from occasionally get no change at all."
-              loading={loading.explain}
-              error={errors.explain}
-            >
-              {explain && (explain.topCategories?.length > 0
-                ? <ExplainCard data={explain} />
-                : <div className="p-8 text-center text-sm text-gray-500">No spending data this month yet.</div>
-              )}
-            </Section>
+            <div className="lg:col-span-2">
+              <Section
+                id="where-its-going"
+                title="🧠 Where It's Going"
+                subtitle="Top categories driving your spending this month"
+                tooltip="Your top expense categories sorted by total. Changes are shown in money against the 30 days before — a percentage only when the two totals compare directly. Categories you only buy from occasionally get no change at all."
+                loading={loading.explain}
+                error={errors.explain}
+              >
+                {explain && (explain.topCategories?.length > 0
+                  ? <ExplainCard data={explain} />
+                  : <div className="p-8 text-center text-sm text-gray-500">No spending data this month yet.</div>
+                )}
+              </Section>
+            </div>
 
             {/* Spending by Category Group */}
             <div className="lg:col-span-2">
