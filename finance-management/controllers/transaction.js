@@ -707,6 +707,41 @@ const seedCategory = async (req, res, next) => {
     }
 }
 
+const RECENT_WINDOW_DAYS = 90;
+const RECENT_HALF_LIFE_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Used today (in tz) first, then by recency-decayed use count, ties by name; unused keep their order.
+const rankByRecentUse = async (userId, names, type, tz) => {
+    const now = new Date();
+    const todayStart = moment.tz(now, tz).startOf('day').toDate();
+    const tomorrowStart = moment.tz(now, tz).startOf('day').add(1, 'day').toDate();
+    const match = {
+        user: new mongoose.Types.ObjectId(userId),
+        time: { $gte: new Date(now.getTime() - RECENT_WINDOW_DAYS * DAY_MS), $lt: tomorrowStart },
+    };
+    if (type) match.type = type;
+
+    const usage = await Transaction.aggregate([
+        { $match: match },
+        { $group: {
+            _id: '$category',
+            score: { $sum: { $exp: { $multiply: [
+                -Math.LN2 / (RECENT_HALF_LIFE_DAYS * DAY_MS),
+                { $max: [0, { $subtract: [now, '$time'] }] },
+            ] } } },
+            usedToday: { $max: { $cond: [{ $gte: ['$time', todayStart] }, 1, 0] } },
+        } },
+    ]);
+
+    const byName = new Map(usage.map(u => [u._id, u]));
+    return [...names].sort((a, b) => {
+        const ua = byName.get(a), ub = byName.get(b);
+        if (!ua || !ub) return (ua ? 0 : 1) - (ub ? 0 : 1);
+        return (ub.usedToday - ua.usedToday) || (ub.score - ua.score) || a.localeCompare(b);
+    });
+};
+
 const getCategory = async (req, res, next) => {
     try {
         logger.info(`Get list of category`);
@@ -734,7 +769,11 @@ const getCategory = async (req, res, next) => {
         const categories = await Category.find(query).select('name -_id').lean();
 
         // Extract just the 'name' values into an array
-        const categoryNames = categories.map(cat => cat.name);
+        let categoryNames = categories.map(cat => cat.name);
+        if (req.query.sort === 'recent') {
+            const type = typeFilter === 'income' || typeFilter === 'expense' ? typeFilter : null;
+            categoryNames = await rankByRecentUse(req.user.id, categoryNames, type, validTz(req.query.tz));
+        }
 
         const responseDTO = new CategoryResponseDTO(categoryNames);
         res.status(200).json(BaseResponseDTO.success('Categories retrieved', responseDTO));

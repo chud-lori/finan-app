@@ -1676,7 +1676,7 @@ docker exec finan-be bun scripts/sendMonthlyReport.js --to=you@example.com --for
 | GET | `/api/transaction/ml-insights` | 20/min | ✓ | ML anomaly detection + month-end forecast (cached; degrades gracefully) |
 | POST | `/api/transaction/ml-insights/refresh` | 10/min | ✓ | Force-refresh ML insights; bypasses tx-count cache check |
 | POST | `/api/transaction/import/csv` | 10/min | ✓ | Bulk CSV import; `multipart/form-data`, field: `files`, up to 10 files, max 5 MB each; MulterErrors return 400 |
-| GET | `/api/transaction/category` | — | ✓ | List categories; query: `?search=X&type=income\|expense` |
+| GET | `/api/transaction/category` | — | ✓ | List categories; query: `?search=X&type=income\|expense&sort=recent&tz=<IANA>`. `sort=recent` puts categories used today (in `tz`) first, then ranks by use over the last 90 days with a 14-day half-life, ties by name; unused categories follow in default order. One aggregate on the `(user, type, time)` index |
 | GET | `/api/transaction/category/suggestions` | — | ✓ | Smart category suggestions based on time of day and past habits |
 | POST | `/api/transaction/category` | — | ✓ | Seed default categories (idempotent) |
 | GET | `/api/transaction/date/:date` | — | ✓ | Transactions on a specific date; `YYYY-MM-DD` |
