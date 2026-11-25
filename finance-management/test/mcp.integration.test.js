@@ -10,6 +10,7 @@ const OAuthClient = require('../models/oauthClient.model');
 const OAuthGrant = require('../models/oauthGrant.model');
 const OAuthToken = require('../models/oauthToken.model');
 const { hashToken, MCP_RESOURCE, ISSUER } = require('../helpers/oauth');
+const { drainBackgroundJobs } = require('../helpers/backgroundJobs');
 
 chai.use(chaiHttp);
 
@@ -33,9 +34,9 @@ const pkce = () => {
   return { verifier, challenge: crypto.createHash('sha256').update(verifier).digest('base64url') };
 };
 
-const registerClient = async (scope = 'finan:read') => {
+const registerClient = async (scope = 'finan:read', name = 'Test Client') => {
   const res = await chai.request(server).post('/oauth/register').send({
-    client_name: 'Test Client',
+    client_name: name,
     redirect_uris: [REDIRECT],
     token_endpoint_auth_method: 'none',
     scope,
@@ -640,5 +641,143 @@ describe('MCP — what the tools disclose', () => {
     });
     const descriptions = res.body.result.structuredContent.transactions.map(t => t.description);
     expect(descriptions).to.not.include('shop alpha');
+  });
+});
+
+describe('MCP — authorised connectors in Settings', () => {
+  const connect = async (session, name = 'Test Client') => {
+    const client = await registerClient('finan:read', name);
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(session.cookie, client, challenge);
+    const pair = (await exchange(client, code, verifier)).body;
+    return { client, pair };
+  };
+  const listConnectors = (cookie) => chai.request(server).get('/api/auth/connectors').set('Cookie', cookie);
+  const revoke = (cookie, clientId) =>
+    chai.request(server).delete(`/api/auth/connectors/${encodeURIComponent(clientId)}`).set('Cookie', cookie);
+
+  it('lists a connected client without exposing any token material', async () => {
+    const session = await registerAndLogin('list');
+    const { client, pair } = await connect(session, 'Desk Assistant');
+
+    const res = await listConnectors(session.cookie);
+    expect(res).to.have.status(200);
+    const [row, ...rest] = res.body.data.connectors;
+    expect(rest).to.have.length(0);
+    expect(row.id).to.equal(client.client_id);
+    expect(row.name).to.equal('Desk Assistant');
+    expect(row.scopes).to.deep.equal(['finan:read']);
+    expect(row.authorisedAt).to.be.a('string');
+    const body = JSON.stringify(res.body);
+    expect(body).to.not.contain(pair.access_token);
+    expect(body).to.not.contain(hashToken(pair.access_token));
+    expect(body).to.not.contain(hashToken(pair.refresh_token));
+    expect(body).to.not.match(/tokenHash|pairId/);
+  });
+
+  it('shows an empty list when nothing is connected, and never another user connector', async () => {
+    const owner = await registerAndLogin('ownerlist');
+    await connect(owner);
+    const stranger = await registerAndLogin('strangerlist');
+
+    const res = await listConnectors(stranger.cookie);
+    expect(res).to.have.status(200);
+    expect(res.body.data.connectors).to.deep.equal([]);
+  });
+
+  it('requires a session to list or revoke', async () => {
+    expect(await chai.request(server).get('/api/auth/connectors')).to.have.status(401);
+    expect(await chai.request(server).delete('/api/auth/connectors/anything')).to.have.status(401);
+  });
+
+  it('revokes one connector at once, refresh token included, and leaves the rest alone', async () => {
+    const session = await registerAndLogin('revokeone');
+    const target = await connect(session, 'Target');
+    const keeper = await connect(session, 'Keeper');
+    expect(await rpc(target.pair.access_token, 'ping')).to.have.status(200);
+
+    const res = await revoke(session.cookie, target.client.client_id);
+    expect(res).to.have.status(200);
+
+    expect(await rpc(target.pair.access_token, 'ping')).to.have.status(401);
+    const refreshed = await chai.request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token', refresh_token: target.pair.refresh_token, client_id: target.client.client_id,
+    });
+    expect(refreshed).to.have.status(400);
+
+    expect(await rpc(keeper.pair.access_token, 'ping')).to.have.status(200);
+    expect(await chai.request(server).get('/api/auth/check').set('Cookie', session.cookie)).to.have.status(200);
+    const names = (await listConnectors(session.cookie)).body.data.connectors.map(c => c.name);
+    expect(names).to.deep.equal(['Keeper']);
+  });
+
+  it('answers 404 for another user client and leaves that connector working', async () => {
+    const owner = await registerAndLogin('ownerrev');
+    const { client, pair } = await connect(owner);
+    const attacker = await registerAndLogin('attackerrev');
+
+    const res = await revoke(attacker.cookie, client.client_id);
+    expect(res).to.have.status(404);
+    expect(await rpc(pair.access_token, 'ping')).to.have.status(200);
+
+    const unknown = await revoke(attacker.cookie, 'no-such-client');
+    expect(unknown).to.have.status(404);
+    expect(unknown.body).to.deep.equal(res.body);
+  });
+
+  it('answers 404 for a connector already revoked', async () => {
+    const session = await registerAndLogin('twice');
+    const { client } = await connect(session);
+    expect(await revoke(session.cookie, client.client_id)).to.have.status(200);
+    expect(await revoke(session.cookie, client.client_id)).to.have.status(404);
+  });
+
+  it('records last use, at most once per window', async () => {
+    const session = await registerAndLogin('lastused');
+    const { pair } = await connect(session);
+    const accessHash = hashToken(pair.access_token);
+    expect((await OAuthToken.findOne({ tokenHash: accessHash }).lean()).lastUsedAt).to.equal(null);
+
+    await rpc(pair.access_token, 'ping');
+    await drainBackgroundJobs();
+    const first = (await OAuthToken.findOne({ tokenHash: accessHash }).lean()).lastUsedAt;
+    expect(first).to.be.an.instanceof(Date);
+
+    await rpc(pair.access_token, 'ping');
+    await drainBackgroundJobs();
+    expect((await OAuthToken.findOne({ tokenHash: accessHash }).lean()).lastUsedAt.getTime()).to.equal(first.getTime());
+
+    const stale = new Date(Date.now() - 10 * 60 * 1000);
+    await OAuthToken.updateMany({ pairId: (await OAuthToken.findOne({ tokenHash: accessHash }).lean()).pairId }, { lastUsedAt: stale });
+    await rpc(pair.access_token, 'ping');
+    await drainBackgroundJobs();
+    expect((await OAuthToken.findOne({ tokenHash: accessHash }).lean()).lastUsedAt.getTime()).to.be.greaterThan(stale.getTime());
+
+    const row = (await listConnectors(session.cookie)).body.data.connectors[0];
+    expect(row.lastUsedAt).to.be.a('string');
+  });
+
+  it('keeps the original authorisation time across refresh rotation', async () => {
+    const session = await registerAndLogin('rotatetime');
+    const { client, pair } = await connect(session);
+    const original = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    await OAuthToken.updateMany({ clientId: client.client_id }, { authorisedAt: original });
+
+    const refreshed = await chai.request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token', refresh_token: pair.refresh_token, client_id: client.client_id,
+    });
+    expect(refreshed).to.have.status(200);
+    const rotated = await OAuthToken.findOne({ tokenHash: hashToken(refreshed.body.refresh_token) }).lean();
+    expect(rotated.authorisedAt.getTime()).to.equal(original.getTime());
+  });
+
+  it('kills an unspent authorization code for the revoked client', async () => {
+    const session = await registerAndLogin('pendingcode');
+    const { client } = await connect(session);
+    const { verifier, challenge } = pkce();
+    const { code } = await authorize(session.cookie, client, challenge);
+
+    expect(await revoke(session.cookie, client.client_id)).to.have.status(200);
+    expect(await exchange(client, code, verifier)).to.have.status(400);
   });
 });

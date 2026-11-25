@@ -13,6 +13,9 @@ const schema = new mongoose.Schema({
   resource:   { type: String, required: true },
   expiresAt:  { type: Date, required: true },
   revokedAt:  { type: Date, default: null },
+  // Carried across refresh rotation so Settings shows the original consent, not the last rotation.
+  authorisedAt: { type: Date, default: null },
+  lastUsedAt:   { type: Date, default: null },
 }, { timestamps: true });
 
 schema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
