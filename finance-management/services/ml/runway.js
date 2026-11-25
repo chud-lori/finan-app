@@ -81,8 +81,7 @@ const computeRunway = (input = {}) => {
   const bills = (input.bills || []).filter((b) => b && b.dueDate && Number(b.amount) > 0);
   const daysLate = (b) => daysBetween(b.dueDate, asOf);
 
-  // A charge that should have posted and has not is named rather than projected on a date already gone.
-  // More than one full cycle late reads as a bill that ended.
+  // A charge that has not posted is named, not projected on a date already gone; past one full cycle it reads as ended.
   const overdueBills = bills
     .filter((b) => daysLate(b) > 0 && daysLate(b) <= (b.intervalDays || 31))
     .map((b) => ({ merchant: b.merchant, dueDate: b.dueDate, amount: Math.round(Number(b.amount)), daysLate: daysLate(b) }))
