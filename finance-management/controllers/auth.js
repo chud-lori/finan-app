@@ -7,6 +7,8 @@ const PasswordReset = require('../models/passwordReset.model');
 const EmailVerification = require('../models/emailVerification.model');
 const Session = require('../models/session.model');
 const OAuthToken = require('../models/oauthToken.model');
+const OAuthClient = require('../models/oauthClient.model');
+const OAuthGrant = require('../models/oauthGrant.model');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const {USER_EMAIL:email, SECRET_TOKEN, FE_URL, GOOGLE_CLIENT_ID} = require('../config/keys');
@@ -427,6 +429,64 @@ const revokeSession = async (req, res) => {
     }
 };
 
+const getConnectors = async (req, res) => {
+    try {
+        const tokens = await OAuthToken.find({ user: req.user.id, revokedAt: null, expiresAt: { $gt: new Date() } })
+            .select('clientId scope authorisedAt lastUsedAt createdAt')
+            .lean();
+
+        const byClient = new Map();
+        for (const t of tokens) {
+            const entry = byClient.get(t.clientId) || { scopes: new Set(), authorisedAt: null, lastUsedAt: null };
+            (t.scope || []).forEach(s => entry.scopes.add(s));
+            const authorisedAt = t.authorisedAt || t.createdAt;
+            if (!entry.authorisedAt || authorisedAt < entry.authorisedAt) entry.authorisedAt = authorisedAt;
+            if (t.lastUsedAt && (!entry.lastUsedAt || t.lastUsedAt > entry.lastUsedAt)) entry.lastUsedAt = t.lastUsedAt;
+            byClient.set(t.clientId, entry);
+        }
+
+        const clients = await OAuthClient.find({ clientId: { $in: [...byClient.keys()] } })
+            .select('clientId clientName')
+            .lean();
+        const names = new Map(clients.map(c => [c.clientId, c.clientName]));
+
+        const data = [...byClient.entries()]
+            .map(([clientId, e]) => ({
+                id:           clientId,
+                name:         names.get(clientId) || 'Unknown application',
+                scopes:       [...e.scopes],
+                authorisedAt: e.authorisedAt,
+                lastUsedAt:   e.lastUsedAt,
+            }))
+            .sort((a, b) => new Date(b.lastUsedAt || b.authorisedAt) - new Date(a.lastUsedAt || a.authorisedAt));
+
+        res.status(200).json(BaseResponseDTO.success('Connectors retrieved', { connectors: data }));
+    } catch (e) {
+        logger.error(`Get connectors error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to retrieve connectors'));
+    }
+};
+
+const revokeConnector = async (req, res) => {
+    try {
+        const clientId = String(req.params.clientId);
+        // Scoped to req.user, so another user's client id matches nothing and reads as not found.
+        const result = await OAuthToken.updateMany(
+            { user: req.user.id, clientId, revokedAt: null },
+            { revokedAt: new Date() },
+        );
+        // An unspent code would otherwise mint a fresh pair after the revoke.
+        await OAuthGrant.deleteMany({ user: req.user.id, clientId });
+        if (result.matchedCount === 0) {
+            return res.status(404).json(BaseResponseDTO.error('Connector not found'));
+        }
+        res.status(200).json(BaseResponseDTO.success('Connector revoked'));
+    } catch (e) {
+        logger.error(`Revoke connector error: ${e.message}`);
+        res.status(500).json(BaseResponseDTO.error('Failed to revoke connector'));
+    }
+};
+
 const forgotPassword = async (req, res) => {
   // Always return 200 to prevent user enumeration
   const OK = () => res.status(200).json(BaseResponseDTO.success('If that email is registered, a reset link has been sent'));
@@ -547,4 +607,4 @@ const resendVerification = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, findOrCreateGoogleUser, deleteAccount, changePassword, logout, logoutAllDevices, getSessions, revokeSession, forgotPassword, resetPassword, verifyEmail, resendVerification };
+module.exports = { registerUser, loginUser, checkAuth, verifyGoogleToken, findOrCreateGoogleUser, deleteAccount, changePassword, logout, logoutAllDevices, getSessions, revokeSession, getConnectors, revokeConnector, forgotPassword, resetPassword, verifyEmail, resendVerification };

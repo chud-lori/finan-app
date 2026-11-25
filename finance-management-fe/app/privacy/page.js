@@ -58,7 +58,7 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="5. Security">
-          <p>Passwords are hashed with bcrypt (never stored in plaintext). API access requires a signed session token delivered in a secure, HttpOnly cookie. Sessions can be invalidated remotely via the &ldquo;Log out all devices&rdquo; feature.</p>
+          <p>Passwords are hashed with bcrypt (never stored in plaintext). API access requires a signed session token delivered in a secure, HttpOnly cookie. Sessions can be invalidated remotely via the &ldquo;Log out all devices&rdquo; feature. Apps you connect get their own token, and each one can be revoked from Authorised connectors in Settings.</p>
           <p>While we take reasonable security precautions, no system is 100% secure. Do not store information here that you would not want exposed in a worst-case breach.</p>
         </Section>
 

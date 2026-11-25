@@ -94,6 +94,7 @@ Most people have no clear picture of their finances. They earn money, spend it, 
 - **All bearer-style tokens hashed in the database** — JWT session, password-reset, and email-verification tokens are stored as SHA-256 hashes. The raw token only lives in your cookie or your inbox, so a database leak cannot be replayed for account takeover
 - **Per-device session management** — see and revoke any active session from the profile page
 - **Logout all devices** — deletes every session and bumps `tokenVersion`; old tokens are dead immediately
+- **Authorised connectors** — every app connected over OAuth is listed in Settings with its scopes, when it was authorised and when it was last used, and can be revoked on its own
 - **Password change / reset** — automatically deletes all sessions across all devices
 - **Account deletion revokes all sessions immediately** — no ghost-session window after you delete your account
 - **Google OAuth** — sign in without a password; server-side token verification

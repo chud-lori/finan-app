@@ -161,7 +161,7 @@ finan-app/                          ← monorepo root
     │   ├── insights/page.js        ← ML insights, anomaly, explainability, group summary, ManageCategories (rename/delete)
     │   ├── recommendation/page.js  ← 11 financial planning tools (incl. Windfall Planner, Zakat Estimator)
     │   ├── profile/page.js         ← Financial identity, preferences, import/export
-    │   └── settings/page.js        ← Theme, password change, sessions, delete account
+    │   └── settings/page.js        ← Theme, password change, sessions, authorised connectors, delete account
     ├── components/
     │   ├── GamificationBanner.js   ← streaks, budget wins, goal rings
     │   ├── AnalyticsFilterBar.js   ← category/group/type/amount filters + removable chips
@@ -284,6 +284,7 @@ req.cookies.token
 | `POST /logout` | Deletes current Session doc + clears cookie |
 | `DELETE /sessions/:id` | Deletes one Session by ID (can't revoke current) |
 | `POST /logout-all` | `Session.deleteMany({ user })` + bumps `tokenVersion` + clears cookie |
+| `DELETE /connectors/:clientId` | Revokes every live `OAuthToken` the user holds for one client and deletes its unspent codes. Sessions and other connectors are untouched |
 | Password change | `Session.deleteMany({ user })` + clears cookie |
 | Password reset | `Session.deleteMany({ user })` + clears cookie |
 | `DELETE /account` | `Session.deleteMany({ user })` + clears cookie before user doc deletion — prevents a ~7-day ghost-session window where the JWT cookie would still authenticate against a removed user |
@@ -1532,6 +1533,8 @@ All responses follow `{ status: 1|0, message: string, data: any }`. Swagger UI a
 | POST | `/api/auth/logout-all` | 5/min per user | ✓ | Delete all sessions + bump tokenVersion + clear cookie |
 | GET | `/api/auth/sessions` | — | ✓ | List all active sessions with device info |
 | DELETE | `/api/auth/sessions/:id` | — | ✓ | Revoke a specific session (cannot revoke current) |
+| GET | `/api/auth/connectors` | — | ✓ | Authorised connectors: one row per client holding a live token (`id`, `name`, `scopes`, `authorisedAt`, `lastUsedAt`). Never returns token values or hashes |
+| DELETE | `/api/auth/connectors/:clientId` | 20/min per user | ✓ | Revoke every access and refresh token for that client. 404 when the caller holds none, including another user's client |
 | PATCH | `/api/auth/password` | 5/min per user | ✓ | Change password (deletes all sessions) |
 ### MCP connector (remote MCP server + OAuth 2.1)
 
@@ -1555,7 +1558,7 @@ location /.well-known/oauth- { proxy_pass http://backend; }
 |---|---|---|
 | `OAuthClient` | registered clients | **Not** user-scoped — one record serves every user who authorises it |
 | `OAuthGrant` | pending authorization codes | hash only, 60s TTL, `usedAt` marks spend |
-| `OAuthToken` | access + refresh tokens | hash only, `resource` is the audience, TTL index |
+| `OAuthToken` | access + refresh tokens | hash only, `resource` is the audience, TTL index. `authorisedAt` is carried across refresh rotation; `lastUsedAt` is stamped by `mcpAuth` on both halves of the pair, at most once per 5 minutes |
 
 Tokens are opaque random values stored as SHA-256 hashes, matching `Session` / `PasswordReset` / `EmailVerification` — not JWTs. `OAuthGrant` and `OAuthToken` are in `userScopedModels`; `OAuthClient` deliberately is not.
 
@@ -1571,6 +1574,7 @@ Tokens are opaque random values stored as SHA-256 hashes, matching `Session` / `
 - **No JSON-RPC batching.** Arrays are rejected outright. The protocol version this server advertises removed batching, and accepting it let one request inside the 100kb body limit fan out into hundreds of full-ledger exports — measured at ~80MB of response and 171MB of heap from 100 batched calls, while counting as a single hit against the rate limiter.
 - **Access and refresh tokens share a `pairId`.** Revoking either takes the other with it (RFC 7009 §2.1), so a disconnect is immediate rather than leaving the access token alive for its remaining hour.
 - **Reusing a rotated refresh token burns the family.** Presenting an already-rotated token means a copy leaked, so every live token for that user and client is revoked — whoever rotated first does not get to keep the account.
+- **Each connector is listed and revocable on its own.** `/settings` lists clients from `OAuthToken`, not `Session`, so a connector shows up even though it never had a browser session. Revoking one also deletes its unspent authorization codes, or a code minted seconds earlier could still be exchanged for a fresh pair.
 - **Account recovery cuts connectors.** `changePassword`, `logoutAllDevices` and `resetPassword` all revoke `OAuthToken` alongside `Session`. Without that, a compromised account stays readable through a connector for as long as the thief keeps refreshing.
 - **Authentication precedes every error redirect.** A registered https `redirect_uri` plus a deliberately bad parameter would otherwise make `/oauth/authorize` an open redirector needing no cookie at all — the classic error-redirect phishing vector.
 - **The consent HMAC binds every field the grant is built from** — session, client, challenge, scope, `redirect_uri` and `resource`. Binding a subset let a valid token be replayed with a wider scope or a different registered redirect.
